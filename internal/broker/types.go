@@ -3,7 +3,8 @@ package broker
 import "time"
 
 // LeaseState is the lease lifecycle state (ARCHITECTURE §4).
-// expiring and reclaimed are declared for M1.3 but never set by this package.
+// LeaseExpiring is reserved for a future soft-expiry signal; LeaseReclaimed
+// is set by Broker.Reclaim (M1.3 watcher/reaper path).
 type LeaseState string
 
 const (

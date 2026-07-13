@@ -642,3 +642,83 @@ func (p *failCauseProvisioner) Provision(ctx context.Context, req ProvisionReque
 		Booted:  true,
 	}, nil
 }
+
+func TestReclaimActiveSetsReclaimedAndAdvancesQueue(t *testing.T) {
+	p := &fakeProvisioner{}
+	b := newTestBroker(t, 1, p)
+	spec := testSpec()
+
+	first, err := b.Acquire(context.Background(), AcquireRequest{
+		Spec: spec, TTL: time.Minute, Owner: Owner{PID: 1},
+	})
+	if err != nil {
+		t.Fatalf("first: %v", err)
+	}
+
+	queued, err := b.Acquire(context.Background(), AcquireRequest{
+		Spec: spec, TTL: time.Minute, Wait: false, Owner: Owner{PID: 2},
+	})
+	if !errors.As(err, new(*CapacityQueuedError)) {
+		t.Fatalf("want CapacityQueuedError, got %v", err)
+	}
+	if queued.State != LeaseQueued {
+		t.Fatalf("queued state=%s", queued.State)
+	}
+
+	reclaimed, err := b.Reclaim(context.Background(), first.ID)
+	if err != nil {
+		t.Fatalf("reclaim: %v", err)
+	}
+	if reclaimed.State != LeaseReclaimed {
+		t.Fatalf("state=%s want reclaimed", reclaimed.State)
+	}
+
+	got, ok := b.Get(first.ID)
+	if !ok || got.State != LeaseReclaimed {
+		t.Fatalf("stored state=%+v ok=%v", got, ok)
+	}
+
+	// Capacity freed: queued lease should have been advanced into ACTIVE.
+	deadline := time.Now().Add(2 * time.Second)
+	var next Lease
+	for {
+		next, ok = b.Get(queued.ID)
+		if ok && next.State == LeaseActive {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("queued lease never became ACTIVE after reclaim; got %+v", next)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if next.Device == nil || next.Device.UDID == first.Device.UDID {
+		t.Fatalf("next should be a distinct provisioned device; got %+v", next.Device)
+	}
+}
+
+func TestReclaimNonActiveIsInvalidState(t *testing.T) {
+	p := &fakeProvisioner{}
+	b := newTestBroker(t, 1, p)
+
+	active, err := b.Acquire(context.Background(), AcquireRequest{
+		Spec: testSpec(), TTL: time.Minute, Owner: Owner{PID: 1},
+	})
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	if _, err := b.Release(context.Background(), active.ID); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+
+	_, err = b.Reclaim(context.Background(), active.ID)
+	var inv *InvalidStateError
+	if !errors.As(err, &inv) {
+		t.Fatalf("err=%v want InvalidStateError", err)
+	}
+
+	_, err = b.Reclaim(context.Background(), "lease-missing")
+	var nf *LeaseNotFoundError
+	if !errors.As(err, &nf) {
+		t.Fatalf("err=%v want LeaseNotFoundError", err)
+	}
+}

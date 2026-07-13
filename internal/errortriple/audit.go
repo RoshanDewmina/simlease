@@ -43,7 +43,16 @@ func audit(rootDir string) (findings []Finding, examined int, err error) {
 			if name == "SampleApp" && isUnderFixtures(rootDir, path) {
 				return filepath.SkipDir
 			}
-			if name == "vendor" || name == ".git" {
+			if name == "vendor" || name == ".git" || name == "__pycache__" || name == ".worktrees" {
+				return filepath.SkipDir
+			}
+			// bench/results and bench/.bin are gitignored raw benchmark
+			// output/build artifacts (see bench/.gitignore) — walking
+			// disk doesn't see .gitignore, and a single real bench run
+			// can leave tens of thousands of files there (screenshots,
+			// per-rep JSON), which otherwise dominates this audit's
+			// runtime for zero Go files examined.
+			if (name == "results" || name == ".bin") && isUnderBench(rootDir, path) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -71,6 +80,14 @@ func audit(rootDir string) (findings []Finding, examined int, err error) {
 		return nil
 	})
 	return findings, examined, err
+}
+
+func isUnderBench(rootDir, path string) bool {
+	rel, err := filepath.Rel(rootDir, path)
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(filepath.ToSlash(rel), "bench/")
 }
 
 func isUnderFixtures(rootDir, path string) bool {

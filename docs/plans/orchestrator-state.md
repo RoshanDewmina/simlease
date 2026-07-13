@@ -7,7 +7,7 @@ engineering-manager session (thread `019f5929-05b3-7b12-a8d3-d4e10f39034f`) that
 mid-redispatch of the M0.2a fix loop. The uncommitted fix in the worktree was verified intact,
 independently reviewed, and merged — see evidence log below.  
 **Repository:** `/Users/roshansilva/Documents/simurgh`  
-**Current phase:** M0 — Skeleton
+**Current phase:** M0 complete — starting M1 (Lease core)
 
 ## Operating decisions
 
@@ -42,13 +42,13 @@ independently reviewed, and merged — see evidence log below.
 | M0.2a IPC protocol/framing | merged locally as `c0098bf` | cleaned | `grok-4.5-high` | low | merged | green |
 | M0.2b daemon socket/startup | merged locally as `1983874` | cleaned | `grok-4.5-high` + Sonnet full-diff review | sensitive | merged | green |
 | M0.3 store | merged locally as `8e4a185` | cleaned | `grok-4.5-high` | low | merged | green |
-| M0.4 doctor | pending | pending | `grok-4.5-high` | low | unblocked (M0.2 complete) | pending |
+| M0.4 doctor | merged locally as `ca76ddc` | cleaned | `grok-4.5-high` | low | merged | green |
 
 ## Milestone gates
 
 | Milestone | Mechanical gates | macOS/integration gate | Status |
 |---|---|---|---|
-| M0 | build, vet, race tests, staticcheck | daemon run + doctor green | pending |
+| M0 | build, vet, race tests, staticcheck — **PASS** | `daemon run` + `doctor` exit 0, all 5 checks green — **PASS**, live-run 2026-07-12 | **COMPLETE** |
 | M1 | broker/safety race + concurrency proofs | tagged real-sim lifecycle/reconciliation | not started |
 | M2 | full Go gates | isolated concurrent sample builds + warm latency | not started |
 | M3 | MCP tests | two-agent dogfood + screenshots/status evidence | not started |
@@ -57,7 +57,6 @@ independently reviewed, and merged — see evidence log below.
 ## Blockers
 
 - No private Git remote has been supplied. This does not block local milestone implementation, but it blocks real PRs and the hosted third-review action.
-- M0.2 touches socket creation and permissions, a security-sensitive path. Dispatch requires owner-visible approval after the M0.1 scaffold is integrated.
 - M0.1 cross-model review attempt 1 (`grok-4.5-high`, fresh Cursor ask session) emitted no output for more than four minutes and was terminated with exit 130. The bounded fresh-session retry approved the diff with one non-blocking minor: pin Staticcheck instead of `@latest` in CI.
 
 ## Evidence log
@@ -153,9 +152,44 @@ independently reviewed, and merged — see evidence log below.
 - **M0 mechanical gate now fully green:** `go build ./... && go vet ./... && go test -race ./...`
   exits 0 across all packages with tests (`internal/ipc`, `internal/store`).
 
+### 2026-07-12 — M0.4 merged; M0 milestone gate CLOSED
+
+- Spec: `docs/plans/work-packages/m0.4-doctor.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m0.4-doctor` (branch `feat/m0.4-doctor`): `internal/cli/doctor.go` (5 checks —
+  Xcode, simctl, iOS runtime, socket perms, daemon liveness — collect-all not fail-fast, every
+  failure with code/message/fix), `cmd/simurgh/doctor.go` (production seams: read-only
+  `xcodebuild -version` / `xcrun simctl list runtimes -j`, and a **non-auto-starting**
+  `daemon.ping` probe that dials the socket directly rather than calling `internal/ipc.Dial` —
+  doctor must never spawn a daemon as a side effect of a diagnostic).
+- Orchestrator independently reran all 7 gates before review: build/vet/test-race/staticcheck/
+  gofmt/diff-check all exit 0.
+- Fresh independent Claude subagent review (low risk, standard pipeline — not the sensitive
+  Sonnet-mandatory path): independently re-ran all gates plus its own live manual check (built
+  the binary itself, confirmed `ps aux` showed no spawned daemon after a doctor run against an
+  empty `SIMURGH_HOME`, confirmed exit 4 → exit 0 transition with daemon started, confirmed
+  `--json` output). Verified `dialPing` never touches `ipc.Dial`'s auto-start path and no
+  mutating `simctl` subcommand appears anywhere. Verdict: **approve-with-minors** (2 non-blocking:
+  `FixSimctlUnavailable` reusing the Xcode-CLT fix string may not resolve a CLT-only environment;
+  runtime filter matches on the `name` string prefix rather than the structured `platform` field
+  — logged, not blocking).
+- Committed as `a30ab3b feat(cli): add simurgh doctor diagnostic command` on `feat/m0.4-doctor`;
+  local-merged to `master` as `ca76ddc merge: M0.4 doctor diagnostic command`. Post-merge gate
+  rerun: build/vet/test-race/staticcheck all exit 0. Worktree removed, branch deleted.
+- **M0 milestone gate run live on this Mac** (the literal `docs/ROADMAP.md:29-32` command):
+  built `/tmp/simurgh-m0-final`, `daemon run &` against a fresh `SIMURGH_HOME`, then `doctor` —
+  all 5 checks green (`Xcode 27.0`, `simctl available`, `1 iOS runtime(s): iOS 27.0`, socket mode
+  0600, `daemon.ping ok`), `doctor_exit=0`, daemon then killed cleanly (`daemon_exit=0`).
+  **M0 — Skeleton is COMPLETE.**
+
 ## Next action
 
-M0.2 (both sub-packages) is done. M0.4 doctor is unblocked next — checks Xcode/simctl presence,
-runtimes, socket perms, daemon liveness, every failure with a `fix` command. After M0.4 merges,
-close the M0 milestone gate: rerun the full mechanical gate plus the `[mac]` integration gate
-(`simurgh daemon run &` then `simurgh doctor` exit 0, all checks green) before starting M1.
+M0 is done (4/4 packages merged, mechanical + `[mac]` integration gates both green, live-verified
+on this Mac). M1 — Lease core is next in phase order: M1.1 broker (acquire/renew/release/get/
+list/wait, FIFO queue, capacity formula, error triple), M1.2 provisioner (clone/boot, interface-
+faked in unit tests), M1.3 watcher+reaper (liveness/TTL/reclamation), M1.4 safety package
+(**sensitive** — the centralized deletion guards; owner-visible approval required before
+dispatch, same as M0.2b), M1.5 CLI. M1.4's property tests over adversarial fixtures and the M1
+concurrency-proof gate (`docs/ARCHITECTURE.md` §11) are the product's actual differentiator —
+budget real attention there, not just gate-passing. Owner digest delivered this turn; awaiting
+go/no-go on M1 dispatch order (broker first, in parallel with the non-sensitive provisioner
+interface, holding M1.4 safety for explicit approval) vs. any owner-directed reprioritization.

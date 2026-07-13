@@ -353,7 +353,10 @@ func (b *Broker) tryBeginNextLocked(key string) *Lease {
 }
 
 func (b *Broker) finishProvision(ctx context.Context, lease *Lease) (Lease, error) {
-	device, err := b.provisioner.Provision(ctx, lease.Spec)
+	device, err := b.provisioner.Provision(ctx, ProvisionRequest{
+		Spec:    lease.Spec,
+		LeaseID: lease.ID,
+	})
 
 	b.mu.Lock()
 

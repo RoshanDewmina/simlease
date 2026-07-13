@@ -21,10 +21,10 @@ type fakeProvisioner struct {
 	delay    time.Duration
 	errAfter int // fail on call number N (1-based); 0 = never
 	calls    int
-	onCall   func(DeviceSpec)
+	onCall   func(ProvisionRequest)
 }
 
-func (f *fakeProvisioner) Provision(ctx context.Context, spec DeviceSpec) (Device, error) {
+func (f *fakeProvisioner) Provision(ctx context.Context, req ProvisionRequest) (Device, error) {
 	f.mu.Lock()
 	f.calls++
 	calls := f.calls
@@ -34,7 +34,7 @@ func (f *fakeProvisioner) Provision(ctx context.Context, spec DeviceSpec) (Devic
 	f.mu.Unlock()
 
 	if onCall != nil {
-		onCall(spec)
+		onCall(req)
 	}
 	if delay > 0 {
 		select {
@@ -50,7 +50,7 @@ func (f *fakeProvisioner) Provision(ctx context.Context, spec DeviceSpec) (Devic
 	return Device{
 		UDID:    fmt.Sprintf("UDID-%d", id),
 		Name:    fmt.Sprintf("sim-%d", id),
-		Runtime: spec.Runtime,
+		Runtime: req.Spec.Runtime,
 		Booted:  true,
 	}, nil
 }
@@ -625,7 +625,7 @@ type failCauseProvisioner struct {
 	n      atomic.Int64
 }
 
-func (p *failCauseProvisioner) Provision(ctx context.Context, spec DeviceSpec) (Device, error) {
+func (p *failCauseProvisioner) Provision(ctx context.Context, req ProvisionRequest) (Device, error) {
 	_ = ctx
 	p.mu.Lock()
 	p.calls++
@@ -638,7 +638,7 @@ func (p *failCauseProvisioner) Provision(ctx context.Context, spec DeviceSpec) (
 	return Device{
 		UDID:    fmt.Sprintf("UDID-%d", id),
 		Name:    fmt.Sprintf("sim-%d", id),
-		Runtime: spec.Runtime,
+		Runtime: req.Spec.Runtime,
 		Booted:  true,
 	}, nil
 }

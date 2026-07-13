@@ -722,3 +722,74 @@ func TestReclaimNonActiveIsInvalidState(t *testing.T) {
 		t.Fatalf("err=%v want LeaseNotFoundError", err)
 	}
 }
+
+// TestRetryQueuesPromotesAfterTransientPressureDip is a regression test for
+// a real bug found running BENCHMARK_PLAN.md's B2 scenario (4 concurrent
+// agents): a Release()-triggered promotion attempt that loses to a
+// transient pressure dip has no other trigger to retry once pressure
+// recovers, so the queued lease waits forever even with capacity fully
+// idle. Without calling RetryQueues, this test reproduces exactly that:
+// capacity idle, pressure fine again, lease still QUEUED.
+func TestRetryQueuesPromotesAfterTransientPressureDip(t *testing.T) {
+	p := &fakeProvisioner{}
+	now := time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC)
+	var pressureOK atomic.Bool
+	pressureOK.Store(true)
+	b := New(BrokerOptions{
+		Capacity:    1,
+		Provisioner: p,
+		Clock:       func() time.Time { return now },
+		PressureOK: func() (bool, string) {
+			if pressureOK.Load() {
+				return true, ""
+			}
+			return false, "ram pressure (test-injected)"
+		},
+	})
+	spec := testSpec()
+
+	first, err := b.Acquire(context.Background(), AcquireRequest{
+		Spec: spec, TTL: time.Minute, Owner: Owner{PID: 1},
+	})
+	if err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+
+	second, err := b.Acquire(context.Background(), AcquireRequest{
+		Spec: spec, TTL: time.Minute, Wait: false, Owner: Owner{PID: 2},
+	})
+	if second.State != LeaseQueued {
+		t.Fatalf("second state=%s want queued (err=%v)", second.State, err)
+	}
+
+	// Pressure dips exactly when Release() would otherwise promote the
+	// queued lease — canGrantLocked sees it, tryBeginNextLocked bails.
+	pressureOK.Store(false)
+	if _, err := b.Release(context.Background(), first.ID); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+
+	stillQueued, ok := b.Get(second.ID)
+	if !ok || stillQueued.State != LeaseQueued {
+		t.Fatalf("after release during pressure dip: state=%v ok=%v want queued (this is the bug's precondition, not the fix)", stillQueued.State, ok)
+	}
+
+	// Pressure recovers. Without RetryQueues, nothing re-checks the
+	// queue — capacity is idle, pressure is fine, and the lease would
+	// stay QUEUED forever (this was the actual bug).
+	pressureOK.Store(true)
+	stillQueued, _ = b.Get(second.ID)
+	if stillQueued.State != LeaseQueued {
+		t.Fatalf("state=%s — pressure recovering alone must not self-heal; RetryQueues is the only trigger", stillQueued.State)
+	}
+
+	b.RetryQueues(context.Background())
+
+	promoted, ok := b.Get(second.ID)
+	if !ok || promoted.State != LeaseActive {
+		t.Fatalf("after RetryQueues: state=%v ok=%v want active", promoted.State, ok)
+	}
+	if promoted.Device == nil {
+		t.Fatalf("promoted lease has no device")
+	}
+}

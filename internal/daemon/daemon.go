@@ -708,7 +708,7 @@ func (l *ReclaimLoop) Run(ctx context.Context, watchInterval, orphanScanInterval
 	w := watcher.New(wopts)
 
 	var wg sync.WaitGroup
-	wg.Add(2)
+	wg.Add(3)
 	go func() {
 		defer wg.Done()
 		w.Run(ctx, watchInterval, func(decisions []watcher.ReclaimDecision) {
@@ -719,7 +719,28 @@ func (l *ReclaimLoop) Run(ctx context.Context, watchInterval, orphanScanInterval
 		defer wg.Done()
 		l.runOrphanScan(ctx, orphanScanInterval, logger)
 	}()
+	go func() {
+		defer wg.Done()
+		l.runQueueRetry(ctx, watchInterval)
+	}()
 	wg.Wait()
+}
+
+// runQueueRetry periodically re-attempts promotion for queued leases on
+// the same cadence as the watcher tick. Broker.RetryQueues exists because
+// a promotion that fails solely on a transient pressure dip otherwise has
+// no other trigger to retry once conditions recover (see its doc comment).
+func (l *ReclaimLoop) runQueueRetry(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			l.Deps.Broker.RetryQueues(ctx)
+		}
+	}
 }
 
 func (l *ReclaimLoop) applyDecisions(ctx context.Context, decisions []watcher.ReclaimDecision, logger func(string, ...any)) {

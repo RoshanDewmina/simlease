@@ -391,6 +391,37 @@ func (b *Broker) beginProvisionLocked(lease *Lease) {
 	lease.State = LeaseProvisioning
 }
 
+// RetryQueues re-attempts promotion for every spec key with a non-empty
+// queue.
+//
+// tryBeginNextLocked only ever fires from Release/Acquire call sites. A
+// promotion attempt that fails solely because pressureOK() was transiently
+// false (canGrantLocked) has no other trigger to retry once conditions
+// recover — capacity can go fully idle while a queued lease waits forever,
+// since nothing re-checks it after the one attempt that happened to land
+// during a pressure dip. Found via B2 (BENCHMARK_PLAN.md bench matrix,
+// 4-agent scenario): two leases sat QUEUED with 0 ACTIVE and capacity
+// free for 20+ minutes. Intended to be called periodically (daemon wires
+// it into the same loop cadence as reclaim) so a transient dip gets
+// retried instead of stranding the lease permanently.
+func (b *Broker) RetryQueues(ctx context.Context) {
+	b.mu.Lock()
+	var toProvision []*Lease
+	for key, q := range b.queues {
+		if len(q.ids) == 0 {
+			continue
+		}
+		if next := b.tryBeginNextLocked(key); next != nil {
+			toProvision = append(toProvision, next)
+		}
+	}
+	b.mu.Unlock()
+
+	for _, lease := range toProvision {
+		_, _ = b.finishProvision(ctx, lease)
+	}
+}
+
 // tryBeginNextLocked dequeues the next grantable lease for key and marks it
 // PROVISIONING. Returns nil if the queue is empty or canGrant is false.
 func (b *Broker) tryBeginNextLocked(key string) *Lease {

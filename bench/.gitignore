@@ -1,0 +1,9 @@
+# Raw per-rep JSON/PNG/log output is gitignored by default (BENCHMARK_PLAN.md
+# §7: "results/ gitignored raw output, committed summaries"). When a run's
+# numbers are ready to publish, force-add that specific results/<ts>/
+# directory (git add -f) so RESULTS.md's evidence trail resolves —
+# ground rule: "every number in RESULTS.md traces to a JSON file in the
+# same commit."
+results/
+.bin/
+__pycache__/

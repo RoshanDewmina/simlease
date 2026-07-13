@@ -23,10 +23,26 @@ targets:
       properties:
         UILaunchScreen: {}
         CFBundleDisplayName: SampleApp
+  SampleAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "27.0"
+    sources:
+      - SampleAppUITests
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: dev.simurgh.fixtures.sampleappuitests
+      GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: SampleApp
 schemes:
   SampleApp:
     build:
       targets:
         SampleApp: all
+        SampleAppUITests: [test]
+    test:
+      config: Debug
+      targets:
+        - SampleAppUITests
     run:
       config: Debug

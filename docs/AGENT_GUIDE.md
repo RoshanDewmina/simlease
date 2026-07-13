@@ -21,7 +21,7 @@ from `internal/mcp/server.go` — follow them literally.
 
 ### `lease_acquire`
 
-> Acquire an isolated iOS Simulator lease before any simulator interaction. Never pick a UDID from simctl yourself — always go through this tool. Returns the device UDID plus the exact env vars and xcodebuild flags to use for isolated builds (see the env and xcodebuildFlags fields) — pass these to xcodebuild / simurgh exec rather than using default paths. Call once per parallel agent or session that needs its own simulator; do not share one lease across concurrent agents.
+> Acquire an isolated iOS Simulator lease before any simulator interaction. Never pick a UDID from simctl yourself — always go through this tool. Returns the device UDID plus the exact env vars and xcodebuild flags to use for isolated builds (see the env and xcodebuildFlags fields) — pass these to xcodebuild / simurgh exec rather than using default paths. Call once per parallel agent or session that needs its own simulator; do not share one lease across concurrent agents. Leases are session-bound by default: when this agent session ends, the lease is reclaimed automatically. Pass detach=true only when the lease must deliberately outlive this session.
 
 ### `lease_renew`
 
@@ -48,7 +48,7 @@ snippet. MCP clients load `.mcp.json` at session start — restart after `init`.
 Same daemon RPCs as the MCP tools:
 
 ```bash
-simurgh acquire --model "iPhone 17 Pro" --wait --json
+simurgh acquire --model "iPhone 17 Pro" --wait --rm --json
 simurgh env <lease-id>                 # or: eval "$(simurgh env <lease-id>)"
 simurgh exec <lease-id> -- xcodebuild … build
 simurgh renew <lease-id> [--ttl DUR]
@@ -92,6 +92,18 @@ returns capacity to the pool. Do not leave leases dangling “for later” — t
 hold capacity and keep devices around until TTL / inactivity / hard-cap or an
 explicit `simurgh prune --apply`.
 
-Without `--rm` / `ReleaseOnPIDExit`, a lease survives the acquiring process
-exiting (required for one-shot CLI `acquire`). With `--rm`, the watcher reclaims
-when that owner PID dies. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+Explicit release is a courtesy, not the safety net. The safety net is
+session binding:
+
+- **MCP (default):** leases are session-bound — the lease is registered
+  against the MCP server process, which lives exactly as long as your agent
+  session. Crash, force-quit, or window close ⇒ the watcher reclaims the
+  lease (and deletes its device) within seconds. Pass `detach=true` on
+  `lease_acquire` only when a lease must deliberately outlive the session.
+- **CLI:** pass `--rm` on `acquire` (as in the snippet above). `--rm` binds
+  the lease to the *parent* of the one-shot `acquire` process — your shell or
+  agent session — so the lease dies when that session does. Without `--rm`, a
+  lease survives the acquiring process exiting and is only reclaimed by
+  TTL / inactivity / hard-cap; use `--inactivity-timeout DUR` as a fallback
+  when a long-lived owner process doesn't exist (e.g. fire-and-forget
+  scripts). See [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

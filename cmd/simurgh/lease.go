@@ -362,6 +362,13 @@ func printLeaseResult(raw json.RawMessage, asJSON bool) error {
 	return nil
 }
 
+func ownerPID(rm bool) int {
+	if rm {
+		return os.Getppid()
+	}
+	return os.Getpid()
+}
+
 func runAcquire(args []string) int {
 	f, err := parseAcquireFlags(args)
 	if err != nil {
@@ -389,7 +396,13 @@ func runAcquire(args []string) int {
 		"owner": map[string]any{
 			// Agent is a fixed CLI identity; real calling-agent detection is
 			// deferred to simurgh init / env-based identification (M2/M3).
-			"pid":   os.Getpid(),
+			// With --rm the lease must die with the *session* that wants it,
+			// not with this one-shot acquire process (which exits right after
+			// printing the grant — binding to os.Getpid() would have the
+			// watcher reclaim every --rm lease within one tick). The parent
+			// is the invoking shell/agent process, the thing whose death
+			// actually means "session over".
+			"pid":   ownerPID(f.RM),
 			"agent": cliAgentName,
 		},
 		"timeouts": map[string]string{

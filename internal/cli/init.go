@@ -51,6 +51,11 @@ lease_release, lease_status, pool_status.
 Never pick a UDID from simctl yourself — always go through lease_acquire.
 Always call lease_release when done so the device is torn down and capacity
 returns to the pool.
+Leases are session-bound by default: if this session crashes or ends without
+releasing, the lease is reclaimed automatically. Do not pass detach=true
+unless a lease must deliberately outlive the session.
+If using the CLI instead of MCP, acquire with --rm so the lease dies with
+your shell session.
 `
 }
 

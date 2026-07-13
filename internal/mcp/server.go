@@ -50,7 +50,9 @@ func newServer(cfg serverConfig) *mcpsdk.Server {
 			"Never pick a UDID from simctl yourself — always go through this tool. " +
 			"Returns the device UDID plus the exact env vars and xcodebuild flags to use for isolated builds " +
 			"(see the env and xcodebuildFlags fields) — pass these to xcodebuild / simurgh exec rather than using default paths. " +
-			"Call once per parallel agent or session that needs its own simulator; do not share one lease across concurrent agents.",
+			"Call once per parallel agent or session that needs its own simulator; do not share one lease across concurrent agents. " +
+			"Leases are session-bound by default: when this agent session ends, the lease is reclaimed automatically. " +
+			"Pass detach=true only when the lease must deliberately outlive this session.",
 	}, s.handleLeaseAcquire)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
@@ -232,6 +234,8 @@ type leaseAcquireParams struct {
 	TTL           string            `json:"ttl,omitempty" jsonschema:"optional lease TTL duration string, e.g. 30m"`
 	ReuseIfExists bool              `json:"reuse_if_exists,omitempty" jsonschema:"if true, request reuse of an existing matching lease when supported"`
 	Wait          bool              `json:"wait,omitempty" jsonschema:"if true, wait when the pool is at capacity instead of failing immediately"`
+	Detach        bool              `json:"detach,omitempty" jsonschema:"if true, the lease survives this agent session ending; default false means the lease is reclaimed when this session's MCP server process exits"`
+	Inactivity    string            `json:"inactivity_timeout,omitempty" jsonschema:"optional inactivity timeout duration string, e.g. 10m; the lease is reclaimed after this long without activity"`
 }
 
 type leaseIDParams struct {
@@ -344,14 +348,19 @@ func (s *server) handleLeaseAcquire(ctx context.Context, _ *mcpsdk.CallToolReque
 		},
 		"labels":           in.Labels,
 		"ttl":              in.TTL,
-		"reuseIfExists":    in.ReuseIfExists,
-		"wait":             in.Wait,
-		"releaseOnPIDExit": false,
+		"reuseIfExists": in.ReuseIfExists,
+		"wait":          in.Wait,
+		// Session-bound by default (P0-4): this MCP server process lives
+		// exactly as long as the agent session that spawned it, so binding
+		// the lease to our own PID makes "agent crashed/window closed" and
+		// "lease reclaimed" the same event — the out-of-box behavior the
+		// crash-cleanup story (B4) is allowed to claim.
+		"releaseOnPIDExit": !in.Detach,
 		"owner": map[string]any{
 			"pid":   os.Getpid(),
 			"agent": mcpAgentName,
 		},
-		"timeouts": map[string]string{},
+		"timeouts": map[string]string{"inactivity": in.Inactivity},
 	}
 	raw, err := s.cfg.Call(ctx, "lease.acquire", params)
 	if err != nil {

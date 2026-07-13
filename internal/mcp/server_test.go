@@ -140,6 +140,11 @@ func TestLeaseAcquireMapsParamsAndResult(t *testing.T) {
 	if labels["run"] != "a" {
 		t.Fatalf("labels = %#v", gotParams["labels"])
 	}
+	// Session-bound by default (P0-4): no detach param passed above, so the
+	// lease must be registered ReleaseOnPIDExit against this MCP server.
+	if gotParams["releaseOnPIDExit"] != true {
+		t.Fatalf("releaseOnPIDExit = %#v, want true by default", gotParams["releaseOnPIDExit"])
+	}
 
 	out := decodeStructured[leaseGrantResult](t, res)
 	if out.ID != "lease-1" || out.UDID != "UDID-ABC" {
@@ -150,6 +155,54 @@ func TestLeaseAcquireMapsParamsAndResult(t *testing.T) {
 	}
 	if len(out.XcodebuildFlags) != 2 || out.XcodebuildFlags[0] != "-derivedDataPath" {
 		t.Fatalf("xcodebuildFlags = %#v", out.XcodebuildFlags)
+	}
+}
+
+func TestLeaseAcquireDetachAndInactivity(t *testing.T) {
+	var gotParams map[string]any
+	srv := newServer(serverConfig{
+		Call: func(_ context.Context, _ string, params any) (json.RawMessage, error) {
+			raw, err := json.Marshal(params)
+			if err != nil {
+				return nil, err
+			}
+			if err := json.Unmarshal(raw, &gotParams); err != nil {
+				return nil, err
+			}
+			return json.RawMessage(`{
+				"lease": {
+					"id": "lease-2",
+					"state": "ACTIVE",
+					"spec": {"platform":"iOS","model":"iPhone 17 Pro"},
+					"device": {"udid":"U2"},
+					"expiresAt": "2026-07-13T12:00:00Z",
+					"env": {"env": {}, "xcodebuildFlags": []}
+				}
+			}`), nil
+		},
+		LastLeasePath: filepath.Join(t.TempDir(), "last-lease"),
+	})
+	cs := connectTestClient(t, srv)
+	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name: "lease_acquire",
+		Arguments: map[string]any{
+			"model":              "iPhone 17 Pro",
+			"detach":             true,
+			"inactivity_timeout": "10m",
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+	if res.IsError {
+		t.Fatalf("unexpected tool error: %v", res.Content)
+	}
+	if gotParams["releaseOnPIDExit"] != false {
+		t.Fatalf("releaseOnPIDExit = %#v, want false with detach=true", gotParams["releaseOnPIDExit"])
+	}
+	timeouts, _ := gotParams["timeouts"].(map[string]any)
+	if timeouts["inactivity"] != "10m" {
+		t.Fatalf("timeouts = %#v", gotParams["timeouts"])
 	}
 }
 

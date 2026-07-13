@@ -14,10 +14,37 @@ func main() {
 			printHelp()
 			return
 		case "daemon":
-			if len(os.Args) > 2 && os.Args[2] == "run" {
-				os.Exit(runDaemon())
+			if len(os.Args) > 2 {
+				switch os.Args[2] {
+				case "run":
+					os.Exit(runDaemon())
+				case "status":
+					var logsFlag, jsonFlag bool
+					for _, a := range os.Args[3:] {
+						switch a {
+						case "--logs":
+							logsFlag = true
+						case "--json":
+							jsonFlag = true
+						case "-h", "--help", "help":
+							fmt.Println("usage: simurgh daemon status [--logs] [--json]")
+							return
+						default:
+							fmt.Fprintf(os.Stderr, "usage: simurgh daemon status [--logs] [--json]\n")
+							os.Exit(3)
+						}
+					}
+					os.Exit(runDaemonStatus(logsFlag, jsonFlag))
+				case "-h", "--help", "help":
+					fmt.Println(`usage: simurgh daemon run
+       simurgh daemon status [--logs] [--json]`)
+					return
+				default:
+					fmt.Fprintf(os.Stderr, "usage: simurgh daemon run|status\n")
+					os.Exit(2)
+				}
 			}
-			fmt.Fprintf(os.Stderr, "usage: simurgh daemon run\n")
+			fmt.Fprintf(os.Stderr, "usage: simurgh daemon run|status\n")
 			os.Exit(2)
 		case "doctor":
 			jsonOut := false
@@ -90,6 +117,7 @@ Usage:
   simurgh warm remove --model NAME [--runtime VER] [--json]
   simurgh prune [--apply] [--json]
   simurgh daemon run
+  simurgh daemon status [--logs] [--json]
   simurgh doctor [--json]
   simurgh init [--force] [--json]
   simurgh mcp

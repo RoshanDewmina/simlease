@@ -5,7 +5,7 @@ simulators. A daemon leases exclusive simulator clones (queue + TTL instead of
 collisions), emits per-lease DerivedData / module-cache / SwiftPM isolation, and
 exposes the same surface as a CLI and a stdio MCP server.
 
-**Status:** pre-`v0.0.1`, closed source, no public remote. Do not add an OSS
+**Status:** `v0.0.1`, closed source, no public remote. Do not add an OSS
 license file or push this tree to a public host.
 
 ## Requirements

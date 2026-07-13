@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.0.1 — 2026-07-13
 
 ### M0 — skeleton
 
@@ -39,4 +39,4 @@
   `pool.status` / `simurgh status`.
 - Log rotation; `simurgh daemon status [--logs] [--json]` (non-auto-starting).
 - Static audit: no empty `code`/`message`/`fix` error-triple literals.
-- Documentation: README quickstart, agent guide, troubleshooting (this package).
+- Documentation: README quickstart, agent guide, troubleshooting.

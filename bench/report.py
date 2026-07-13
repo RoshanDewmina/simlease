@@ -15,11 +15,27 @@ import sys
 
 def load_runs(results_dir):
     runs = []
+    skipped = []
     for path in sorted(glob.glob(os.path.join(results_dir, "run-*.json"))):
-        with open(path) as f:
-            data = json.load(f)
-        data["_file"] = os.path.basename(path)
+        base = os.path.basename(path)
+        # Sidecar files (e.g. arm_simurgh.sh's *.acquire.json acquire-
+        # timing record) match this glob but aren't agent-task results.
+        if ".acquire." in base:
+            continue
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            skipped.append((base, str(exc)))
+            continue
+        if "scenario" not in data or "arm" not in data:
+            skipped.append((base, "missing scenario/arm key"))
+            continue
+        data["_file"] = base
         runs.append(data)
+    if skipped:
+        for name, reason in skipped:
+            print(f"report.py: skipped {name}: {reason}", file=sys.stderr)
     return runs
 
 

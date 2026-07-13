@@ -87,6 +87,17 @@ if [[ "$build_exit" -eq 0 ]]; then
   fi
 fi
 
+# `simctl` reporting device state "Booted" is weaker than full boot
+# readiness (SpringBoard etc. actually up) — arm_naive.sh/arm_diy.sh
+# already wait on `simctl bootstatus` for devices they create
+# themselves, but arm_simurgh.sh's device comes pre-leased and this
+# script never verified it beyond what the daemon's own WaitBooted
+# already did (state-poll only). Under real concurrent CPU load that
+# gap widens; a real 10-rep run surfaced this as install/launch
+# failing with no observable error — belt-and-braces here regardless
+# of arm, cheap when the device's already fully booted.
+bench_step boot_wait xcrun simctl bootstatus "$BENCH_UDID" -b >>"$STEPS_FILE"
+
 # --- install --------------------------------------------------------
 install_exit=1
 install_json='{"step":"install","start_ns":0,"end_ns":0,"duration_ns":0,"exit_code":1,"incidents":[{"type":"launch_destination_failure","evidence":"build failed or app bundle not found, install skipped"}],"log":""}'

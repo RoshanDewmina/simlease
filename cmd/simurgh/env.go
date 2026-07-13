@@ -172,6 +172,8 @@ Exit code is the child's exit code (not the IPC 0/2/3/4/5 contract).`)
 	}
 
 	argv := append([]string(nil), cmdArgs...)
+	var warmDDPath string
+	leaseDD := iso.Env["SIMURGH_DERIVED_DATA"]
 	if isXcodebuild(argv) {
 		// Inject base isolation flags after the binary (PATH shim is v0.1 — not built).
 		flags := append([]string(nil), iso.XcodebuildFlags...)
@@ -184,6 +186,15 @@ Exit code is the child's exit code (not the IPC 0/2/3/4/5 contract).`)
 			flags = append(flags, "-resultBundlePath", bundle)
 		}
 		argv = append([]string{argv[0]}, append(flags, argv[1:]...)...)
+
+		if !isXcodebuildQueryOnly(argv) {
+			if projectPath, scheme := extractProjectScheme(argv); projectPath != "" {
+				if home, herr := simurghHomeDir(); herr == nil {
+					warmDDPath = warmDDCachePath(home, warmDDKey(projectPath, scheme))
+					seedDerivedDataFromWarm(warmDDPath, leaseDD)
+				}
+			}
+		}
 	}
 
 	env := append([]string(nil), os.Environ()...)
@@ -198,6 +209,9 @@ Exit code is the child's exit code (not the IPC 0/2/3/4/5 contract).`)
 	cmd.Stdin = os.Stdin
 	err = cmd.Run()
 	if err == nil {
+		if warmDDPath != "" {
+			refreshWarmFromDerivedData(leaseDD, warmDDPath)
+		}
 		return 0
 	}
 	var ee *exec.ExitError

@@ -55,7 +55,7 @@ independently reviewed, and merged — see evidence log below.
 | M2.3 prune + doctor extensions | merged locally as `f916760` | cleaned | `grok-4.5-high` | sensitive-adjacent, personal review (real deletion surface) | merged | green |
 | M3.1 MCP server | merged locally as `a83a947` | cleaned | `grok-4.5-high` | low | merged | green |
 | M3.2 simurgh init | merged locally as `ed124b2` | cleaned | `grok-4.5-high` | low | merged | green |
-| M3.3 dogfood | pending | pending | orchestrator-driven (2 parallel Agent-tool subagents) | low | blocked on M3.1/M3.2 | pending |
+| M3.3 dogfood | committed `a01b792` (docs) + fix `66ae3f6` (watcher bug) | cleaned | orchestrator-driven (2 parallel Agent-tool subagents) | found+fixed a real reclaim bug | done | green (run 2, after fix) |
 
 ## Milestone gates
 
@@ -64,7 +64,7 @@ independently reviewed, and merged — see evidence log below.
 | M0 | build, vet, race tests, staticcheck — **PASS** | `daemon run` + `doctor` exit 0, all 5 checks green — **PASS**, live-run 2026-07-12 | **COMPLETE** |
 | M1 | `go test -race -count=1 ./...` (whole repo) — **PASS**, all 11 testable packages green | `[mac]` full-lifecycle + two-terminal concurrent-acquire smoke — **PASS**; SIGKILL-mid-lifecycle → restart → reconcile — **PASS**, live-run 2026-07-13 (see evidence log) | **COMPLETE — all sub-scenarios in the GATE text satisfied, live-proven, no caveats** |
 | M2 | full Go gates — **PASS**, all packages green | isolated concurrent sample builds — **PASS** (M2.1); warm latency ≥50% — **NOT MET** on this Mac, functionally correct, honestly reported (M2.2); `release && prune` → empty plan — **PASS**, live-run 2026-07-13 (M2.3) | **COMPLETE** (one sub-target — warm latency — honestly reported as unmet rather than papered over; everything else live-proven) |
-| M3 | MCP tests | two-agent dogfood + screenshots/status evidence | not started |
+| M3 | `go test ./internal/mcp/...` — **PASS** | two-agent dogfood — **PASS** run 2, `docs/dogfood/2026-07-13.md`, real screenshots + build/release evidence committed | **COMPLETE** |
 | M4 | full suite + error audit | clean dogfood rerun + fresh-account quickstart | not started |
 
 ## Blockers
@@ -666,33 +666,69 @@ independently reviewed, and merged — see evidence log below.
   (M3.2)` on `feat/m3.2-init`; local-merged to `master` as `ed124b2 merge: M3.2 simurgh init`.
   Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
 
+### 2026-07-13 — M3.3 dogfood run, a real bug found+fixed, then a clean second run; M3 COMPLETE
+
+- **Mechanical question resolved:** a dispatched `Agent`-tool subagent cannot attach to a new MCP
+  server mid-session — this session's MCP servers are fixed at startup from `command-center`'s own
+  `.mcp.json` (confirmed by inspection: `context7, XcodeBuildMCP, xcode, apple-docs, ios-simulator,
+  supabase`, no `simurgh`), and subagents inherit that same fixed set. A literal "two parallel
+  Claude Code sessions each holding a live MCP connection" was therefore not achievable from
+  inside this orchestrator run. **Honest fallback used and documented in `docs/dogfood/
+  2026-07-13.md`:** two parallel `Agent`-tool subagents each independently drove `simurgh` through
+  its CLI (`acquire`/`exec`/`release`) — the same underlying `internal/daemon` RPCs the MCP tools
+  also wrap (confirmed identical in M1.5b and M3.1), so this is a faithful substitute for the
+  concurrency/isolation claim even though it isn't literally the MCP wire protocol under load
+  (which M3.1's own live test already separately proved works with a real client).
+- **Run 1 failed both agents and surfaced a real, previously-undetected bug**, exactly the kind
+  dogfooding exists to catch: `internal/watcher.decide()` checked owner-PID liveness
+  unconditionally regardless of `ReleaseOnPIDExit`, and the CLI's `acquire` command records its
+  own one-shot process's PID as owner — which exits the instant `acquire` returns. Every
+  CLI-acquired lease (no `--rm`) was therefore reclaimed, and its device deleted, within one
+  watcher tick (5s) of the acquire command returning, regardless of TTL. One agent's fast build
+  (12.8s) won the race against reclamation; the other's slower start didn't and hit `xcodebuild:
+  error: Unable to find a device matching the provided destination specifier`. No prior package's
+  live test caught this because every prior `[mac]` check used a short acquire→immediately-verify-
+  then-release flow, never held a lease across a slower multi-step workflow the way a real agent
+  actually would.
+- **Fixed with the same rigor as every other package**, dispatched as an urgent, narrowly-scoped
+  bug fix (not folded into a bigger package): `internal/watcher.decide()` now checks owner-PID
+  liveness ONLY when `ReleaseOnPIDExit` is `true` — matching what the `--rm` CLI flag was always
+  documented to mean; without `--rm` a lease lives until TTL/inactivity/hard-cap. New test coverage
+  added for the fixed behavior; the M1 GATE's "SIGKILL'd owner → RECLAIMED within one watcher
+  interval" scenario re-tested explicitly against a `ReleaseOnPIDExit=true` lease (its correct
+  scope, not every lease unconditionally) and still passes. Orchestrator independently reran all
+  gates and personally traced the fix (a small, well-understood conditional change, but reclaim/
+  deletion-gating logic gets personal scrutiny per this session's standing practice) before
+  merging as `66ae3f6`.
+- **Run 2, with the fix, succeeded completely for both agents:** real distinct UDIDs
+  (`075CB5DC-...`/`659D4EC5-...`), real builds (45.2s/49.8s, `BUILD SUCCEEDED`), real install+
+  launch (`simctl launch` returned real PIDs), real PNG screenshots (145,150/151,504 bytes,
+  1206×2622, independently confirmed via `file`), clean release, and confirmed device teardown
+  after each. Concurrency proven both by timestamp-overlap analysis (both leases genuinely
+  ACTIVE simultaneously 05:14:39–05:15:10) and by agent B's own live confirmation mid-run that
+  agent A's lease was concurrently active. Zero manual UDID handling — both agents only ever used
+  the UDID their own `acquire` call returned. Orchestrator independently verified every claim
+  (screenshot files real and non-empty, build logs actually say `BUILD SUCCEEDED`, final real
+  device state shows only `simurgh-base[...]`, `~/.simurgh` untouched throughout both runs)
+  rather than trusting the subagent reports at face value.
+- Dogfood log + both screenshots committed as `a01b792 docs(dogfood): M3.3 dogfood run -- two-agent
+  concurrent build/launch (2026-07-13)` at `docs/dogfood/2026-07-13.md`.
+- **M3 milestone gate is now fully green**: `go test ./internal/mcp/...` passes, and the two-agent
+  dogfood — the actual v0 exit demo the owner asked to see — succeeded with real, independently-
+  verified evidence, plus caught and fixed a genuine product bug along the way.
+
 ## Next action
 
-**M3.3 — dogfood — is next, and it is the real v0 exit demo** the owner explicitly asked to see —
-this is the one piece of the whole roadmap that isn't a normal "spec → dispatch to Cursor →
-verify → merge" package, so it deserves its own focused planning pass rather than being rushed.
-The roadmap wants: register `simurgh mcp` with Claude Code (M3.1/M3.2 make this mechanically
-possible now — `simurgh init` in a scratch project directory produces a working `.mcp.json`
-entry), run TWO parallel Claude Code sessions against `test/fixtures/SampleApp` (already built and
-proven buildable in M2.1), each independently told to acquire → build → launch → screenshot →
-release, zero collisions, zero manual UDID handling, with a dogfood log (both screenshots +
-`simurgh status` output captured mid-run) committed to `docs/dogfood/`.
-
-**Open mechanical question to resolve first, before writing anything:** can a dispatched
-subagent (via the `Agent` tool) actually attach to `simurgh mcp` as a real MCP client and call its
-tools directly, the way a real Claude Code user session would via `.mcp.json`? If yes, the cleanest
-approach is two parallel `Agent` tool calls (not Cursor CLI — this needs to consume the MCP server
-as a client, not write code), each independently: `lease_acquire`, build+launch `SampleApp` via
-`xcodebuild`, screenshot the booted simulator (`xcrun simctl io <udid> screenshot` is available
-without any new MCP tool), `lease_release`. If a bare `Agent`-tool subagent can't attach to a
-project-local `.mcp.json` the way a full Claude Code session can, the fallback is to actually
-drive two real CLI-level flows (e.g. two subagents each running `simurgh acquire`/`simurgh
-exec`/`simurgh release` directly, which exercises the exact same underlying daemon/broker
-concurrency this whole roadmap has already proven — M1's two-terminal smoke test literally IS
-this scenario minus the MCP-and-build-and-screenshot wrapper) and document honestly which
-mechanism was actually used if it isn't the literal "two parallel Claude Code sessions" the
-roadmap describes. Investigate the real capability before committing to an approach, and record
-the decision here. After M3.3: M4 (hardening + polish), tag `v0.0.1` per
-`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar (all M0–M4 gates green with pasted evidence in
-this file, the M3 dogfood log committed, a README quickstart a fresh Mac user could follow
-verbatim).
+**M4 — Hardening + polish (v0 exit)** is the last milestone, per `docs/ROADMAP.md`: pressure
+monitoring before grant (RAM/thermal/disk, with a queue-reason — `internal/broker`'s `PressureOK`
+seam already exists from M1.1 but always returns true today; this is where it gets a real
+implementation), `wait` long-poll UX polish + `simurgh status --queue`, log rotation +
+`simurgh daemon status --logs`, an error-message audit (every error path has a real code+message+
+fix — a grep-able test asserting this across the codebase would be a good mechanical check), and
+documentation: a README quickstart at Limrun-quality bar, an agent guide, a troubleshooting doc.
+GATE: full `[mac]` suite green, a clean dogfood rerun, and the README quickstart actually followed
+verbatim (ideally by a fresh check, not just written and assumed correct). Then tag `v0.0.1`
+(private, per the brief's non-negotiables — no public remote) per
+`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar: all M0–M4 gates green with pasted evidence in
+this file (now true through M3), the M3 dogfood log committed (done), a README quickstart a fresh
+Mac user could follow verbatim (not yet written — this is real remaining work, not a formality).

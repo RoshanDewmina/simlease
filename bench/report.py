@@ -19,8 +19,16 @@ def load_runs(results_dir):
     for path in sorted(glob.glob(os.path.join(results_dir, "run-*.json"))):
         base = os.path.basename(path)
         # Sidecar files (e.g. arm_simurgh.sh's *.acquire.json acquire-
-        # timing record) match this glob but aren't agent-task results.
-        if ".acquire." in base:
+        # timing record, arm_diy.sh's *.provision.json) match this glob
+        # but aren't agent-task results.
+        if ".acquire." in base or ".provision." in base:
+            continue
+        # Retry attempts (-tryN suffix, P0-2) are counted by the
+        # time-to-N-green table via green-log.jsonl; the per-agent-task
+        # table below stays first-attempt-only so it remains comparable
+        # with pre-retry runs.
+        stem = base[: -len(".json")]
+        if stem.rsplit("-", 1)[-1].startswith("try"):
             continue
         try:
             with open(path) as f:
@@ -37,6 +45,18 @@ def load_runs(results_dir):
         for name, reason in skipped:
             print(f"report.py: skipped {name}: {reason}", file=sys.stderr)
     return runs
+
+
+def load_green_log(results_dir):
+    path = os.path.join(results_dir, "green-log.jsonl")
+    entries = []
+    if os.path.exists(path):
+        with open(path) as f:
+            for line in f:
+                line = line.strip()
+                if line:
+                    entries.append(json.loads(line))
+    return entries
 
 
 def load_residue_log(results_dir):
@@ -81,7 +101,56 @@ def summarize_group(runs):
     }
 
 
-def render(results_dir, runs, residue_log):
+def badge_latency_stats(runs):
+    """Per (scenario, arm): time-to-badge latencies from first-attempt
+    launch steps that recorded one (older runs predate the field)."""
+    groups = {}
+    for r in runs:
+        for step in r.get("steps", []):
+            if step.get("step") == "launch" and step.get("time_to_badge_ns") is not None:
+                groups.setdefault(group_key(r), []).append(step["time_to_badge_ns"])
+    return groups
+
+
+def render_green_table(lines, green_log):
+    lines.append("## Time-to-N-green (retry-to-green, max attempts per agent-task shown)")
+    lines.append("")
+    lines.append(
+        "Wall-clock per rep until ALL N agents hold a verified-correct result "
+        "(retry latency included). `first-try greens` counts agents green on attempt 1."
+    )
+    lines.append("")
+    lines.append(
+        "| Scenario | Arm | Mode | Reps | All-green reps | Median to-green | Min | Max "
+        "| First-try greens | Attempts used / budget |"
+    )
+    lines.append("|---|---|---|---|---|---|---|---|---|---|")
+    groups = {}
+    for e in green_log:
+        groups.setdefault((e["scenario"], e["arm"], e.get("simurgh_mode", "n/a")), []).append(e)
+    for key in sorted(groups.keys()):
+        scenario, arm, mode = key
+        entries = groups[key]
+        wallclocks = sorted(e["wallclock_ns"] for e in entries)
+        all_green = sum(1 for e in entries if e.get("all_green"))
+        first_try = sum(
+            1
+            for e in entries
+            for a in e.get("agents", {}).values()
+            if a.get("green") and a.get("attempts") == 1
+        )
+        agent_tasks = sum(e.get("n_agents", 0) for e in entries)
+        attempts = sum(e.get("total_attempts", 0) for e in entries)
+        budget = sum(e.get("n_agents", 0) * e.get("max_attempts", 1) for e in entries)
+        lines.append(
+            f"| {scenario} | {arm} | {mode} | {len(entries)} | {all_green}/{len(entries)} "
+            f"| {fmt_ns(statistics.median(wallclocks))} | {fmt_ns(wallclocks[0])} | {fmt_ns(wallclocks[-1])} "
+            f"| {first_try}/{agent_tasks} | {attempts}/{budget} |"
+        )
+    lines.append("")
+
+
+def render(results_dir, runs, residue_log, green_log):
     lines = []
     lines.append(f"# Bench summary — {os.path.basename(results_dir.rstrip('/'))}")
     lines.append("")
@@ -108,6 +177,24 @@ def render(results_dir, runs, residue_log):
             f"| {incident_str} |"
         )
     lines.append("")
+
+    if green_log:
+        render_green_table(lines, green_log)
+
+    latency_groups = badge_latency_stats(runs)
+    if latency_groups:
+        lines.append("## Badge latency (launch → first AGENT_BADGE print, first attempts)")
+        lines.append("")
+        lines.append("| Scenario | Arm | n with badge | Median | Min | Max |")
+        lines.append("|---|---|---|---|---|---|")
+        for key in sorted(latency_groups.keys()):
+            scenario, arm = key
+            vals = sorted(latency_groups[key])
+            lines.append(
+                f"| {scenario} | {arm} | {len(vals)} | {fmt_ns(statistics.median(vals))} "
+                f"| {fmt_ns(vals[0])} | {fmt_ns(vals[-1])} |"
+            )
+        lines.append("")
 
     if residue_log:
         lines.append("## Post-rep residue log")
@@ -147,7 +234,8 @@ def main():
     results_dir = sys.argv[1]
     runs = load_runs(results_dir)
     residue_log = load_residue_log(results_dir)
-    sys.stdout.write(render(results_dir, runs, residue_log))
+    green_log = load_green_log(results_dir)
+    sys.stdout.write(render(results_dir, runs, residue_log, green_log))
 
 
 if __name__ == "__main__":

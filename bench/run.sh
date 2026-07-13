@@ -3,6 +3,21 @@
 #
 # Usage:
 #   run.sh --scenario B1 [--reps N] [--arms N,D,S] [--out DIR]
+#          [--retries K] [--simurgh-mode fresh|reuse]
+#
+# --retries K (default 1 = off): retry-to-green (P0-2). A failed
+#   agent-task retries under the same arm and rules, up to K attempts
+#   total; retry latency is part of the rep's wall-clock. Per-rep
+#   time-to-N-green + attempts land in green-log.jsonl.
+# --simurgh-mode reuse (default fresh): ARM-S holds ONE lease per agent
+#   across all reps (acquired up front with --reuse-if-exists +
+#   per-agent labels, released after the last rep) instead of paying a
+#   fresh clone+boot every rep — this mirrors how a real agent iterates
+#   on a task. NOTE (found during P0-1): --reuse-if-exists is parsed by
+#   the CLI and carried over the wire, but broker.Acquire never reads
+#   it — the flag is a no-op in the product today. The reuse economics
+#   here come from the harness holding the lease, and the flag is
+#   passed anyway to keep the invocation honest about intent.
 #
 # Drives one scenario across the requested arms/reps, writing one JSON
 # per agent-task to results/<ts>/run-<scenario>-<arm>-rep<rep>-<agent>.json,
@@ -19,9 +34,11 @@ SCENARIO=""
 REPS=""
 ARMS=""
 OUT_ROOT="$HERE/results"
+RETRIES=1
+SIMURGH_MODE="fresh"
 
 usage() {
-  echo "usage: run.sh --scenario B1..B5 [--reps N] [--arms N,D,S] [--out DIR]" >&2
+  echo "usage: run.sh --scenario B1..B5 [--reps N] [--arms N,D,S] [--out DIR] [--retries K] [--simurgh-mode fresh|reuse]" >&2
   exit 2
 }
 
@@ -31,11 +48,14 @@ while [[ $# -gt 0 ]]; do
     --reps) REPS="$2"; shift 2 ;;
     --arms) ARMS="$2"; shift 2 ;;
     --out) OUT_ROOT="$2"; shift 2 ;;
+    --retries) RETRIES="$2"; shift 2 ;;
+    --simurgh-mode) SIMURGH_MODE="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "run.sh: unknown flag $1" >&2; usage ;;
   esac
 done
 [[ -z "$SCENARIO" ]] && usage
+[[ "$SIMURGH_MODE" != "fresh" && "$SIMURGH_MODE" != "reuse" ]] && usage
 
 # --- scenario table: agents, default arms, default reps ---------------
 case "$SCENARIO" in
@@ -62,6 +82,17 @@ mkdir -p "$RESULTS_DIR"
 # they accumulate silently across separate run.sh invocations. Safe per
 # the harness's own naming invariant: only ever deletes bench-*-named
 # devices, never simurgh-* or anything else.
+# Scratch sweep (P2-9, the 40 GB lesson): DIY's per-agent scratch
+# DerivedData under results/.scratch/ accumulates unbounded across
+# separate invocations and once genuinely exhausted this Mac's disk
+# mid-run. Swept at startup like bench-* devices. Only ever deletes
+# under bench/results/ — within the harness's own safety invariant.
+if [[ -d "$HERE/results/.scratch" ]]; then
+  scratch_size="$(du -sh "$HERE/results/.scratch" 2>/dev/null | awk '{print $1}')"
+  echo "run.sh: sweeping bench/results/.scratch (${scratch_size:-0})" >&2
+  rm -rf "$HERE/results/.scratch"
+fi
+
 for udid in $(xcrun simctl list devices -j 2>/dev/null | python3 -c '
 import json, sys
 d = json.load(sys.stdin)
@@ -110,12 +141,52 @@ ensure_daemon() {
   fi
 }
 
-stop_daemon_if_ours() {
+# --- reuse mode (P0-1): one long-lived lease per agent for the whole
+#     ARM-S cell, acquired before rep 1, released after the last rep. ---
+REUSE_LEASE_DIR="$RESULTS_DIR/.reuse-leases"
+
+reuse_acquire_all() {
+  mkdir -p "$REUSE_LEASE_DIR"
+  local agent
+  for agent in "${AGENTS[@]}"; do
+    local t0 t1 acquire_json
+    t0="$(mono_ns)"
+    acquire_json="$("$SIMURGH_BIN" acquire --model "${BENCH_SIM_NAME:-iPhone 17 Pro}" --wait --reuse-if-exists \
+      --label "bench=$RUN_ID" --label "agent=$agent" --json)"
+    local rc=$?
+    t1="$(mono_ns)"
+    if [[ $rc -ne 0 ]]; then
+      echo "run.sh: reuse-mode acquire failed for agent $agent: $acquire_json" >&2
+      return 1
+    fi
+    python3 -c '
+import json, sys
+d = json.loads(sys.argv[1])
+print(json.dumps({"lease_id": d["lease"]["id"], "udid": d["lease"]["device"]["udid"]}))
+' "$acquire_json" >"$REUSE_LEASE_DIR/$agent.json"
+    jq -nc --argjson s "$t0" --argjson e "$t1" --argjson d "$((t1 - t0))" --arg agent "$agent" \
+      '{agent:$agent, start_ns:$s, end_ns:$e, duration_ns:$d, mode:"reuse", note:"one acquire for the whole cell"}' \
+      >"$RESULTS_DIR/reuse-acquire-${agent}.json"
+  done
+  return 0
+}
+
+reuse_release_all() {
+  local f
+  for f in "$REUSE_LEASE_DIR"/*.json; do
+    [[ -f "$f" ]] || continue
+    "$SIMURGH_BIN" release "$(jq -r '.lease_id' "$f")" --json >/dev/null 2>&1 || true
+    rm -f "$f"
+  done
+}
+
+cleanup_on_exit() {
+  reuse_release_all
   if [[ "$DAEMON_STARTED_BY_US" == "1" && -f "$RESULTS_DIR/daemon.pid" ]]; then
     kill "$(cat "$RESULTS_DIR/daemon.pid")" 2>/dev/null || true
   fi
 }
-trap stop_daemon_if_ours EXIT
+trap cleanup_on_exit EXIT
 
 run_rep() {
   local arm_code="$1" rep="$2"
@@ -139,27 +210,79 @@ run_rep() {
     ram_sampler_pid=$!
   fi
 
+  local rep_start_ns loadavg
+  rep_start_ns="$(mono_ns)"
+  loadavg="$(sysctl -n vm.loadavg 2>/dev/null | tr -d '{}' | xargs)"
+
   local pids=()
-  local outs=()
   for agent in "${AGENTS[@]}"; do
-    local out="$RESULTS_DIR/run-${SCENARIO}-${arm_name}-rep${rep}-${agent}.json"
-    outs+=("$out")
+    local out_base="$RESULTS_DIR/run-${SCENARIO}-${arm_name}-rep${rep}-${agent}"
+    local attempts_file="$RESULTS_DIR/.attempts-${arm_name}-rep${rep}-${agent}"
     (
       export BENCH_AGENT="$agent"
       export BENCH_SCENARIO="$SCENARIO"
       export BENCH_REP="$rep"
-      export BENCH_OUT="$out"
       export BENCH_RUN_ID="$RUN_ID"
       export SIMURGH_BIN
-      "$arm_script"
+      if [[ "$arm_name" == "simurgh" && "$SIMURGH_MODE" == "reuse" && -f "$REUSE_LEASE_DIR/$agent.json" ]]; then
+        export BENCH_LEASE_ID="$(jq -r '.lease_id' "$REUSE_LEASE_DIR/$agent.json")"
+        export BENCH_PRESET_UDID="$(jq -r '.udid' "$REUSE_LEASE_DIR/$agent.json")"
+      fi
+      attempt=1
+      status=1
+      while :; do
+        if [[ "$attempt" -eq 1 ]]; then
+          export BENCH_OUT="${out_base}.json"
+        else
+          export BENCH_OUT="${out_base}-try${attempt}.json"
+        fi
+        "$arm_script"
+        status=$?
+        echo "$attempt" >"$attempts_file"
+        [[ "$status" -eq 0 || "$attempt" -ge "$RETRIES" ]] && exit "$status"
+        attempt=$((attempt + 1))
+      done
     ) &
     pids+=($!)
   done
 
   local rep_exit=0
+  local agent_statuses=()
   for pid in "${pids[@]}"; do
-    wait "$pid" || rep_exit=1
+    if wait "$pid"; then
+      agent_statuses+=(0)
+    else
+      agent_statuses+=(1)
+      rep_exit=1
+    fi
   done
+
+  # Time-to-N-green (P0-2): wall-clock from rep start until every agent
+  # subshell finished (green or retries exhausted), retries included.
+  local rep_end_ns=$(( $(mono_ns) ))
+  local greens=0 total_attempts=0 attempts_json="{}"
+  local i=0
+  for agent in "${AGENTS[@]}"; do
+    local attempts_file="$RESULTS_DIR/.attempts-${arm_name}-rep${rep}-${agent}"
+    local a=1
+    [[ -f "$attempts_file" ]] && a="$(cat "$attempts_file")"
+    total_attempts=$(( total_attempts + a ))
+    [[ "${agent_statuses[$i]}" -eq 0 ]] && greens=$((greens + 1))
+    attempts_json="$(jq -c --arg agent "$agent" --argjson a "$a" --argjson green "$([[ ${agent_statuses[$i]} -eq 0 ]] && echo true || echo false)" \
+      '. + {($agent): {attempts:$a, green:$green}}' <<<"$attempts_json")"
+    rm -f "$attempts_file"
+    i=$((i + 1))
+  done
+  jq -nc --arg scenario "$SCENARIO" --arg arm "$arm_name" --argjson rep "$rep" \
+    --argjson wallclock_ns "$((rep_end_ns - rep_start_ns))" \
+    --argjson n_agents "${#AGENTS[@]}" --argjson greens "$greens" \
+    --argjson all_green "$([[ $greens -eq ${#AGENTS[@]} ]] && echo true || echo false)" \
+    --argjson total_attempts "$total_attempts" --argjson max_attempts "$RETRIES" \
+    --argjson agents "$attempts_json" --arg loadavg_start "$loadavg" \
+    --arg simurgh_mode "$([[ "$arm_name" == "simurgh" ]] && echo "$SIMURGH_MODE" || echo "n/a")" \
+    '{scenario:$scenario, arm:$arm, rep:$rep, wallclock_ns:$wallclock_ns, n_agents:$n_agents,
+      greens:$greens, all_green:$all_green, total_attempts:$total_attempts, max_attempts:$max_attempts,
+      agents:$agents, loadavg_start:$loadavg_start, simurgh_mode:$simurgh_mode}' >>"$RESULTS_DIR/green-log.jsonl"
 
   if [[ -n "$ram_sampler_pid" ]]; then
     kill "$ram_sampler_pid" 2>/dev/null || true
@@ -234,7 +357,9 @@ bench_b4_residue() {
       ;;
     naive)
       local stray
-      stray="$(pgrep -fl xcodebuild 2>/dev/null | grep -v grep || true)"
+      # Anchored (P2-10): a bare `pgrep -fl xcodebuild` substring-matches
+      # the unrelated xcodebuildmcp MCP server process.
+      stray="$(pgrep -fl 'xcodebuild' 2>/dev/null | grep -E '(^|/| )xcodebuild( |$)' | grep -v grep || true)"
       jq -nc --arg stray "$stray" '{arm:"naive", stray_xcodebuild_processes:$stray}'
       ;;
   esac
@@ -268,10 +393,13 @@ run_rep_b4() {
       export BENCH_RUN_ID="$RUN_ID"
       export SIMURGH_BIN
       if [[ "$agent" == "$victim" && "$arm_name" == "simurgh" ]]; then
-        # SIGKILL bypasses this script's own release trap entirely — a
-        # short inactivity timeout is what lets the daemon's watcher
-        # reclaim it instead, which is the actual mechanism under test.
-        export BENCH_ACQUIRE_EXTRA_FLAGS="--inactivity-timeout 20s"
+        # SIGKILL bypasses this script's own release trap entirely — the
+        # daemon's watcher has to reclaim instead, and that's the actual
+        # mechanism under test. Default is the shipped agent default
+        # (--rm: lease dies with the agent process tree, P0-4); override
+        # via BENCH_B4_VICTIM_FLAGS to test other reclaim paths (the
+        # original 2026-07-13 run used "--inactivity-timeout 20s").
+        export BENCH_ACQUIRE_EXTRA_FLAGS="${BENCH_B4_VICTIM_FLAGS:---rm}"
         export BENCH_LEASE_INFO_FILE="$victim_lease_info"
       fi
       "$arm_script"
@@ -302,6 +430,13 @@ run_rep_b4() {
 overall_exit=0
 IFS=',' read -ra ARM_LIST <<<"$ARMS"
 for arm_code in "${ARM_LIST[@]}"; do
+  if [[ "$arm_code" == "S" && "$SIMURGH_MODE" == "reuse" && "$SCENARIO" != "B4" ]]; then
+    ensure_daemon
+    if ! reuse_acquire_all; then
+      overall_exit=1
+      continue
+    fi
+  fi
   for rep in $(seq 1 "$REPS"); do
     if [[ "$SCENARIO" == "B4" ]]; then
       run_rep_b4 "$arm_code" "$rep" || overall_exit=1
@@ -309,6 +444,7 @@ for arm_code in "${ARM_LIST[@]}"; do
       run_rep "$arm_code" "$rep" || overall_exit=1
     fi
   done
+  [[ "$arm_code" == "S" && "$SIMURGH_MODE" == "reuse" ]] && reuse_release_all
 done
 
 echo "run.sh: results in $RESULTS_DIR" >&2

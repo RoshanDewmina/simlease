@@ -20,6 +20,20 @@ SIM_NAME="${BENCH_SIM_NAME:-iPhone 17 Pro}"
 # shellcheck disable=SC2206
 extra_flags=(${BENCH_ACQUIRE_EXTRA_FLAGS:-})
 
+# Reuse mode (P0-1): when run.sh has already acquired a long-lived lease
+# for this agent (one lease held across all reps — how a real agent
+# iterates), it passes the lease in via env and this script must not
+# acquire or release anything itself: the whole point of the mode is
+# that the per-rep fresh clone+boot disappears.
+if [[ -n "${BENCH_LEASE_ID:-}" && -n "${BENCH_PRESET_UDID:-}" ]]; then
+  export BENCH_ARM="simurgh"
+  export BENCH_UDID="$BENCH_PRESET_UDID"
+  export BENCH_DD=""
+  export BENCH_SWIFTPM=""
+  export BENCH_BUILD_PREFIX="$SIMURGH_BIN exec $BENCH_LEASE_ID --"
+  exec "$HERE/workload.sh"
+fi
+
 # B5's core metric (queued completion vs thrash under capacity
 # pressure) happens entirely inside this --wait call, before
 # workload.sh's own step timing ever starts — so it has to be timed

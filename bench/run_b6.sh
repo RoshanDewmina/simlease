@@ -49,6 +49,18 @@ RUN_ID="B6-${RUN_TS}"
 RESULTS_DIR="$OUT_ROOT/$RUN_TS"
 mkdir -p "$RESULTS_DIR"
 
+# Scratch sweep (P2-9, the 40 GB lesson): DIY's per-agent Lancer
+# DerivedData under results/.scratch accumulated ~40 GB across separate
+# invocations in the 2026-07-13 session and genuinely exhausted this
+# Mac's disk mid-build. Swept at startup, exactly like run.sh's bench-*
+# device sweep. Only ever deletes under bench/results/ — within the
+# harness's own safety invariant.
+if [[ -d "$HERE/results/.scratch" ]]; then
+  scratch_size="$(du -sh "$HERE/results/.scratch" 2>/dev/null | awk '{print $1}')"
+  echo "run_b6.sh: sweeping bench/results/.scratch (${scratch_size:-0})" >&2
+  rm -rf "$HERE/results/.scratch"
+fi
+
 SIMURGH_BIN="${SIMURGH_BIN:-$HERE/.bin/simurgh}"
 DAEMON_STARTED_BY_US=0
 

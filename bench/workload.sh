@@ -117,19 +117,35 @@ if [[ "$install_exit" -eq 0 ]]; then
   hash_after_install="$(bench_hash_file "$container/SampleApp")"
 fi
 
-# --- launch: assert healthy 5s via --console-pty stdout capture -------
+# --- launch: assert healthy via --console-pty stdout capture ----------
+# BENCH_HEALTH_WINDOW_S (default 5, the plan's fixed SLA) is how long
+# the badge print has to appear. The wait always runs the FULL window
+# (identical wall-clock semantics to the original fixed `sleep 5`, so
+# medians stay comparable across runs), but the badge's first-seen
+# latency is polled at 0.25s granularity and recorded as
+# time_to_badge_ns — the margin data needed to root-cause "window too
+# tight under load" instead of guessing at it.
+HEALTH_WINDOW_S="${BENCH_HEALTH_WINDOW_S:-5}"
 launch_start="$(mono_ns)"
 launch_exit=1
 launch_incidents="[]"
+time_to_badge_ns="null"
 if [[ "$install_exit" -eq 0 ]]; then
   xcrun simctl terminate "$BENCH_UDID" "$BUNDLE_ID" >/dev/null 2>&1 || true
   (xcrun simctl launch --console-pty "$BENCH_UDID" "$BUNDLE_ID" >"$CONSOLE_LOG" 2>&1 &
    echo $! >"$CONSOLE_LOG.pid")
-  sleep 5
-  if grep -q 'AGENT_BADGE=' "$CONSOLE_LOG"; then
-    launch_exit=0
-  else
-    launch_incidents='[{"type":"launch_destination_failure","evidence":"no AGENT_BADGE print observed within 5s healthy window"}]'
+  deadline_ns=$(( launch_start + HEALTH_WINDOW_S * 1000000000 ))
+  while :; do
+    now_ns="$(mono_ns)"
+    if [[ "$time_to_badge_ns" == "null" ]] && grep -q 'AGENT_BADGE=' "$CONSOLE_LOG"; then
+      time_to_badge_ns=$(( now_ns - launch_start ))
+      launch_exit=0
+    fi
+    [[ "$now_ns" -ge "$deadline_ns" ]] && break
+    sleep 0.25
+  done
+  if [[ "$launch_exit" -ne 0 ]]; then
+    launch_incidents="[{\"type\":\"launch_destination_failure\",\"evidence\":\"no AGENT_BADGE print observed within ${HEALTH_WINDOW_S}s healthy window\"}]"
   fi
 else
   launch_incidents='[{"type":"launch_destination_failure","evidence":"install failed, launch skipped"}]'
@@ -138,7 +154,9 @@ launch_end="$(mono_ns)"
 launch_json="$(jq -nc --argjson s "$launch_start" --argjson e "$launch_end" \
   --argjson d "$((launch_end - launch_start))" --argjson ec "$launch_exit" \
   --argjson inc "$launch_incidents" --arg log "$(tail -c 4000 "$CONSOLE_LOG")" \
-  '{step:"launch", start_ns:$s, end_ns:$e, duration_ns:$d, exit_code:$ec, incidents:$inc, log:$log}')"
+  --argjson ttb "$time_to_badge_ns" --argjson window "$HEALTH_WINDOW_S" \
+  '{step:"launch", start_ns:$s, end_ns:$e, duration_ns:$d, exit_code:$ec, incidents:$inc,
+    time_to_badge_ns:$ttb, health_window_s:$window, log:$log}')"
 echo "$launch_json" >>"$STEPS_FILE"
 
 # --- screenshot (evidence artifact) -----------------------------------

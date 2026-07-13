@@ -14,6 +14,7 @@ import (
 	"github.com/RoshanDewmina/simurgh/internal/broker"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
 	"github.com/RoshanDewmina/simurgh/internal/isolator"
+	"github.com/RoshanDewmina/simurgh/internal/pressure"
 	"github.com/RoshanDewmina/simurgh/internal/provisioner"
 	"github.com/RoshanDewmina/simurgh/internal/reaper"
 	"github.com/RoshanDewmina/simurgh/internal/safety"
@@ -279,6 +280,7 @@ func (h *handlers) poolStatus(_ context.Context, _ ipc.Request) (json.RawMessage
 	raw, err := json.Marshal(map[string]any{
 		"capacity": h.deps.Broker.Capacity(),
 		"leases":   counts,
+		"pressure": pressure.Check(h.deps.LeasesRoot),
 	})
 	if err != nil {
 		return nil, internalErr(err)

@@ -392,7 +392,16 @@ func TestPoolStatusMapsResult(t *testing.T) {
 			}
 			return json.RawMessage(`{
 				"capacity": 4,
-				"leases": {"active": 1, "queued": 0, "released": 2}
+				"leases": {"active": 1, "queued": 0, "released": 2},
+				"pressure": {
+					"ok": true,
+					"reason": "",
+					"signals": [
+						{"name": "ram", "ok": true, "detail": "available 8589934592 bytes (free+inactive); minimum 4294967296"},
+						{"name": "thermal", "ok": true, "detail": "thermal state nominal (no warning level recorded)"},
+						{"name": "disk", "ok": true, "detail": "available 50000000000 bytes; minimum 5368709120"}
+					]
+				}
 			}`), nil
 		},
 	})
@@ -410,6 +419,9 @@ func TestPoolStatusMapsResult(t *testing.T) {
 	}
 	if out.Leases["active"] != 1 || out.Leases["queued"] != 0 {
 		t.Fatalf("leases = %#v", out.Leases)
+	}
+	if !out.Pressure.OK || len(out.Pressure.Signals) != 3 {
+		t.Fatalf("pressure = %#v", out.Pressure)
 	}
 }
 

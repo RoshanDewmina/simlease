@@ -267,8 +267,21 @@ type leaseReleaseResult struct {
 }
 
 type poolStatusResult struct {
-	Capacity int            `json:"capacity" jsonschema:"configured pool capacity"`
-	Leases   map[string]int `json:"leases" jsonschema:"lease counts by state (active, queued, ...)"`
+	Capacity int                    `json:"capacity" jsonschema:"configured pool capacity"`
+	Leases   map[string]int         `json:"leases" jsonschema:"lease counts by state (active, queued, ...)"`
+	Pressure poolStatusPressureView `json:"pressure" jsonschema:"host RAM/thermal/disk pressure before grant"`
+}
+
+type poolStatusPressureView struct {
+	OK      bool                       `json:"ok" jsonschema:"true when all determinable pressure signals are OK"`
+	Reason  string                     `json:"reason" jsonschema:"short reason naming failing signal(s); empty when ok"`
+	Signals []poolStatusPressureSignal `json:"signals" jsonschema:"per-signal RAM/thermal/disk detail"`
+}
+
+type poolStatusPressureSignal struct {
+	Name   string `json:"name" jsonschema:"signal name (ram, thermal, disk)"`
+	OK     bool   `json:"ok" jsonschema:"true when this signal is non-blocking"`
+	Detail string `json:"detail" jsonschema:"human-readable signal detail"`
 }
 
 type wireLeaseWrap struct {

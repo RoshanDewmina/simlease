@@ -12,10 +12,12 @@ import (
 // SchemaVersion is the only journal envelope version supported in M0.
 const SchemaVersion = 1
 
-// State is the daemon-owned journal envelope. M0 keeps the payload minimal:
-// schema version only; lease/broker fields arrive in later milestones.
+// State is the daemon-owned journal envelope. SchemaVersion stays at 1;
+// Leases is an opaque broker-owned blob (json.RawMessage) so store never
+// imports broker types. Added additively in M1.6 — not a schema bump.
 type State struct {
-	SchemaVersion int `json:"schemaVersion"`
+	SchemaVersion int             `json:"schemaVersion"`
+	Leases        json.RawMessage `json:"leases,omitempty"`
 }
 
 // Store persists State at an injected journal path. The daemon is the single

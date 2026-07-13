@@ -425,7 +425,7 @@ func (l *ReclaimLoop) runOrphanScan(ctx context.Context, interval time.Duration,
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			orphans, err := l.Deps.Reaper.ScanOrphans(ctx, knownNonTerminalUDIDs(l.Deps.Broker))
+			orphans, err := l.Deps.Reaper.Reconcile(ctx, knownNonTerminalUDIDs(l.Deps.Broker))
 			if err != nil {
 				logger("simurgh orphan scan: %v", err)
 				continue
@@ -439,19 +439,11 @@ func (l *ReclaimLoop) runOrphanScan(ctx context.Context, interval time.Duration,
 	}
 }
 
+// knownNonTerminalUDIDs delegates to Broker.KnownDeviceUDIDs (crash-durable
+// after Rehydrate). Kept as a thin helper so nil Broker stays safe.
 func knownNonTerminalUDIDs(b *broker.Broker) map[string]bool {
-	known := make(map[string]bool)
 	if b == nil {
-		return known
+		return map[string]bool{}
 	}
-	for _, lease := range b.List(broker.ListFilter{}) {
-		switch lease.State {
-		case broker.LeaseReleased, broker.LeaseCancelled, broker.LeaseFailed, broker.LeaseReclaimed:
-			continue
-		}
-		if lease.Device != nil && lease.Device.UDID != "" {
-			known[lease.Device.UDID] = true
-		}
-	}
-	return known
+	return b.KnownDeviceUDIDs()
 }

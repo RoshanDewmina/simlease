@@ -36,8 +36,45 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got != want {
-		t.Fatalf("Load = %+v, want %+v", got, want)
+	if got.SchemaVersion != want.SchemaVersion {
+		t.Fatalf("SchemaVersion = %d, want %d", got.SchemaVersion, want.SchemaVersion)
+	}
+	if len(got.Leases) != 0 {
+		t.Fatalf("Leases = %s, want empty/nil", got.Leases)
+	}
+}
+
+func TestLeasesRoundTripOpaqueJSON(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.json")
+	s := New(path)
+
+	payload := json.RawMessage(`{"lease-1":{"id":"lease-1","state":"active","device":{"udid":"AAAA"}}}`)
+	if err := s.Save(State{SchemaVersion: SchemaVersion, Leases: payload}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	got, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got.SchemaVersion != SchemaVersion {
+		t.Fatalf("SchemaVersion = %d, want %d", got.SchemaVersion, SchemaVersion)
+	}
+	var wantObj, gotObj any
+	if err := json.Unmarshal(payload, &wantObj); err != nil {
+		t.Fatalf("unmarshal want: %v", err)
+	}
+	if err := json.Unmarshal(got.Leases, &gotObj); err != nil {
+		t.Fatalf("unmarshal got Leases: %v", err)
+	}
+	wantRaw, _ := json.Marshal(wantObj)
+	gotRaw, _ := json.Marshal(gotObj)
+	if string(wantRaw) != string(gotRaw) {
+		t.Fatalf("Leases round-trip mismatch:\n got %s\nwant %s", got.Leases, payload)
+	}
+	// store must keep Leases opaque — typed as RawMessage, never interpreted.
+	if got.Leases == nil {
+		t.Fatal("Leases must be present after round-trip")
 	}
 }
 

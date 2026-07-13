@@ -50,6 +50,8 @@ func main() {
 			os.Exit(runExec(os.Args[2:]))
 		case "warm":
 			os.Exit(runWarm(os.Args[2:]))
+		case "prune":
+			os.Exit(runPrune(os.Args[2:]))
 		}
 	}
 
@@ -70,15 +72,17 @@ Usage:
   simurgh warm create --model NAME [--runtime VER] [--json]
   simurgh warm list [--json]
   simurgh warm remove --model NAME [--runtime VER] [--json]
+  simurgh prune [--apply] [--json]
   simurgh daemon run
   simurgh doctor [--json]
   simurgh [help]
 
 Acquire/release/renew/status/list are thin IPC clients over the daemon lease RPCs.
 warm create|list|remove manages primed shut-down clone sources.
+prune plans (and optionally applies) cleanup of orphan devices and held leases.
 env prints eval-able isolation exports; exec runs a command with those env vars
 (and xcodebuild isolation flags) injected. PATH shim is v0.1 — not built.
-Daemon serves the Unix socket IPC endpoint (daemon.ping + lease.* + pool.status + warm.*).
-Doctor checks Xcode, simctl, iOS runtimes, socket perms, and daemon liveness.
+Daemon serves the Unix socket IPC endpoint (daemon.ping + lease.* + pool.status + warm.* + prune.*).
+Doctor checks Xcode, simctl, iOS runtimes, socket perms, daemon liveness, stale leases, and disk usage.
 See docs/ROADMAP.md for the build plan.`)
 }

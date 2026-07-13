@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Stable check failure codes.
@@ -14,6 +16,7 @@ const (
 	CodeIOSRuntimeMissing = "IOS_RUNTIME_MISSING"
 	CodeSocketInvalid     = "SOCKET_INVALID"
 	CodeDaemonNotRunning  = "DAEMON_NOT_RUNNING"
+	CodeStaleLeases       = "STALE_LEASES"
 )
 
 // Exact fix command strings for failing checks.
@@ -23,7 +26,14 @@ const (
 	FixIOSRuntimeMissing = "xcodebuild -downloadPlatform iOS"
 	FixSocketInvalid     = "simurgh daemon run"
 	FixDaemonNotRunning  = "simurgh daemon run"
+	// Stale ACTIVE leases are past ExpiresAt; release triggers immediate teardown
+	// (M2.3). prune does not touch ACTIVE leases — do not suggest prune here.
+	FixStaleLeases = "simurgh release <lease-id>"
 )
+
+// StaleLeaseGrace is how far past ExpiresAt an ACTIVE lease may drift before
+// doctor treats it as stale (watcher ticks every 5s; 5m is a real health signal).
+const StaleLeaseGrace = 5 * time.Minute
 
 // Check is one doctor diagnostic result. Failures always carry Code, Message, and Fix.
 type Check struct {
@@ -34,22 +44,37 @@ type Check struct {
 	Fix     string `json:"fix,omitempty"`
 }
 
+// LeaseExpiryInfo is the minimal lease shape doctor needs for the stale check.
+type LeaseExpiryInfo struct {
+	ID        string
+	State     string
+	ExpiresAt time.Time
+}
+
 // DoctorOptions injects seams so RunChecks is unit-testable without a real Mac.
 type DoctorOptions struct {
 	XcodeVersion   func(ctx context.Context) (string, error)
 	SimctlRuntimes func(ctx context.Context) ([]string, error)
 	SocketPath     string
 	DialPing       func(ctx context.Context) error
+	// ListLeases lists leases via the daemon (injected; unused when DialPing fails).
+	ListLeases func(ctx context.Context) ([]LeaseExpiryInfo, error)
+	// LeasesRoot is ~/.simurgh/leases (or $SIMURGH_HOME/leases) for disk usage.
+	LeasesRoot string
+	// Now overrides wall clock for the stale-lease check (tests).
+	Now func() time.Time
 }
 
 // RunChecks runs all doctor checks and returns every result (collect-all, not fail-fast).
 func RunChecks(ctx context.Context, opts DoctorOptions) []Check {
-	checks := make([]Check, 0, 5)
+	checks := make([]Check, 0, 7)
 	checks = append(checks, checkXcode(ctx, opts))
 	simctl, runtimes := checkSimctlAndRuntimes(ctx, opts)
 	checks = append(checks, simctl, runtimes)
 	checks = append(checks, checkSocket(opts.SocketPath))
 	checks = append(checks, checkDaemon(ctx, opts))
+	checks = append(checks, checkStaleLeases(ctx, opts))
+	checks = append(checks, checkDiskUsage(opts))
 	return checks
 }
 
@@ -132,6 +157,97 @@ func checkDaemon(ctx context.Context, opts DoctorOptions) Check {
 		return fail(name, CodeDaemonNotRunning, fmt.Sprintf("daemon is not responding: %v", err), FixDaemonNotRunning)
 	}
 	return ok(name, "daemon.ping ok")
+}
+
+func checkStaleLeases(ctx context.Context, opts DoctorOptions) Check {
+	const name = "stale-leases"
+	// Reuse the same daemon-liveness signal — do not invent a second message.
+	if opts.DialPing == nil {
+		return fail(name, CodeDaemonNotRunning, "daemon ping probe not configured", FixDaemonNotRunning)
+	}
+	if err := opts.DialPing(ctx); err != nil {
+		return fail(name, CodeDaemonNotRunning, fmt.Sprintf("daemon is not responding: %v", err), FixDaemonNotRunning)
+	}
+	if opts.ListLeases == nil {
+		return fail(name, CodeStaleLeases, "lease list probe not configured", FixStaleLeases)
+	}
+	leases, err := opts.ListLeases(ctx)
+	if err != nil {
+		return fail(name, CodeStaleLeases, fmt.Sprintf("lease.list failed: %v", err), FixStaleLeases)
+	}
+	now := time.Now
+	if opts.Now != nil {
+		now = opts.Now
+	}
+	cutoff := now().Add(-StaleLeaseGrace)
+	var stale []string
+	for _, l := range leases {
+		if l.State != "active" {
+			continue
+		}
+		if l.ExpiresAt.IsZero() {
+			continue
+		}
+		if l.ExpiresAt.Before(cutoff) {
+			stale = append(stale, l.ID)
+		}
+	}
+	if len(stale) == 0 {
+		return ok(name, "0 stale active leases")
+	}
+	return fail(name, CodeStaleLeases,
+		fmt.Sprintf("%d active lease(s) expired >%s ago: %s", len(stale), StaleLeaseGrace, strings.Join(stale, ", ")),
+		FixStaleLeases)
+}
+
+func checkDiskUsage(opts DoctorOptions) Check {
+	const name = "disk-usage"
+	root := opts.LeasesRoot
+	if root == "" {
+		// Informational always-OK: missing root is reported as 0B.
+		return ok(name, "leases/: 0B")
+	}
+	size, err := dirSize(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ok(name, "leases/: 0B")
+		}
+		// Still informational — report the error in the message but stay OK.
+		return ok(name, fmt.Sprintf("leases/: (could not measure: %v)", err))
+	}
+	return ok(name, fmt.Sprintf("leases/: %s", formatBytes(size)))
+}
+
+func dirSize(root string) (int64, error) {
+	var total int64
+	err := filepath.Walk(root, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total, err
+}
+
+func formatBytes(n int64) string {
+	const (
+		kb = 1024
+		mb = 1024 * kb
+		gb = 1024 * mb
+	)
+	switch {
+	case n >= gb:
+		return fmt.Sprintf("%.1fGB", float64(n)/float64(gb))
+	case n >= mb:
+		return fmt.Sprintf("%dMB", n/mb)
+	case n >= kb:
+		return fmt.Sprintf("%dKB", n/kb)
+	default:
+		return fmt.Sprintf("%dB", n)
+	}
 }
 
 func filterIOSRuntimes(names []string) []string {

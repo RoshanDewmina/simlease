@@ -21,12 +21,19 @@ func runDoctor(jsonOut bool) int {
 		fmt.Fprintf(os.Stderr, "simurgh doctor: %v\n", err)
 		return 4
 	}
+	leasesRoot, err := DefaultLeasesRoot()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "simurgh doctor: %v\n", err)
+		return 4
+	}
 
 	opts := cli.DoctorOptions{
 		XcodeVersion:   xcodeVersion,
 		SimctlRuntimes: simctlRuntimes,
 		SocketPath:     socketPath,
 		DialPing:       dialPing(socketPath),
+		ListLeases:     listLeasesForDoctor,
+		LeasesRoot:     leasesRoot,
 	}
 
 	checks := cli.RunChecks(context.Background(), opts)
@@ -130,4 +137,30 @@ func dialPing(socketPath string) func(ctx context.Context) error {
 		}
 		return nil
 	}
+}
+
+func listLeasesForDoctor(ctx context.Context) ([]cli.LeaseExpiryInfo, error) {
+	raw, err := dialAndCall(ctx, "lease.list", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	var wrap struct {
+		Leases []struct {
+			ID        string    `json:"id"`
+			State     string    `json:"state"`
+			ExpiresAt time.Time `json:"expiresAt"`
+		} `json:"leases"`
+	}
+	if err := json.Unmarshal(raw, &wrap); err != nil {
+		return nil, err
+	}
+	out := make([]cli.LeaseExpiryInfo, 0, len(wrap.Leases))
+	for _, l := range wrap.Leases {
+		out = append(out, cli.LeaseExpiryInfo{
+			ID:        l.ID,
+			State:     l.State,
+			ExpiresAt: l.ExpiresAt,
+		})
+	}
+	return out, nil
 }

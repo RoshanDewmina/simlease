@@ -875,3 +875,239 @@ func TestWarmCreate_NilProvisioner(t *testing.T) {
 		t.Fatalf("error=%+v want INTERNAL", resp.Error)
 	}
 }
+
+func TestRelease_ActiveWithDevice_TriggersReaperTeardown(t *testing.T) {
+	deps, b, deleter := newTestDeps(t, 2)
+	h := newHandlers(deps)
+
+	acq := callHandler(t, h.acquire, "r1", map[string]any{
+		"spec":  map[string]string{"platform": "iOS", "model": "iPhone 17 Pro"},
+		"wait":  true,
+		"owner": map[string]any{"pid": 42},
+	})
+	if !acq.OK {
+		t.Fatalf("acquire: %+v", acq.Error)
+	}
+	var wrap struct {
+		Lease broker.Lease `json:"lease"`
+	}
+	if err := json.Unmarshal(acq.Result, &wrap); err != nil {
+		t.Fatal(err)
+	}
+	if wrap.Lease.Device == nil {
+		t.Fatal("missing device")
+	}
+	udid := wrap.Lease.Device.UDID
+
+	// Reaper must see the live device for DeleteSimulatorClone to call Delete.
+	lister := &fakeLister{devices: []safety.Device{{
+		UDID: udid,
+		Name: wrap.Lease.Device.Name,
+	}}}
+	deps.Reaper = reaper.New(reaper.ReaperOptions{
+		LeasesRoot: t.TempDir(),
+		Lister:     lister,
+		Deleter:    deleter,
+		StartedAt:  func() time.Time { return time.Now().Add(-time.Minute) },
+		Now:        time.Now,
+	})
+	h = newHandlers(deps)
+
+	rel := callHandler(t, h.release, "x1", map[string]any{"id": wrap.Lease.ID})
+	if !rel.OK {
+		t.Fatalf("release must succeed even if teardown is best-effort: %+v", rel.Error)
+	}
+	got, ok := b.Get(wrap.Lease.ID)
+	if !ok || got.State != broker.LeaseReleased {
+		t.Fatalf("after release: ok=%v state=%s", ok, got.State)
+	}
+	if deleted := deleter.deleted(); len(deleted) != 1 || deleted[0] != udid {
+		t.Fatalf("want delete of %s, got %v", udid, deleted)
+	}
+}
+
+func TestRelease_QueuedLease_NoDeviceDelete(t *testing.T) {
+	deps, _, deleter := newTestDeps(t, 1)
+	h := newHandlers(deps)
+
+	first, err := deps.Broker.Acquire(context.Background(), broker.AcquireRequest{
+		Spec:  testSpec(),
+		Wait:  true,
+		Owner: broker.Owner{PID: 1},
+	})
+	if err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+	_ = first
+
+	// Wait=false returns the QUEUED lease alongside CAPACITY_QUEUED.
+	queued, err := deps.Broker.Acquire(context.Background(), broker.AcquireRequest{
+		Spec:  testSpec(),
+		Wait:  false,
+		Owner: broker.Owner{PID: 2},
+	})
+	var cq *broker.CapacityQueuedError
+	if !errors.As(err, &cq) {
+		t.Fatalf("want CapacityQueuedError, got %v", err)
+	}
+	if queued.State != broker.LeaseQueued {
+		t.Fatalf("state=%s want queued", queued.State)
+	}
+	if queued.Device != nil {
+		t.Fatalf("queued lease must have nil Device, got %+v", queued.Device)
+	}
+
+	rel := callHandler(t, h.release, "x1", map[string]any{"id": queued.ID})
+	if !rel.OK {
+		t.Fatalf("release queued: %+v", rel.Error)
+	}
+	if deleted := deleter.deleted(); len(deleted) != 0 {
+		t.Fatalf("QUEUED→CANCELLED must not delete devices, got %v", deleted)
+	}
+}
+
+func TestPrunePlan_ReturnsBuckets(t *testing.T) {
+	root := t.TempDir()
+	deps, b, deleter := newTestDeps(t, 2)
+	deps.LeasesRoot = root
+	lister := &fakeLister{}
+	deps.DeviceLister = lister
+	deps.DeviceDeleter = deleter
+	deps.Reaper = reaper.New(reaper.ReaperOptions{
+		LeasesRoot: root,
+		Lister:     lister,
+		Deleter:    deleter,
+		StartedAt:  func() time.Time { return time.Now().Add(-time.Minute) },
+		Now:        time.Now,
+	})
+	h := newHandlers(deps)
+
+	active, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), Wait: true, Owner: broker.Owner{PID: 1}, TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Put a RELEASED lease with lingering device into the broker by releasing
+	// without teardown (swap reaper to nil path: release with empty lister so
+	// reclaim is best-effort no-op on missing device — but Device stays on lease).
+	held, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), Wait: true, Owner: broker.Owner{PID: 2}, TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Bypass daemon release teardown: call Broker.Release directly so Device lingers.
+	released, err := b.Release(context.Background(), held.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if released.Device == nil {
+		t.Fatal("want lingering device on RELEASED lease")
+	}
+
+	orphanUDID := "ORPHAN-UDID"
+	lister.mu.Lock()
+	lister.devices = []safety.Device{
+		{UDID: orphanUDID, Name: "simurgh-clone[orphan]"},
+		{UDID: active.Device.UDID, Name: active.Device.Name},
+		{UDID: released.Device.UDID, Name: released.Device.Name},
+	}
+	lister.mu.Unlock()
+
+	resp := callHandler(t, h.prunePlan, "p1", map[string]any{})
+	if !resp.OK {
+		t.Fatalf("prune.plan: %+v", resp.Error)
+	}
+	var plan struct {
+		Held    []broker.Lease `json:"held"`
+		Orphans []string       `json:"orphans"`
+		Active  []broker.Lease `json:"active"`
+	}
+	if err := json.Unmarshal(resp.Result, &plan); err != nil {
+		t.Fatalf("unmarshal: %v raw=%s", err, resp.Result)
+	}
+	if len(plan.Held) != 1 || plan.Held[0].ID != released.ID {
+		t.Fatalf("held=%+v want [%s]", plan.Held, released.ID)
+	}
+	if len(plan.Orphans) != 1 || plan.Orphans[0] != orphanUDID {
+		t.Fatalf("orphans=%v want [%s]", plan.Orphans, orphanUDID)
+	}
+	foundActive := false
+	for _, l := range plan.Active {
+		if l.ID == active.ID {
+			foundActive = true
+		}
+	}
+	if !foundActive {
+		t.Fatalf("active bucket missing %s: %+v", active.ID, plan.Active)
+	}
+}
+
+func TestPruneApply_ReclaimsHeldAndDeletesOrphans_NeverTouchesActive(t *testing.T) {
+	root := t.TempDir()
+	deps, b, deleter := newTestDeps(t, 2)
+	deps.LeasesRoot = root
+	lister := &fakeLister{}
+	deps.DeviceLister = lister
+	deps.DeviceDeleter = deleter
+	deps.Reaper = reaper.New(reaper.ReaperOptions{
+		LeasesRoot: root,
+		Lister:     lister,
+		Deleter:    deleter,
+		StartedAt:  func() time.Time { return time.Now().Add(-time.Minute) },
+		Now:        time.Now,
+	})
+	h := newHandlers(deps)
+
+	active, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), Wait: true, Owner: broker.Owner{PID: 1}, TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	held, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), Wait: true, Owner: broker.Owner{PID: 2}, TTL: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	released, err := b.Release(context.Background(), held.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, released.ID), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	orphanUDID := "ORPHAN-APPLY"
+	lister.mu.Lock()
+	lister.devices = []safety.Device{
+		{UDID: orphanUDID, Name: "simurgh-clone[orphan]"},
+		{UDID: active.Device.UDID, Name: active.Device.Name},
+		{UDID: released.Device.UDID, Name: released.Device.Name},
+	}
+	lister.mu.Unlock()
+
+	resp := callHandler(t, h.pruneApply, "pa1", map[string]any{})
+	if !resp.OK {
+		t.Fatalf("prune.apply: %+v", resp.Error)
+	}
+	deleted := deleter.deleted()
+	want := map[string]bool{orphanUDID: true, released.Device.UDID: true}
+	for _, u := range deleted {
+		delete(want, u)
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing deletes for %v; got %v", want, deleted)
+	}
+	for _, u := range deleted {
+		if u == active.Device.UDID {
+			t.Fatalf("prune.apply must never delete active device %s; deleted=%v", active.Device.UDID, deleted)
+		}
+	}
+	still, ok := b.Get(active.ID)
+	if !ok || still.State != broker.LeaseActive {
+		t.Fatalf("active lease must remain ACTIVE, got ok=%v state=%v", ok, still.State)
+	}
+}

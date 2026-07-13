@@ -18,6 +18,7 @@ import (
 	"github.com/RoshanDewmina/simurgh/internal/provisioner"
 	"github.com/RoshanDewmina/simurgh/internal/reaper"
 	"github.com/RoshanDewmina/simurgh/internal/safety"
+	"github.com/RoshanDewmina/simurgh/internal/store"
 )
 
 // simurghHomeDir resolves the on-disk root: $SIMURGH_HOME if set, else ~/.simurgh.
@@ -68,6 +69,15 @@ func DefaultLastLeasePath() (string, error) {
 	return filepath.Join(home, "last-lease"), nil
 }
 
+// DefaultStatePath returns ~/.simurgh/state.json (honors $SIMURGH_HOME).
+func DefaultStatePath() (string, error) {
+	home, err := simurghHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "state.json"), nil
+}
+
 func runDaemon() int {
 	socketPath, err := DefaultSocketPath()
 	if err != nil {
@@ -83,6 +93,11 @@ func runDaemon() int {
 		fmt.Fprintf(os.Stderr, "simurgh daemon run: leases dir: %v\n", err)
 		return 1
 	}
+	statePath, err := DefaultStatePath()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "simurgh daemon run: %v\n", err)
+		return 1
+	}
 
 	ln, err := ipc.Listen(socketPath)
 	if err != nil {
@@ -95,10 +110,17 @@ func runDaemon() int {
 	defer stop()
 
 	prov := provisioner.New(provisioner.NewExecClient())
+	st := store.New(statePath)
 	brk := broker.New(broker.BrokerOptions{
 		Provisioner: prov,
+		Store:       st,
 		// Capacity / RAM / pressure use Broker defaults (formula + always-OK).
 	})
+	// Rehydrate before any client can connect so ownership is crash-durable.
+	if err := brk.Rehydrate(); err != nil {
+		fmt.Fprintf(os.Stderr, "simurgh daemon run: rehydrate: %v\n", err)
+		return 1
+	}
 	safetyClient := &simctlSafetyClient{}
 	rp := reaper.New(reaper.ReaperOptions{
 		LeasesRoot: leasesRoot,

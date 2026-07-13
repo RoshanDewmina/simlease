@@ -245,12 +245,44 @@ func TestScanOrphans_AfterWindow_FindsManagedUnknowns(t *testing.T) {
 	}
 }
 
-func TestReconcile_IsNoOpStub(t *testing.T) {
+func TestReconcile_DelegatesToScanOrphans(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := start.Add(11 * time.Second) // past reconciliation window
+	lister := &fakeLister{devices: []safety.Device{
+		{UDID: "orphan-1", Name: "simurgh-clone[x]"},
+		{UDID: "known-1", Name: "simurgh-clone[y]"},
+		{UDID: "base-1", Name: "simurgh-base[z]"},
+	}}
 	r := New(ReaperOptions{
-		Lister:  &fakeLister{},
-		Deleter: &fakeDeleter{},
+		Lister:    lister,
+		Deleter:   &fakeDeleter{},
+		StartedAt: func() time.Time { return start },
+		Now:       func() time.Time { return now },
 	})
-	if err := r.Reconcile(context.Background()); err != nil {
-		t.Fatalf("Reconcile stub must be no-op: %v", err)
+	got, err := r.Reconcile(context.Background(), map[string]bool{"known-1": true})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if len(got) != 1 || got[0] != "orphan-1" {
+		t.Fatalf("Reconcile orphans = %v, want [orphan-1]", got)
+	}
+}
+
+func TestReconcile_RespectsReconciliationWindow(t *testing.T) {
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	r := New(ReaperOptions{
+		Lister: &fakeLister{devices: []safety.Device{
+			{UDID: "orphan-1", Name: "simurgh-clone[x]"},
+		}},
+		Deleter:   &fakeDeleter{},
+		StartedAt: func() time.Time { return start },
+		Now:       func() time.Time { return start.Add(5 * time.Second) },
+	})
+	got, err := r.Reconcile(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("within window Reconcile must return nil, got %v", got)
 	}
 }

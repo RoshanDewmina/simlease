@@ -123,17 +123,12 @@ func (r *Reaper) ScanOrphans(ctx context.Context, knownLeaseUDIDs map[string]boo
 	return orphans, nil
 }
 
-// Reconcile is the extension point for restart-safe cross-process
-// reconciliation (daemon crash → restart reconstructing owned UDIDs from
-// ~/.simurgh/state.json via internal/store). That persistence wiring does
-// not exist yet (deliberately deferred past M1.1). Until it does, this is
-// a no-op.
+// Reconcile is the restart-safe orphan scan: after the reconciliation window,
+// list live simurgh-managed devices and return UDIDs not in knownDeviceUDIDs.
 //
-// TODO(m1.x-store): when store persistence is wired, reconstruct known
-// lease UDIDs from the journal and reclaim any device-name-scan orphans
-// that are not accounted for after the reconciliation window.
-func (r *Reaper) Reconcile(ctx context.Context) error {
-	_ = ctx
-	_ = r
-	return nil
+// knownDeviceUDIDs should come from Broker.KnownDeviceUDIDs after Rehydrate so
+// ownership survives a daemon crash/restart. This is a thin wrapper around
+// ScanOrphans (same 10s window, same log-only policy — no deletion).
+func (r *Reaper) Reconcile(ctx context.Context, knownDeviceUDIDs map[string]bool) ([]string, error) {
+	return r.ScanOrphans(ctx, knownDeviceUDIDs)
 }

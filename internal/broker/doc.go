@@ -1,13 +1,15 @@
-// Package broker implements the in-memory lease lifecycle engine: state machine,
+// Package broker implements the lease lifecycle engine: state machine,
 // per-DeviceSpec FIFO queue, capacity gate, and Acquire/Renew/Release/Get/List/Wait.
 //
-// Boundaries for this package (M1.1):
-//   - Provisioning is injected via Provisioner; M1.2 supplies the real simctl-backed
-//     implementation. This package never calls simctl or xcodebuild.
+// Boundaries for this package:
+//   - Provisioning is injected via Provisioner; this package never calls simctl
+//     or xcodebuild.
 //   - No deletion of devices or filesystem paths. Release only transitions lease
-//     state and advances the queue; M1.3's reaper performs teardown via M1.4 safety.
+//     state and advances the queue; the reaper performs teardown via safety.
 //   - No PID/TTL/heartbeat watcher. Renew only updates HeartbeatAt/ExpiresAt;
-//     transitions to RECLAIMED are M1.3's job.
-//   - In-memory only. Persistence to the store journal is a later package; see the
-//     hook comment on Broker.
+//     transitions to RECLAIMED are the watcher's job.
+//   - Persistence is opt-in via BrokerOptions.Store (M1.6). When configured,
+//     state-mutating ops journal the lease map through internal/store, and
+//     Rehydrate restores ownership across daemon restarts. Without a Store the
+//     broker stays in-memory-only (existing tests and callers unchanged).
 package broker

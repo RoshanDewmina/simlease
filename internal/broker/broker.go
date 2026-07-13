@@ -3,10 +3,13 @@ package broker
 import (
 	"context"
 	"fmt"
+	"log"
 	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/RoshanDewmina/simurgh/internal/store"
 )
 
 const (
@@ -33,18 +36,24 @@ type BrokerOptions struct {
 	TotalRAMBytes func() (uint64, error)
 	// NumCPU defaults to runtime.NumCPU.
 	NumCPU func() int
+	// Store is optional journal persistence (M1.6). Nil keeps the broker
+	// in-memory-only; existing tests and callers that omit it are unchanged.
+	Store *store.Store
+	// Logger defaults to log.Printf. Used for best-effort persist failures
+	// and rehydrate normalization messages.
+	Logger func(format string, args ...any)
 }
 
-// Broker is the in-memory lease lifecycle engine.
-//
-// Persistence hook (not implemented in M1.1): a later package will journal
-// mutations through internal/store. This type stays transport- and
-// persistence-agnostic so that wiring is mechanical.
+// Broker is the in-memory lease lifecycle engine with optional journal
+// persistence via internal/store (M1.6). When Store is configured, call
+// Rehydrate once after New and before accepting client traffic.
 type Broker struct {
 	capacity    int
 	provisioner Provisioner
 	clock       func() time.Time
 	pressureOK  func() (bool, string)
+	store       *store.Store
+	logger      func(format string, args ...any)
 
 	mu         sync.Mutex
 	leases     map[string]*Lease
@@ -55,6 +64,8 @@ type Broker struct {
 }
 
 // New constructs a Broker with defaults applied for zero Option fields.
+// Persistence is opt-in via BrokerOptions.Store; when set, the caller must
+// invoke Rehydrate() before serving requests.
 func New(opts BrokerOptions) *Broker {
 	clock := opts.Clock
 	if clock == nil {
@@ -71,6 +82,10 @@ func New(opts BrokerOptions) *Broker {
 	totalRAM := opts.TotalRAMBytes
 	if totalRAM == nil {
 		totalRAM = func() (uint64, error) { return 16 << 30, nil }
+	}
+	logger := opts.Logger
+	if logger == nil {
+		logger = log.Printf
 	}
 
 	capacity := opts.Capacity
@@ -90,6 +105,8 @@ func New(opts BrokerOptions) *Broker {
 		provisioner: opts.Provisioner,
 		clock:       clock,
 		pressureOK:  pressureOK,
+		store:       opts.Store,
+		logger:      logger,
 		leases:      make(map[string]*Lease),
 		queues:      make(map[string]*fifoQueue),
 		waiters:     make(map[string][]chan struct{}),
@@ -159,6 +176,7 @@ func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error)
 	key := SpecKey(req.Spec)
 	if b.canGrantLocked(key) {
 		b.beginProvisionLocked(lease)
+		b.persistLocked()
 		b.mu.Unlock()
 		return b.finishProvision(ctx, lease)
 	}
@@ -174,11 +192,13 @@ func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error)
 
 	if !req.Wait {
 		out := cloneLease(lease)
+		b.persistLocked()
 		b.mu.Unlock()
 		return out, capacityQueued(pos, b.capacity, active, reason)
 	}
 
 	ch := b.addWaiterLocked(id)
+	b.persistLocked()
 	b.mu.Unlock()
 
 	return b.waitForLease(ctx, id, ch)
@@ -205,6 +225,7 @@ func (b *Broker) Renew(ctx context.Context, leaseID string, ttl time.Duration) (
 	lease.HeartbeatAt = now
 	lease.TTL = ttl
 	lease.ExpiresAt = now.Add(ttl)
+	b.persistLocked()
 	return cloneLease(lease), nil
 }
 
@@ -240,6 +261,7 @@ func (b *Broker) Reclaim(ctx context.Context, leaseID string) (Lease, error) {
 	b.notifyWaitersLocked(leaseID)
 	next := b.tryBeginNextLocked(SpecKey(lease.Spec))
 	out := cloneLease(lease)
+	b.persistLocked()
 	b.mu.Unlock()
 
 	if next != nil {
@@ -277,6 +299,7 @@ func (b *Broker) endActiveOrQueued(ctx context.Context, leaseID string, activeTe
 		return Lease{}, invalidState(leaseID, lease.State, op)
 	}
 	out := cloneLease(lease)
+	b.persistLocked()
 	b.mu.Unlock()
 
 	if next != nil {
@@ -411,6 +434,7 @@ func (b *Broker) finishProvision(ctx context.Context, lease *Lease) (Lease, erro
 		b.notifyWaitersLocked(lease.ID)
 		next := b.tryBeginNextLocked(SpecKey(lease.Spec))
 		out := cloneLease(lease)
+		b.persistLocked()
 		b.mu.Unlock()
 		if next != nil {
 			_, _ = b.finishProvision(ctx, next)
@@ -427,6 +451,7 @@ func (b *Broker) finishProvision(ctx context.Context, lease *Lease) (Lease, erro
 	lease.ExpiresAt = now.Add(lease.TTL)
 	b.notifyWaitersLocked(lease.ID)
 	out := cloneLease(lease)
+	b.persistLocked()
 	b.mu.Unlock()
 	return out, nil
 }

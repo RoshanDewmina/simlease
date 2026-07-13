@@ -49,6 +49,10 @@ independently reviewed, and merged — see evidence log below.
 | M1.3 watcher + reaper | merged locally as `60dfe1b` | cleaned | `grok-4.5-high` | low (no deletion itself — calls into M1.4 safety only) | merged | green |
 | M1.5a daemon lease RPC + reclaim loop | merged locally as `6fc5529` | cleaned | `grok-4.5-high` | low, personal review (unattended deletion capability) | merged | green |
 | M1.5b CLI client commands | merged locally as `512a427` | cleaned | `grok-4.5-high` | low | merged | green |
+| M1.6 broker persistence + reconciliation | merged locally as `8aee920` | cleaned | `grok-4.5-high` | low, personal review (central package) | merged | green |
+| M2.1 isolator | merged locally as `2fe9991` | cleaned | `grok-4.5-high` | low | merged | green |
+| M2.2 warm templates | pending | pending | `grok-4.5-high` | low | next | pending |
+| M2.3 prune + doctor extensions | pending | pending | `grok-4.5-high` | low (resolves orphan-auto-reclaim policy) | blocked on M2.2 | pending |
 
 ## Milestone gates
 
@@ -56,7 +60,7 @@ independently reviewed, and merged — see evidence log below.
 |---|---|---|---|
 | M0 | build, vet, race tests, staticcheck — **PASS** | `daemon run` + `doctor` exit 0, all 5 checks green — **PASS**, live-run 2026-07-12 | **COMPLETE** |
 | M1 | `go test -race -count=1 ./...` (whole repo) — **PASS**, all 11 testable packages green | `[mac]` full-lifecycle + two-terminal concurrent-acquire smoke — **PASS**; SIGKILL-mid-lifecycle → restart → reconcile — **PASS**, live-run 2026-07-13 (see evidence log) | **COMPLETE — all sub-scenarios in the GATE text satisfied, live-proven, no caveats** |
-| M2 | full Go gates | isolated concurrent sample builds + warm latency | not started |
+| M2 | full Go gates — green (see M2.1 evidence) | isolated concurrent sample builds — **PASS**, live-run 2026-07-13 (real xcodebuild, both DerivedData-isolation and concurrent-build-no-collision proven); warm latency — not started (M2.2) | in progress (1/3 packages) |
 | M3 | MCP tests | two-agent dogfood + screenshots/status evidence | not started |
 | M4 | full suite + error audit | clean dogfood rerun + fresh-account quickstart | not started |
 
@@ -487,20 +491,53 @@ independently reviewed, and merged — see evidence log below.
   concurrent-acquire, AND the SIGKILL-restart-reconcile scenario) has been live-proven on this
   Mac, not just unit-tested.
 
+### 2026-07-13 — M2.1 isolator merged; concurrent-build isolation proven live
+
+- Spec: `docs/plans/work-packages/m2.1-isolator.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m2.1-isolator` (the longest single dispatch of this whole engagement — ~18 minutes,
+  real `xcodegen`/`xcodebuild` work, not just Go code): `internal/isolator` (`EnsureLeaseDir`,
+  pure `BuildEnv` matching `docs/ARCHITECTURE.md` §7's env/flag matrix byte-for-byte with the
+  required VibeChard/Apache-2.0 attribution comment at the definition site, `AllocateResultBundlePath`,
+  `WriteLeaseSnapshot` via the same atomic temp+rename pattern `internal/store` established);
+  `internal/daemon` recomputes `IsolationEnv` fresh in every wire response for an ACTIVE lease
+  (never stored on the broker's own persisted `Lease` — a deliberate simplicity choice, it's a pure
+  function of already-known data); `simurgh env`/`simurgh exec` (direct `argv` execution, never
+  `sh -c`, no shell-injection surface); a minimal real `xcodegen`-generated `test/fixtures/SampleApp`
+  fixture committed so the GATE has something to build against. **PATH shim explicitly not built**
+  (confirmed v0.1-deferred, per spec).
+- Orchestrator independently reran all gates (green), personally read every new/changed file
+  (traced every path from the daemon handlers to `isolator`'s pure functions, confirmed no
+  destructive capability was introduced, confirmed the exec path never shells out through `sh -c`).
+- **Personally reproduced a live build myself** (a lighter, independent spot-check rather than
+  redoing the implementer's full 2-lease concurrent test, since the code review found nothing to
+  doubt): real `xcodebuild` through `simurgh exec` against the real `SampleApp` fixture —
+  `** BUILD SUCCEEDED **`, `DerivedData` populated only under the lease's own directory, confirmed
+  `~/Library/Developer/Xcode/DerivedData` had zero `SampleApp` entries. The implementer's own live
+  evidence (independently plausible — real build timings of 23.9s/2.3s/65.2s, not fabricatable
+  round numbers) additionally proved the actual concurrency claim: two leases building the same
+  scheme simultaneously both succeeded with zero `build.db` collisions and independent
+  `DerivedData` trees — the concrete "GATE" this milestone exists to prove.
+- Committed as `375200c feat(isolator): per-lease dirs, env/flag emission, exec/env CLI (M2.1)` on
+  `feat/m2.1-isolator`; local-merged to `master` as `2fe9991 merge: M2.1 isolation environment
+  (per-lease dirs, env/flag emission, exec)`. Post-merge gate rerun: build/vet/test-race/
+  staticcheck all exit 0. Worktree removed, branch deleted.
+
 ## Next action
 
-**M2 — Isolation + warm templates** is next, per `docs/ROADMAP.md`: M2.1 isolator (per-lease dirs,
-env/flag emission per the VibeChard seven-resource matrix — attribution comment required per
-`docs/COMPETITOR_NOTES.md`'s reuse rules — `simurgh env`/`simurgh exec` with auto result-bundle
-allocation, `lease.json` snapshot), M2.2 warm templates (`warm create|list|remove`,
-clone-from-warm path threaded into `internal/provisioner`, reaper exclusion so warm templates are
-never treated as reclaimable — the existing `simurgh-warm[...]` pattern already exists in
-`internal/safety.IsSimurghManagedName`, just unused until now), M2.3 prune + doctor extensions
-(prune plan/apply with orphan/held/active buckets — this is also where `internal/reaper`'s
-long-deferred "auto-reclaim orphans" policy question finally gets a real home, via `prune
---apply` rather than automatic background deletion). **Prep note:** M2's `[mac]` GATE references
-a fixture iOS app at `test/fixtures/SampleApp` that does not exist yet — M2.1's work package should
-either scaffold a minimal one or explicitly scope that as a small first step, since the gate can't
-run without it. After M2: M3 (MCP server + the two-parallel-Claude-Code-sessions dogfood — the v0
-exit demo the owner explicitly wants to see), M4 (hardening), tag `v0.0.1` per
-`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar.
+M2.2 warm templates is next: `simurgh warm create|list|remove --model ... --runtime ...`, a
+clone-from-warm-template path threaded into `internal/provisioner`'s `Provision` (prefer an
+existing `simurgh-warm[<model>:<runtime>]` device as the clone source over the plain
+`simurgh-base[...]` when one matches, per `docs/ARCHITECTURE.md` §6 — this cuts clone+boot
+latency, the roadmap's own "warm template cuts acquire→Booted latency ≥50% vs cold" GATE line),
+and reaper exclusion (the existing `internal/safety.IsSimurghManagedName` pattern already
+recognizes `simurgh-warm[...]` as structurally deletable by name, but the reaper's orphan scan
+must never propose deleting a warm template just because it isn't a "known lease UDID" — warm
+templates are a distinct, deliberately-persistent category from lease clones and need their own
+exclusion check before M2.3's `prune` can safely exist). After M2.2: M2.3 prune + doctor
+extensions (`prune plan/apply` with orphan/held/active buckets — this is also where the
+long-deferred "should orphans auto-reclaim" policy question from M1.5a/M1.6 finally gets a real,
+explicit, owner-visible answer via `prune --apply` rather than silent background deletion; doctor
+gains stale-lease/disk-usage checks). Then the M2 milestone gate's remaining half (warm-latency
+timing numbers, `simurgh release && simurgh prune` → empty plan). Then M3 (MCP server + the
+two-parallel-Claude-Code-sessions dogfood — the v0 exit demo the owner explicitly wants to see),
+M4 (hardening), tag `v0.0.1` per `~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar.

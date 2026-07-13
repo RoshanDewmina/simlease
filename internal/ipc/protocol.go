@@ -18,15 +18,18 @@ const MaxFrameSize = 1 << 20
 
 const (
 	CodeUnsupportedVersion = "UNSUPPORTED_VERSION"
-	FixUnsupportedVersion  = "simurgh upgrade   # or: simurgh status"
+	// FixUnsupportedVersion is a planned CLI command (Architecture §9).
+	FixUnsupportedVersion = "simurgh doctor   # install a compatible simurgh version"
 )
 
 var (
 	ErrEmptyFrame         = errors.New("ipc: empty frame")
+	ErrTruncatedFrame     = errors.New("ipc: truncated frame")
 	ErrOversizedFrame     = errors.New("ipc: oversized frame")
 	ErrMalformedJSON      = errors.New("ipc: malformed JSON frame")
 	ErrMissingID          = errors.New("ipc: missing id")
 	ErrMissingMethod      = errors.New("ipc: missing method")
+	ErrInvalidVersion     = errors.New("ipc: invalid or missing protocol version")
 	ErrInvalidError       = errors.New("ipc: error requires code, message, and fix")
 	ErrUnexpectedError    = errors.New("ipc: ok response must not include error")
 	ErrUnexpectedResult   = errors.New("ipc: error response must not include result")
@@ -223,7 +226,8 @@ func (d *Decoder) readFrame() ([]byte, error) {
 				if total == 0 {
 					return nil, io.EOF
 				}
-				return nil, ErrOversizedFrame
+				// Non-empty frame ended without newline at or under maxSize.
+				return nil, ErrTruncatedFrame
 			}
 			return nil, err
 		}
@@ -237,6 +241,8 @@ func (d *Decoder) readFrame() ([]byte, error) {
 		_ = buf.WriteByte(b)
 	}
 
+	// Decode intentionally trims surrounding whitespace so padded single-line
+	// JSON frames are accepted; Encode still emits compact objects only.
 	raw := bytes.TrimSpace(buf.Bytes())
 	if len(raw) == 0 {
 		return nil, ErrEmptyFrame
@@ -244,9 +250,19 @@ func (d *Decoder) readFrame() ([]byte, error) {
 	return append([]byte(nil), raw...), nil
 }
 
+func validateVersion(v int) error {
+	if v <= 0 {
+		return ErrInvalidVersion
+	}
+	if v != ProtocolVersion {
+		return unsupportedVersion(v)
+	}
+	return nil
+}
+
 func validateRequest(req Request) error {
-	if req.V != ProtocolVersion {
-		return unsupportedVersion(req.V)
+	if err := validateVersion(req.V); err != nil {
+		return err
 	}
 	if strings.TrimSpace(req.ID) == "" {
 		return ErrMissingID
@@ -258,8 +274,8 @@ func validateRequest(req Request) error {
 }
 
 func validateResponse(resp Response) error {
-	if resp.V != ProtocolVersion {
-		return unsupportedVersion(resp.V)
+	if err := validateVersion(resp.V); err != nil {
+		return err
 	}
 	if strings.TrimSpace(resp.ID) == "" {
 		return ErrMissingID

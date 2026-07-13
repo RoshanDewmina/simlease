@@ -61,7 +61,8 @@ func TestDecodeErrors(t *testing.T) {
 		{name: "whitespace", input: "   \n", req: true, wantIs: ErrEmptyFrame},
 		{name: "malformed", input: "{not-json\n", req: true, wantIs: ErrMalformedJSON},
 		{name: "oversize_nl", input: strings.Repeat("a", 16) + "\n", max: 16, req: true, wantIs: ErrOversizedFrame},
-		{name: "oversize_eof", input: strings.Repeat("b", 16), max: 16, req: true, wantIs: ErrOversizedFrame},
+		{name: "trunc_short", input: `{"v":1`, req: true, wantIs: ErrTruncatedFrame},
+		{name: "trunc_at_limit", input: strings.Repeat("b", 16), max: 16, req: true, wantIs: ErrTruncatedFrame},
 		{name: "missing_id", input: `{"v":1,"id":"","method":"daemon.ping"}` + "\n", req: true, wantIs: ErrMissingID},
 		{name: "missing_method", input: `{"v":1,"id":"r1"}` + "\n", req: true, wantIs: ErrMissingMethod},
 		{name: "resp_missing_id", input: `{"v":1,"id":"","ok":true}` + "\n", wantIs: ErrMissingID},
@@ -70,7 +71,10 @@ func TestDecodeErrors(t *testing.T) {
 		{name: "ok_with_error", input: `{"v":1,"id":"r1","ok":true,"error":{"code":"X","message":"m","fix":"simurgh status"}}` + "\n", wantIs: ErrUnexpectedError},
 		{name: "err_with_result", input: `{"v":1,"id":"r1","ok":false,"result":{"x":1},"error":{"code":"X","message":"m","fix":"simurgh status"}}` + "\n", wantIs: ErrUnexpectedResult},
 		{name: "req_ver", input: `{"v":2,"id":"r1","method":"daemon.ping"}` + "\n", req: true, wantIs: ErrUnsupportedVersion, wantVer: true},
-		{name: "resp_ver", input: `{"v":0,"id":"r1","ok":true}` + "\n", wantIs: ErrUnsupportedVersion, wantVer: true},
+		{name: "resp_ver", input: `{"v":99,"id":"r1","ok":true}` + "\n", wantIs: ErrUnsupportedVersion, wantVer: true},
+		{name: "missing_v", input: `{"id":"r1","method":"daemon.ping"}` + "\n", req: true, wantIs: ErrInvalidVersion},
+		{name: "zero_v", input: `{"v":0,"id":"r1","ok":true}` + "\n", wantIs: ErrInvalidVersion},
+		{name: "neg_v", input: `{"v":-1,"id":"r1","method":"daemon.ping"}` + "\n", req: true, wantIs: ErrInvalidVersion},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -92,8 +96,37 @@ func TestDecodeErrors(t *testing.T) {
 				if !errors.As(err, &uerr) || uerr.ErrorEnvelope.Code != CodeUnsupportedVersion || uerr.ErrorEnvelope.Fix != FixUnsupportedVersion {
 					t.Fatalf("UnsupportedVersionError = %#v", err)
 				}
+				if !strings.Contains(FixUnsupportedVersion, "simurgh doctor") {
+					t.Fatalf("FixUnsupportedVersion must reference simurgh doctor: %q", FixUnsupportedVersion)
+				}
 			}
 		})
+	}
+}
+
+func TestTruncatedFrameBoundaries(t *testing.T) {
+	// Under-limit and exact-limit EOF without newline are truncated, not oversized.
+	for _, tt := range []struct {
+		name  string
+		input string
+		max   int
+	}{
+		{name: "short", input: `{"v":1,"id":"r1"`, max: 64},
+		{name: "exact", input: strings.Repeat("x", 8), max: 8},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dec := NewDecoder(strings.NewReader(tt.input))
+			dec.maxSize = tt.max
+			if _, err := dec.DecodeRequest(); !errors.Is(err, ErrTruncatedFrame) {
+				t.Fatalf("err = %v, want ErrTruncatedFrame", err)
+			}
+		})
+	}
+	// One byte past max before newline is oversized.
+	dec := NewDecoder(strings.NewReader(strings.Repeat("y", 9) + "\n"))
+	dec.maxSize = 8
+	if _, err := dec.DecodeRequest(); !errors.Is(err, ErrOversizedFrame) {
+		t.Fatalf("err = %v, want ErrOversizedFrame", err)
 	}
 }
 
@@ -153,6 +186,8 @@ func TestNewErrorAndEncodeRejects(t *testing.T) {
 	}{
 		{Request{V: ProtocolVersion, ID: "r1"}, ErrMissingMethod},
 		{Response{V: 2, ID: "r1", OK: true}, ErrUnsupportedVersion},
+		{Response{V: 0, ID: "r1", OK: true}, ErrInvalidVersion},
+		{Request{V: -3, ID: "r1", Method: "daemon.ping"}, ErrInvalidVersion},
 		{Response{V: ProtocolVersion, ID: "r1", OK: false, Error: &Error{Code: "X", Message: "m"}}, ErrInvalidError},
 		{Response{V: ProtocolVersion, ID: "r1", OK: true, Error: &Error{Code: "X", Message: "m", Fix: "simurgh status"}}, ErrUnexpectedError},
 		{Response{V: ProtocolVersion, ID: "r1", OK: false, Result: json.RawMessage(`{}`), Error: &Error{Code: "X", Message: "m", Fix: "simurgh status"}}, ErrUnexpectedResult},

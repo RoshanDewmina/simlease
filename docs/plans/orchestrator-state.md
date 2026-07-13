@@ -51,7 +51,7 @@ independently reviewed, and merged — see evidence log below.
 | M1.5b CLI client commands | merged locally as `512a427` | cleaned | `grok-4.5-high` | low | merged | green |
 | M1.6 broker persistence + reconciliation | merged locally as `8aee920` | cleaned | `grok-4.5-high` | low, personal review (central package) | merged | green |
 | M2.1 isolator | merged locally as `2fe9991` | cleaned | `grok-4.5-high` | low | merged | green |
-| M2.2 warm templates | pending | pending | `grok-4.5-high` | low | next | pending |
+| M2.2 warm templates | merged locally as `4fc5228` | cleaned | `grok-4.5-high` | low | merged (functionally correct; latency target NOT met, see evidence log) | green |
 | M2.3 prune + doctor extensions | pending | pending | `grok-4.5-high` | low (resolves orphan-auto-reclaim policy) | blocked on M2.2 | pending |
 
 ## Milestone gates
@@ -60,7 +60,7 @@ independently reviewed, and merged — see evidence log below.
 |---|---|---|---|
 | M0 | build, vet, race tests, staticcheck — **PASS** | `daemon run` + `doctor` exit 0, all 5 checks green — **PASS**, live-run 2026-07-12 | **COMPLETE** |
 | M1 | `go test -race -count=1 ./...` (whole repo) — **PASS**, all 11 testable packages green | `[mac]` full-lifecycle + two-terminal concurrent-acquire smoke — **PASS**; SIGKILL-mid-lifecycle → restart → reconcile — **PASS**, live-run 2026-07-13 (see evidence log) | **COMPLETE — all sub-scenarios in the GATE text satisfied, live-proven, no caveats** |
-| M2 | full Go gates — green (see M2.1 evidence) | isolated concurrent sample builds — **PASS**, live-run 2026-07-13 (real xcodebuild, both DerivedData-isolation and concurrent-build-no-collision proven); warm latency — not started (M2.2) | in progress (1/3 packages) |
+| M2 | full Go gates — green (see M2.1/M2.2 evidence) | isolated concurrent sample builds — **PASS** (M2.1); warm latency ≥50% — **NOT MET** on this Mac, functionally correct, two independent honest measurements (M2.2, see evidence log); `prune` empty-plan check — not started (M2.3) | in progress (2/3 packages) |
 | M3 | MCP tests | two-agent dogfood + screenshots/status evidence | not started |
 | M4 | full suite + error audit | clean dogfood rerun + fresh-account quickstart | not started |
 
@@ -522,22 +522,62 @@ independently reviewed, and merged — see evidence log below.
   (per-lease dirs, env/flag emission, exec)`. Post-merge gate rerun: build/vet/test-race/
   staticcheck all exit 0. Worktree removed, branch deleted.
 
+### 2026-07-13 — M2.2 warm templates merged; honest latency finding recorded
+
+- Spec: `docs/plans/work-packages/m2.2-warm-templates.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m2.2-warm`: `simurgh warm create|list|remove`; `internal/provisioner.Provision`
+  extended to prefer an existing `simurgh-warm[<model>:<runtime>]` device as the clone source —
+  the lookup was added to the SAME `ListDevices` call and the SAME per-`(model,runtime)` lock
+  (`lockForBase`) that M1.2's review already made race-safe, so this does not reopen that race,
+  and the no-warm-template path is unchanged (existing tests pass verbatim); `internal/safety`
+  gained one additive function (`IsWarmTemplateName`); `internal/reaper.ScanOrphans` now skips
+  warm-named devices before the known-UDID check (they're deliberately persistent, never
+  lease-owned, so treating them as orphans was a real future noise/correctness gap this closes
+  pre-emptively); `warm remove` calls the existing, already-reviewed
+  `safety.DeleteSimulatorClone` directly — no new deletion primitive anywhere in this package.
+- Orchestrator independently reran all gates (green), personally read `ensureBaseDevice`'s diff
+  line-by-line to confirm the lock-scope concern (the one thing flagged as needing real scrutiny
+  in the risk section) held: the warm lookup executes inside the identical `mu.Lock()`/
+  `defer mu.Unlock()` block as the existing base-device check, confirmed by reading the code, not
+  inferred. `CreateWarmTemplate` uses the same lock, confirmed idempotent. `warm.remove`'s daemon
+  handler traced to confirm it really does call `safety.DeleteSimulatorClone` and nothing else.
+  Given the depth of this direct trace, no separate subagent review was dispatched (matching the
+  M1.3 precedent for a `low`-risk package with a thorough personal read).
+- **Honest, twice-measured finding — not hidden, not treated as a defect to chase:** the roadmap's
+  own GATE target ("warm template cuts acquire→Booted latency ≥50% vs cold") was **not met on
+  this Mac**. The implementer's live pass: cold 2.147s, warm 2.696s (warm was 25.6% *slower*).
+  The orchestrator's own independent re-measurement (2 cold + 2 warm samples, acknowledged
+  confound: leftover clones from the prior sample added system load across the run): cold
+  2.0–8.8s, warm 7.7–21.0s — same directional result, high variance, warm not reliably faster.
+  Functional correctness is solid (`cloneOf` in the live wire response confirmed the acquired
+  clone really was sourced from the warm template's UDID, not the base's) — the gap is the
+  *latency benefit* VibeChard's original pattern assumed, which does not appear to reproduce on
+  this Mac's Apple-Silicon + Xcode-beta + iOS-27 setup (clone+boot from a cold base is already
+  fast enough here that the "primed" advantage doesn't show up, and may be dominated by
+  concurrent-simulator system load instead). This is logged as a **product/architecture finding
+  for the owner**, not an implementation bug — someone should look at this before investing more
+  in the warm-pool idea (v1) on the assumption the v0 latency case is proven; it currently isn't,
+  on this hardware.
+- Committed as `2a76862 feat(warm): warm templates -- create/list/remove, clone-from-warm (M2.2)`
+  on `feat/m2.2-warm`; local-merged to `master` as `4fc5228 merge: M2.2 warm templates`.
+  Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0. Worktree removed, branch
+  deleted.
+
 ## Next action
 
-M2.2 warm templates is next: `simurgh warm create|list|remove --model ... --runtime ...`, a
-clone-from-warm-template path threaded into `internal/provisioner`'s `Provision` (prefer an
-existing `simurgh-warm[<model>:<runtime>]` device as the clone source over the plain
-`simurgh-base[...]` when one matches, per `docs/ARCHITECTURE.md` §6 — this cuts clone+boot
-latency, the roadmap's own "warm template cuts acquire→Booted latency ≥50% vs cold" GATE line),
-and reaper exclusion (the existing `internal/safety.IsSimurghManagedName` pattern already
-recognizes `simurgh-warm[...]` as structurally deletable by name, but the reaper's orphan scan
-must never propose deleting a warm template just because it isn't a "known lease UDID" — warm
-templates are a distinct, deliberately-persistent category from lease clones and need their own
-exclusion check before M2.3's `prune` can safely exist). After M2.2: M2.3 prune + doctor
-extensions (`prune plan/apply` with orphan/held/active buckets — this is also where the
-long-deferred "should orphans auto-reclaim" policy question from M1.5a/M1.6 finally gets a real,
-explicit, owner-visible answer via `prune --apply` rather than silent background deletion; doctor
-gains stale-lease/disk-usage checks). Then the M2 milestone gate's remaining half (warm-latency
-timing numbers, `simurgh release && simurgh prune` → empty plan). Then M3 (MCP server + the
-two-parallel-Claude-Code-sessions dogfood — the v0 exit demo the owner explicitly wants to see),
-M4 (hardening), tag `v0.0.1` per `~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar.
+M2.3 prune + doctor extensions is next: `simurgh prune [--apply]` with orphan/held/active buckets
+(dry-run plan by default, matching the roadmap's `simurgh release && simurgh prune` → empty-plan
+GATE check), and `doctor` extensions for stale-lease/disk-usage checks. **This is also where the
+long-deferred "should orphans auto-reclaim" policy question from M1.5a/M1.6 (log-only since it was
+first introduced) finally gets an explicit, owner-visible answer**: `prune --apply` becomes the
+real, deliberate mechanism for reclaiming device-name-scan orphans — not automatic background
+deletion, which was correctly never built. `prune`'s plan-building logic should reuse
+`internal/reaper.ScanOrphans`/`Reconcile` for the orphan bucket (already correctly excludes warm
+templates as of M2.2) rather than re-deriving orphan detection, and `prune --apply`'s actual
+deletion must go through the existing `safety.DeleteSimulatorClone`/`DeleteLeaseDir` — no new
+primitive, matching every prior deletion-capable package this session. After M2.3: the M2
+milestone gate is fully closed (M2.1's build-isolation proof + M2.2's warm-latency numbers,
+honestly reported even though the target wasn't hit + M2.3's empty-prune-plan check). Then M3
+(MCP server + the two-parallel-Claude-Code-sessions dogfood — the v0 exit demo the owner
+explicitly wants to see), M4 (hardening), tag `v0.0.1` per
+`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar.

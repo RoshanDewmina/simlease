@@ -46,8 +46,8 @@ independently reviewed, and merged — see evidence log below.
 | M1.1 lease broker | merged locally as `38fe554` | cleaned | `grok-4.5-high` | low | merged | green |
 | M1.2 provisioner | merged locally as `87de11c` | cleaned | `grok-4.5-high` | low (interface-faked; `[mac]` suite is real, live-verified twice) | merged | green |
 | M1.4 safety | merged locally as `fd1773a` | cleaned | `grok-4.5-high` + Sonnet personal full-diff review | **sensitive** | merged | green |
-| M1.3 watcher + reaper | pending | pending | `grok-4.5-high` | low (no deletion itself — calls into M1.4 safety) | next (unblocked) | pending |
-| M1.5 CLI | pending | pending | `grok-4.5-high` | low | blocked on M1.1–M1.4 (now unblocked) | pending |
+| M1.3 watcher + reaper | merged locally as `60dfe1b` | cleaned | `grok-4.5-high` | low (no deletion itself — calls into M1.4 safety only) | merged | green |
+| M1.5 CLI | pending | pending | `grok-4.5-high` | low | next (unblocked) | pending |
 
 ## Milestone gates
 
@@ -312,18 +312,66 @@ independently reviewed, and merged — see evidence log below.
   Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0. Worktree removed, branch
   deleted.
 
+### 2026-07-13 — M1.3 watcher+reaper merged; known gap: cross-process crash recovery deferred
+
+- Spec: `docs/plans/work-packages/m1.3-watcher-reaper.md`, written with an explicit, deliberate
+  scope boundary: the roadmap's `[mac]` GATE scenario "daemon SIGKILL mid-provision → restart
+  reconciles with zero orphans" needs broker-lease persistence via `internal/store`, which does
+  not exist yet (M1.1 scoped that out as a later package). This package delivers everything
+  achievable without it — in-process reclaim (PID death/TTL/heartbeat/hard-cap) and same-process
+  orphan scan — and stubs `Reaper.Reconcile` as an honest no-op with a `TODO(m1.x-store)` comment
+  rather than faking cross-restart recovery. **This gap is still open** — whoever wires
+  `internal/store` into the broker next should also revisit `Reconcile`.
+- Implemented by `grok-4.5-high` in `.worktrees/m1.3-watcher-reaper`: `broker.Reclaim`
+  (ACTIVE→RECLAIMED, queue advance factored into a shared `endActiveOrQueued` helper with
+  `Release`, `isWaitTerminal` updated so `Wait()` callers see reclaimed leases) — the one
+  permitted `internal/broker` edit; `watcher.Tick` (pure decision function, zero side effects,
+  priority order PID-exit(`--rm`) → PID-death → hard-cap → inactivity → TTL, real
+  `syscall.Kill(pid,0)` seam) + `watcher.Run` (thin ticker wrapper); `reaper.Reclaim` (acts on an
+  already-RECLAIMED lease, calls `safety.DeleteSimulatorClone`/`safety.DeleteLeaseDir` only,
+  idempotent on both sides) + `reaper.ScanOrphans` (refuses to run inside the 10s post-start
+  reconciliation window per §10, returns candidates without deleting them — mirrors
+  `safety.ValidateDeviceDeletion`'s validate-vs-act split, so a scan false positive still can't
+  cause an unsafe delete since any real reclaim of a returned UDID re-validates live through
+  safety).
+- Orchestrator independently reran all gates, then **independently reproduced the live `[mac]`
+  test myself**: real throwaway clone reclaimed (device + lease dir both actually deleted); a
+  separately-created real orphan clone correctly found by `ScanOrphans` after the window elapsed;
+  the pre-existing `simurgh-base[...]` device confirmed untouched throughout, same UDID
+  before/after.
+- **Personal trace of the decision logic** (this package is risk-adjacent even though it's
+  classified `low` — a bug here means "my simulator got deleted while I was using it," so it got
+  the same scrutiny as a sensitive package): confirmed `reaper.go` calls only the two
+  already-reviewed `internal/safety` destructive functions, no raw `simctl`/`os.RemoveAll`
+  anywhere; confirmed the reconciliation window correctly gates only `ScanOrphans` (an already-
+  decided `Reclaim` on an ACTIVE lease is NOT gated by it, which is the correct reading of §10 —
+  the window protects against premature orphan reclamation on a fresh/restarting daemon, not
+  against reclaiming a lease within the same running process); confirmed passing a device's own
+  UDID as "known" into `DeleteSimulatorClone` is legitimate audit context, not a bypass (`safety`
+  still independently re-verifies the live name regardless). No blocking findings; approved
+  without a separate subagent pass given the depth of this direct trace.
+- Committed as `d93e1b7 feat(watcher,reaper): reclamation loop — decide then act (M1.3)` on
+  `feat/m1.3-watcher-reaper`; local-merged to `master` as `60dfe1b merge: M1.3 watcher + reaper
+  (reclamation loop)`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
+  Worktree removed, branch deleted.
+
 ## Next action
 
-M1.1, M1.2, and M1.4 are done. M1.3 watcher+reaper is next (now unblocked — reaper calls into the
-safety package that now exists): PID liveness (`kill(pid,0)`), heartbeat/TTL/inactivity/hard
-timeouts, `--rm` (release on client-PID exit), reclamation (shutdown+delete via
-`internal/safety.DeleteSimulatorClone`, never a raw `simctl` call), startup reconciliation window
-(reaper must not run destructive actions during the first 10s after daemon start per
-`docs/ARCHITECTURE.md` §10), orphan scan by device-name pattern
-(`internal/safety.IsSimurghManagedName`). This package is itself risk-adjacent (it's the thing
-that actually DECIDES what gets reclaimed and calls safety to do it) even though it never deletes
-directly — treat the decision logic (what counts as an orphan, what counts as reclaimable) with
-real scrutiny in review, not just gate-passing, per the same standard applied to M1.4. Then M1.5
-CLI, the M1 milestone gate (unit race suite including the SIGKILL'd-owner-reclaimed-within-one-
-watcher-interval scenario + `[mac]` full-lifecycle integration + the two-terminal manual acquire
-smoke), then M2 in phase order.
+M1.1–M1.4 are all done — the full in-process lease lifecycle (acquire → provision → active →
+reclaim/release, with the deletion guards enforced throughout) now exists and is real,
+live-verified on this Mac, not just unit-tested. **M1.5 CLI is next** (now unblocked): wrap the
+broker/provisioner/watcher/reaper into `simurgh acquire|release|renew|status|list` with `--json`
+on every command, the `~/.simurgh/last-lease` pointer convention (no lease-id argument → most
+recent lease owned by caller), and the exit-code contract from `docs/ARCHITECTURE.md` §9 (0 ok,
+2 queued/blocked, 3 invalid input, 4 environment problem, 5 internal). This is also where the
+daemon's actual event loop needs to glue `watcher.Run`'s callback to `broker.Reclaim` +
+`reaper.Reclaim`/`ScanOrphans` — noted as explicitly out of scope for M1.3, it has to land
+somewhere, and M1.5/the CLI's `daemon run` wiring is the natural place since that's where the
+long-running process lives. After M1.5: the M1 milestone gate (unit race suite — including the
+"two concurrent same-spec acquires," "exclusive same-device → QUEUED," and "SIGKILL'd owner →
+RECLAIMED within one watcher interval" scenarios, all now real and mergeable across
+broker+provisioner+watcher+reaper — plus the `[mac]` full-lifecycle integration test and the
+two-terminal manual `simurgh acquire` smoke described in the roadmap). Then M2 in phase order.
+The persistence/crash-recovery gap noted above should probably be scheduled as its own package
+before M2 isolation work compounds on top of an unpersisted broker — worth a decision point at
+the M1 milestone boundary rather than silently carrying forward.

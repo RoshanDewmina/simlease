@@ -34,6 +34,16 @@ func main() {
 				}
 			}
 			os.Exit(runDoctor(jsonOut))
+		case "acquire":
+			os.Exit(runAcquire(os.Args[2:]))
+		case "release":
+			os.Exit(runRelease(os.Args[2:]))
+		case "renew":
+			os.Exit(runRenew(os.Args[2:]))
+		case "status":
+			os.Exit(runStatus(os.Args[2:]))
+		case "list":
+			os.Exit(runList(os.Args[2:]))
 		}
 	}
 
@@ -44,11 +54,17 @@ func printHelp() {
 	fmt.Println(`simurgh — iOS simulator lease broker (pre-v0 scaffold)
 
 Usage:
+  simurgh acquire --model NAME [flags]
+  simurgh release [<lease-id>] [--all --label k=v] [--json]
+  simurgh renew <lease-id> [--ttl DUR] [--json]
+  simurgh status [--queue] [--json]
+  simurgh list [--label-selector k=v,...] [--json]
   simurgh daemon run
   simurgh doctor [--json]
   simurgh [help]
 
-Daemon serves the Unix socket IPC endpoint (daemon.ping).
+Acquire/release/renew/status/list are thin IPC clients over the daemon lease RPCs.
+Daemon serves the Unix socket IPC endpoint (daemon.ping + lease.* + pool.status).
 Doctor checks Xcode, simctl, iOS runtimes, socket perms, and daemon liveness.
 See docs/ROADMAP.md for the build plan.`)
 }

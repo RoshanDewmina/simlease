@@ -622,3 +622,56 @@ func TestRegisterLeaseHandlersWiresMethods(t *testing.T) {
 		t.Fatal("Serve did not exit")
 	}
 }
+
+func TestPoolStatusCountsByState(t *testing.T) {
+	deps, b, _ := newTestDeps(t, 3)
+	h := newHandlers(deps)
+
+	lease, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec:  testSpec(),
+		TTL:   time.Hour,
+		Wait:  true,
+		Owner: broker.Owner{PID: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := b.Release(context.Background(), lease.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Second acquire stays ACTIVE.
+	if _, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec:  testSpec(),
+		TTL:   time.Hour,
+		Wait:  true,
+		Owner: broker.Owner{PID: 2},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := callHandler(t, h.poolStatus, "ps1", map[string]any{})
+	if !resp.OK {
+		t.Fatalf("pool.status: %+v", resp.Error)
+	}
+	var got struct {
+		Capacity int            `json:"capacity"`
+		Leases   map[string]int `json:"leases"`
+	}
+	if err := json.Unmarshal(resp.Result, &got); err != nil {
+		t.Fatalf("unmarshal: %v raw=%s", err, resp.Result)
+	}
+	if got.Capacity != 3 {
+		t.Fatalf("capacity = %d want 3", got.Capacity)
+	}
+	if got.Leases["active"] != 1 {
+		t.Fatalf("active = %d want 1; leases=%v", got.Leases["active"], got.Leases)
+	}
+	if got.Leases["released"] != 1 {
+		t.Fatalf("released = %d want 1; leases=%v", got.Leases["released"], got.Leases)
+	}
+	for _, key := range []string{"queued", "provisioning", "cancelled", "failed", "reclaimed"} {
+		if _, ok := got.Leases[key]; !ok {
+			t.Fatalf("missing lease count key %q in %v", key, got.Leases)
+		}
+	}
+}

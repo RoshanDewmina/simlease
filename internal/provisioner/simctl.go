@@ -46,6 +46,7 @@ type SimctlClient interface {
 	Rename(ctx context.Context, udid, newName string) error
 	Boot(ctx context.Context, udid string) error
 	WaitBooted(ctx context.Context, udid string) error
+	Shutdown(ctx context.Context, udid string) error
 }
 
 // execSimctlClient runs xcrun simctl via exec.CommandContext.
@@ -112,6 +113,11 @@ func (c *execSimctlClient) Rename(ctx context.Context, udid, newName string) err
 
 func (c *execSimctlClient) Boot(ctx context.Context, udid string) error {
 	_, err := c.run(ctx, "boot", udid)
+	return err
+}
+
+func (c *execSimctlClient) Shutdown(ctx context.Context, udid string) error {
+	_, err := c.run(ctx, "shutdown", udid)
 	return err
 }
 

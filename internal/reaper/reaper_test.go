@@ -218,7 +218,7 @@ func TestScanOrphans_AfterWindow_FindsManagedUnknowns(t *testing.T) {
 	lister := &fakeLister{devices: []safety.Device{
 		{UDID: "known-1", Name: "simurgh-clone[owned]"},
 		{UDID: "orphan-clone", Name: "simurgh-clone[lost]"},
-		{UDID: "orphan-warm", Name: "simurgh-warm[lost]"},
+		{UDID: "warm-1", Name: "simurgh-warm[iPhone 17 Pro:27.0]"},
 		{UDID: "base-1", Name: "simurgh-base[iPhone 17 Pro:27.0]"},
 		{UDID: "user-1", Name: "My iPhone"},
 	}}
@@ -234,13 +234,47 @@ func TestScanOrphans_AfterWindow_FindsManagedUnknowns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err=%v", err)
 	}
-	want := map[string]bool{"orphan-clone": true, "orphan-warm": true}
-	if len(got) != 2 {
-		t.Fatalf("want 2 orphans, got %v", got)
+	if len(got) != 1 || got[0] != "orphan-clone" {
+		t.Fatalf("want [orphan-clone], got %v (warm templates must not be orphans)", got)
+	}
+}
+
+func TestScanOrphans_SkipsWarmTemplates(t *testing.T) {
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	now := start.Add(11 * time.Second)
+
+	lister := &fakeLister{devices: []safety.Device{
+		{UDID: "warm-only", Name: "simurgh-warm[iPhone 17 Pro:27.0]"},
+		{UDID: "orphan-clone", Name: "simurgh-clone[lost]"},
+	}}
+	r := New(ReaperOptions{
+		Lister:               lister,
+		Deleter:              &fakeDeleter{},
+		StartedAt:            func() time.Time { return start },
+		Now:                  func() time.Time { return now },
+		ReconciliationWindow: 10 * time.Second,
+	})
+
+	got, err := r.ScanOrphans(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("err=%v", err)
 	}
 	for _, udid := range got {
-		if !want[udid] {
-			t.Fatalf("unexpected orphan %s in %v", udid, got)
+		if udid == "warm-only" {
+			t.Fatalf("warm template must never be returned by ScanOrphans, got %v", got)
+		}
+	}
+	if len(got) != 1 || got[0] != "orphan-clone" {
+		t.Fatalf("want [orphan-clone], got %v", got)
+	}
+
+	got2, err := r.Reconcile(context.Background(), map[string]bool{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	for _, udid := range got2 {
+		if udid == "warm-only" {
+			t.Fatalf("warm template must never be returned by Reconcile, got %v", got2)
 		}
 	}
 }

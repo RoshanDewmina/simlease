@@ -19,16 +19,18 @@ type fakeSimctl struct {
 	runtimes    []Runtime
 	devices     []SimDevice
 
-	createCalls []createCall
-	cloneCalls  []cloneCall
-	renameCalls []renameCall
-	bootCalls   []string
-	waitCalls   []string
+	createCalls   []createCall
+	cloneCalls    []cloneCall
+	renameCalls   []renameCall
+	bootCalls     []string
+	waitCalls     []string
+	shutdownCalls []string
 
-	cloneErr  error
-	bootErr   error
-	waitErr   error
-	createErr error
+	cloneErr    error
+	bootErr     error
+	waitErr     error
+	createErr   error
+	shutdownErr error
 
 	nextUDID int
 
@@ -189,6 +191,23 @@ func (f *fakeSimctl) WaitBooted(ctx context.Context, udid string) error {
 	}
 }
 
+func (f *fakeSimctl) Shutdown(ctx context.Context, udid string) error {
+	_ = ctx
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.shutdownCalls = append(f.shutdownCalls, udid)
+	if f.shutdownErr != nil {
+		return f.shutdownErr
+	}
+	for i := range f.devices {
+		if f.devices[i].UDID == udid {
+			f.devices[i].State = "Shutdown"
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown udid %s", udid)
+}
+
 func defaultFake() *fakeSimctl {
 	return &fakeSimctl{
 		deviceTypes: []DeviceType{
@@ -210,6 +229,51 @@ func defaultFake() *fakeSimctl {
 				PlatformName: "iOS",
 			},
 		},
+	}
+}
+
+func TestProvisionClonesFromWarmWhenPresent(t *testing.T) {
+	fake := defaultFake()
+	warmUDID := "WARM-EXISTING"
+	baseUDID := "BASE-EXISTING"
+	rtID := "com.apple.CoreSimulator.SimRuntime.iOS-27-0"
+	fake.devices = []SimDevice{
+		{
+			UDID:                 baseUDID,
+			Name:                 "simurgh-base[iPhone 17 Pro:27.0]",
+			State:                "Shutdown",
+			RuntimeIdentifier:    rtID,
+			DeviceTypeIdentifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+			IsAvailable:          true,
+		},
+		{
+			UDID:                 warmUDID,
+			Name:                 "simurgh-warm[iPhone 17 Pro:27.0]",
+			State:                "Shutdown",
+			RuntimeIdentifier:    rtID,
+			DeviceTypeIdentifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro",
+			IsAvailable:          true,
+		},
+	}
+	p := New(fake)
+	dev, err := p.Provision(context.Background(), broker.ProvisionRequest{
+		LeaseID: "lease-warm",
+		Spec:    broker.DeviceSpec{Platform: "iOS", Model: "iPhone 17 Pro"},
+	})
+	if err != nil {
+		t.Fatalf("Provision: %v", err)
+	}
+	if len(fake.cloneCalls) != 1 {
+		t.Fatalf("cloneCalls=%d want 1", len(fake.cloneCalls))
+	}
+	if fake.cloneCalls[0].SourceUDID != warmUDID {
+		t.Fatalf("Clone source=%q want warm UDID %q (not base %q)", fake.cloneCalls[0].SourceUDID, warmUDID, baseUDID)
+	}
+	if dev.CloneOf != warmUDID {
+		t.Fatalf("CloneOf=%q want warm UDID %q", dev.CloneOf, warmUDID)
+	}
+	if len(fake.createCalls) != 0 {
+		t.Fatalf("createCalls=%d want 0 (warm present; no base create)", len(fake.createCalls))
 	}
 }
 

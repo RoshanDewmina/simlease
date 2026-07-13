@@ -7,6 +7,39 @@ import (
 	"testing"
 )
 
+func TestIsWarmTemplateName(t *testing.T) {
+	cases := []struct {
+		name string
+		want bool
+	}{
+		// Intended positives
+		{"simurgh-warm[iPhone 17 Pro:27.0]", true},
+		{"simurgh-warm[a:b:c]", true},
+		{"simurgh-warm[]", true}, // pattern allows empty bracket body via .*
+
+		// Near-miss adversarial negatives (same discipline as TestIsSimurghManagedName)
+		{"simurgh-clone[iPhone 17 Pro:27.0]", false},
+		{"simurgh-base[iPhone 17 Pro:27.0]", false},
+		{"Simurgh-warm[x]", false},     // wrong case
+		{"simurgh-warm[x]evil", false}, // trailing garbage
+		{"xsimurgh-warm[x]", false},    // leading garbage
+		{"simurgh-warmy[x]", false},    // wrong kind
+		{"simurgh-warm(x)", false},     // wrong bracket
+		{"simurgh-warm", false},        // missing brackets
+		{"", false},
+		{"simurgh-warm[x]\n", false},
+		{" simurgh-warm[x]", false},
+		{"simurgh-warm[x] ", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsWarmTemplateName(tc.name); got != tc.want {
+				t.Fatalf("IsWarmTemplateName(%q)=%v want %v", tc.name, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIsSimurghManagedName(t *testing.T) {
 	cases := []struct {
 		name string

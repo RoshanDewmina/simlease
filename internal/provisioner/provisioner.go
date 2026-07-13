@@ -160,7 +160,12 @@ func (p *Provisioner) ensureBaseDevice(ctx context.Context, model, deviceTypeID 
 	// Safety-invariant adjacent: base devices are named simurgh-base[...], which
 	// deliberately does NOT match ^simurgh-(clone|warm)\[.*]$. The future reaper
 	// must never treat bases as deletable lease clones.
+	//
+	// When a warm template simurgh-warm[<model>:<runtime>] exists for this key,
+	// prefer it as the clone source (ARCHITECTURE §6). Still under lockForBase
+	// so concurrent Provision/CreateWarmTemplate for the same key cannot race.
 	baseName := baseDeviceName(model, rt.Version)
+	warmName := warmTemplateName(model, rt.Version)
 
 	mu := p.lockForBase(model, rt.Identifier)
 	mu.Lock()
@@ -169,6 +174,11 @@ func (p *Provisioner) ensureBaseDevice(ctx context.Context, model, deviceTypeID 
 	devices, err := p.client.ListDevices(ctx)
 	if err != nil {
 		return "", cloneFailed(err)
+	}
+	for _, d := range devices {
+		if d.Name == warmName && d.RuntimeIdentifier == rt.Identifier {
+			return d.UDID, nil
+		}
 	}
 	for _, d := range devices {
 		if d.Name == baseName && d.RuntimeIdentifier == rt.Identifier {

@@ -46,12 +46,12 @@
     },
     {
       "date": "2026-07-13",
-      "topic": "B4: does crash cleanup actually work? (in progress)",
-      "summary": "Kill an agent's whole process tree ~8s into its build, then check 90s later what's left behind per arm. Early results already show the expected shape: DIY's killed victim leaves an orphaned simulator behind (no automatic cleanup), which is exactly the categorical gap Simurgh's reaper exists to close.",
-      "decisions": [],
-      "open_items": [
-        "Full B4 results across all three arms still running"
-      ]
+      "topic": "B4: crash cleanup is Simurgh's clearest categorical win",
+      "summary": "Kill an agent's whole process tree ~8s into its build, then check 90s later what's left behind per arm. DIY orphaned its killed victim's simulator in 5/5 reps -- nothing left to run its own cleanup line. Simurgh's daemon watcher reclaimed the killed lease in all 4 cleanly-measured reps (device gone, lease state reclaimed). Hit real, sustained RAM pressure mid-run from accumulated already-measured orphaned DIY simulators (5 of them, still fully booted) compounding with new boots for the current rep -- diagnosed and fixed by shutting down the already-measured orphans (safe: their residue was already recorded), which let the earlier RetryQueues fix clear the backlog automatically.",
+      "decisions": [
+        "Shut down already-measured orphaned devices mid-run rather than let a real resource constraint block progress indefinitely -- safe because the finding was already durably recorded in JSON before cleanup"
+      ],
+      "open_items": []
     },
     {
       "date": "2026-07-13",

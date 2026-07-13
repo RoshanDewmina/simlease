@@ -356,27 +356,27 @@ img, video, canvas, svg { max-width: 100%; max-height: 100%; }
 <section class="slide on-cream">
     <div class="topbar">
         <span class="label reveal">05 — B4</span>
-        <span class="label reveal">Kill mid-build · in progress</span>
+        <span class="label reveal">Kill mid-build · 5 reps</span>
     </div>
-    <h2 class="headline-xl reveal editable-hover" style="position:absolute; left:120px; top:180px;">Does crash cleanup actually work?</h2>
+    <h2 class="headline-xl reveal editable-hover" style="position:absolute; left:120px; top:180px;">Crash cleanup — the categorical win</h2>
     <div class="arm-grid">
         <div class="arm-tile tile-cream2 reveal">
             <span class="tile-ord">Naive</span>
             <div class="tile-title" style="font-size:40px;">No lease concept</div>
-            <div class="tile-body">Shared persistent device — no orphan device to leave behind, but no automatic recovery either.</div>
-            <span class="arm-status" style="background:var(--green); color:var(--cream);">measuring</span>
+            <div class="tile-body">Shared persistent device — no orphan to leave behind, but also no automatic recovery. 2/5 success.</div>
+            <span class="arm-status" style="background:var(--green); color:var(--cream);">2/5 success</span>
         </div>
         <div class="arm-tile tile-pink reveal">
             <span class="tile-ord">DIY</span>
-            <div class="tile-title" style="font-size:40px;">Orphan confirmed</div>
-            <div class="tile-body">Killed victim's simulator stays booted forever — nothing left to run the cleanup line.</div>
-            <span class="arm-status" style="background:var(--green-deep); color:var(--pink);">device_still_present: true</span>
+            <div class="tile-title" style="font-size:40px;">Orphaned every time</div>
+            <div class="tile-body">Killed victim's simulator stayed booted in 5/5 reps — nothing left to run the cleanup line.</div>
+            <span class="arm-status" style="background:var(--green-deep); color:var(--pink);">device_still_present: true × 5</span>
         </div>
         <div class="arm-tile tile-green reveal">
             <span class="tile-ord">Simurgh</span>
-            <div class="tile-title" style="font-size:40px;">Reaper's turn</div>
-            <div class="tile-body">This is the categorical win the plan expects — the daemon's watcher should reclaim what the killed process couldn't clean up itself.</div>
-            <span class="arm-status" style="background:var(--pink); color:var(--green-deep);">results pending</span>
+            <div class="tile-title" style="font-size:40px;">Reclaimed, every time</div>
+            <div class="tile-body">The daemon's watcher caught what the killed process couldn't clean up itself — in all 4 cleanly-measured reps.</div>
+            <span class="arm-status" style="background:var(--pink); color:var(--green-deep);">lease_state: reclaimed × 4</span>
         </div>
     </div>
 </section>
@@ -442,10 +442,10 @@ img, video, canvas, svg { max-width: 100%; max-height: 100%; }
         <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">B1 — naive collision</span><span class="status-note">done</span></div>
         <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">B2 — broker bug fixed</span><span class="status-note">done</span></div>
         <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">B3 — honest cost</span><span class="status-note">done</span></div>
-        <div class="status-row reveal"><span class="status-mark">→</span><span class="status-label">B4 — crash cleanup</span><span class="status-note">running</span></div>
+        <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">B4 — crash cleanup</span><span class="status-note">done</span></div>
         <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">Warm-DD latency fix</span><span class="status-note">shipped</span></div>
         <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">Test suite 34.3s → 6.2s</span><span class="status-note">shipped</span></div>
-        <div class="status-row reveal"><span class="status-mark">○</span><span class="status-label">B5 — thundering herd</span><span class="status-note">next</span></div>
+        <div class="status-row reveal"><span class="status-mark">→</span><span class="status-label">B5 — thundering herd</span><span class="status-note">running</span></div>
         <div class="status-row reveal"><span class="status-mark">○</span><span class="status-label">B6 — real Lancer app</span><span class="status-note">next</span></div>
     </div>
     <div class="footline">

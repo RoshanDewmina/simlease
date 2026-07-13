@@ -47,7 +47,8 @@ independently reviewed, and merged — see evidence log below.
 | M1.2 provisioner | merged locally as `87de11c` | cleaned | `grok-4.5-high` | low (interface-faked; `[mac]` suite is real, live-verified twice) | merged | green |
 | M1.4 safety | merged locally as `fd1773a` | cleaned | `grok-4.5-high` + Sonnet personal full-diff review | **sensitive** | merged | green |
 | M1.3 watcher + reaper | merged locally as `60dfe1b` | cleaned | `grok-4.5-high` | low (no deletion itself — calls into M1.4 safety only) | merged | green |
-| M1.5 CLI | pending | pending | `grok-4.5-high` | low | next (unblocked) | pending |
+| M1.5a daemon lease RPC + reclaim loop | merged locally as `6fc5529` | cleaned | `grok-4.5-high` | low, personal review (unattended deletion capability) | merged | green |
+| M1.5b CLI client commands | pending | pending | `grok-4.5-high` | low | next | pending |
 
 ## Milestone gates
 
@@ -355,23 +356,56 @@ independently reviewed, and merged — see evidence log below.
   (reclamation loop)`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
   Worktree removed, branch deleted.
 
+### 2026-07-13 — M1.5a merged: the daemon has a real, live-proven reclaim loop
+
+- Spec: `docs/plans/work-packages/m1.5a-daemon-lease-rpc.md`. This is the first package where a
+  real client can trigger real device creation over the actual socket protocol, and the first
+  place unattended reclaim/deletion runs while the daemon is up — so it got the same "personally
+  spot-check before merge" treatment as a sensitive package, without formally being classified
+  `sensitive` (no new destructive primitive was added; every delete still routes through the
+  already-reviewed `internal/safety`).
+- Implemented by `grok-4.5-high` in `.worktrees/m1.5a-daemon-rpc`: registered
+  `lease.acquire|renew|release|get|list|wait` on the socket server (additive
+  `ipc.Server.RegisterHandler`), explicit wire DTOs decoupling the JSON contract from broker's Go
+  shape, a complete `brokerErrorToIPC` mapping (all 4 typed broker errors + INTERNAL fallback,
+  including `CAPACITY_QUEUED`'s `queuePosition`), additive JSON tags + duration-string marshaling
+  on `broker/types.go` (existing broker tests unaffected), and `daemon.ReclaimLoop` (5s watch
+  tick → `Broker.Reclaim` → `Reaper.Reclaim`; separate 5m orphan scan, **log-only, no
+  auto-delete** — the safer judgment call, deferred to a future `prune --apply` per roadmap
+  M2.3). `cmd/simurgh/daemon.go` gained a `simctlSafetyClient` adapter (real `xcrun simctl`
+  shutdown/delete) wired only into `reaper.Reaper`'s `Deleter` — reachable only through the
+  already-validated `safety.DeleteSimulatorClone` path, no bypass.
+- Orchestrator independently reran all gates (green), then **personally traced `ReclaimLoop`**:
+  confirmed `applyDecisions` always re-validates via `Broker.Reclaim` (which itself re-checks
+  ACTIVE state) before calling `Reaper.Reclaim` with the exact lease object `Broker.Reclaim`
+  returned — no stale-lease or cross-lease risk — and confirmed the orphan scanner never deletes,
+  only logs.
+- **Personally exercised the full reclaim→deletion path live end-to-end** (the subagent's own
+  live check explicitly did NOT cover this — it only proved acquire/release, not reclaim): built
+  a throwaway Go client inside the worktree (deleted before commit, never shipped) that dialed
+  the real socket, sent a real `lease.acquire` with `ttl:"6s"`, waited past one 5s watch tick, and
+  confirmed via `lease.get` over the wire that the lease auto-transitioned to `"state":"reclaimed"`
+  — then independently confirmed via `xcrun simctl list devices` that the real clone was actually
+  gone, with zero manual intervention. Only the pre-existing `simurgh-base[...]` remained
+  throughout, same UDID as always.
+- Committed as `8e6e1a1 feat(daemon): wire lease RPCs + reclaim loop into the running daemon
+  (M1.5a)` on `feat/m1.5a-daemon-rpc`; local-merged to `master` as `6fc5529 merge: M1.5a daemon
+  lease RPC wiring + reclaim loop`. Post-merge gate rerun: build/vet/test-race/staticcheck all
+  exit 0. Worktree removed, branch deleted.
+
 ## Next action
 
-M1.1–M1.4 are all done — the full in-process lease lifecycle (acquire → provision → active →
-reclaim/release, with the deletion guards enforced throughout) now exists and is real,
-live-verified on this Mac, not just unit-tested. **M1.5 CLI is next** (now unblocked): wrap the
-broker/provisioner/watcher/reaper into `simurgh acquire|release|renew|status|list` with `--json`
-on every command, the `~/.simurgh/last-lease` pointer convention (no lease-id argument → most
-recent lease owned by caller), and the exit-code contract from `docs/ARCHITECTURE.md` §9 (0 ok,
-2 queued/blocked, 3 invalid input, 4 environment problem, 5 internal). This is also where the
-daemon's actual event loop needs to glue `watcher.Run`'s callback to `broker.Reclaim` +
-`reaper.Reclaim`/`ScanOrphans` — noted as explicitly out of scope for M1.3, it has to land
-somewhere, and M1.5/the CLI's `daemon run` wiring is the natural place since that's where the
-long-running process lives. After M1.5: the M1 milestone gate (unit race suite — including the
-"two concurrent same-spec acquires," "exclusive same-device → QUEUED," and "SIGKILL'd owner →
-RECLAIMED within one watcher interval" scenarios, all now real and mergeable across
-broker+provisioner+watcher+reaper — plus the `[mac]` full-lifecycle integration test and the
-two-terminal manual `simurgh acquire` smoke described in the roadmap). Then M2 in phase order.
-The persistence/crash-recovery gap noted above should probably be scheduled as its own package
-before M2 isolation work compounds on top of an unpersisted broker — worth a decision point at
-the M1 milestone boundary rather than silently carrying forward.
+M1.5b is next: the CLI client commands (`simurgh acquire|release|renew|status|list`) that consume
+the RPCs M1.5a just wired — `--json` on every command, the `~/.simurgh/last-lease` pointer
+convention (no lease-id argument → most recent lease owned by caller), and the exit-code contract
+from `docs/ARCHITECTURE.md` §9 (0 ok, 2 queued/blocked, 3 invalid input, 4 environment problem, 5
+internal). These are thin `internal/ipc.Dial`-based clients (auto-starting the daemon on
+connection failure, per `internal/ipc.Dial`'s existing behavior — M1.5b should not reimplement
+that). After M1.5b: the M1 milestone gate — unit race suite across
+broker+provisioner+watcher+reaper+daemon (all real now, no more interface-fakes needed for the
+roadmap's "two concurrent same-spec acquires," "exclusive same-device → QUEUED," and "SIGKILL'd
+owner → RECLAIMED within one watcher interval" scenarios), the `[mac]` full-lifecycle integration
+test, and the two-terminal manual `simurgh acquire` smoke test described in the roadmap (now
+actually possible to run for real, since the CLI will exist). Then a decision point on the
+persistence/crash-recovery gap (`internal/reaper.Reconcile` is still a stub) before M2 isolation
+work compounds on top of an unpersisted broker. Then M2 in phase order.

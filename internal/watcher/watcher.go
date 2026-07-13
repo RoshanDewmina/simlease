@@ -61,7 +61,8 @@ func New(opts WatcherOptions) *Watcher {
 }
 
 // Tick scans ACTIVE leases and returns reclaim decisions without side effects.
-// Priority per lease: PID exit (--rm) → PID not alive → hard → inactivity → TTL.
+// Priority per lease: PID exit (--rm / ReleaseOnPIDExit) → hard → inactivity → TTL.
+// When ReleaseOnPIDExit is false, owner PID liveness is not checked at all.
 func (w *Watcher) Tick(ctx context.Context) []ReclaimDecision {
 	_ = ctx
 	if w == nil || w.broker == nil {
@@ -82,12 +83,8 @@ func (w *Watcher) Tick(ctx context.Context) []ReclaimDecision {
 }
 
 func (w *Watcher) decide(lease broker.Lease, now time.Time) (string, bool) {
-	alive := w.isProcessAlive(lease.Owner.PID)
-	if lease.ReleaseOnPIDExit && !alive {
+	if lease.ReleaseOnPIDExit && !w.isProcessAlive(lease.Owner.PID) {
 		return "owner process exited", true
-	}
-	if !alive {
-		return "owner process not alive", true
 	}
 
 	hard := lease.Timeouts.Hard

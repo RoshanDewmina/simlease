@@ -55,7 +55,7 @@ independently reviewed, and merged — see evidence log below.
 | Milestone | Mechanical gates | macOS/integration gate | Status |
 |---|---|---|---|
 | M0 | build, vet, race tests, staticcheck — **PASS** | `daemon run` + `doctor` exit 0, all 5 checks green — **PASS**, live-run 2026-07-12 | **COMPLETE** |
-| M1 | `go test -race -count=1 ./...` (whole repo) — **PASS**, all 11 testable packages green | `[mac]` full-lifecycle + two-terminal concurrent-acquire smoke — **PASS**, live-run 2026-07-13. **Partial**: the GATE's "daemon SIGKILL mid-provision → restart reconciles with zero orphans" sub-scenario is NOT satisfied — it needs broker persistence, which doesn't exist yet (see M1.6 below, added to close this honestly rather than claim an unqualified pass). | **M1.1–M1.5 all merged and live-verified; M1.6 (new, persistence) added before M2 to close the one unmet GATE sub-scenario** |
+| M1 | `go test -race -count=1 ./...` (whole repo) — **PASS**, all 11 testable packages green | `[mac]` full-lifecycle + two-terminal concurrent-acquire smoke — **PASS**; SIGKILL-mid-lifecycle → restart → reconcile — **PASS**, live-run 2026-07-13 (see evidence log) | **COMPLETE — all sub-scenarios in the GATE text satisfied, live-proven, no caveats** |
 | M2 | full Go gates | isolated concurrent sample builds + warm latency | not started |
 | M3 | MCP tests | two-agent dogfood + screenshots/status evidence | not started |
 | M4 | full suite + error audit | clean dogfood rerun + fresh-account quickstart | not started |
@@ -451,20 +451,56 @@ independently reviewed, and merged — see evidence log below.
   package, before M2, so isolation/warm-template state doesn't compound on top of an unpersisted
   broker.
 
+### 2026-07-13 — M1.6 merged; M1 milestone fully COMPLETE, no caveats
+
+- Spec: `docs/plans/work-packages/m1.6-broker-persistence.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m1.6-persistence`: additive `store.State.Leases json.RawMessage` (no schema bump,
+  `store` never imports `broker` — confirmed no cycle); `broker.persistLocked()` called at the end
+  of every one of the six state-mutation call sites (`Acquire`'s 3 exit paths, `Renew`, `Reclaim`,
+  `Release`/queued-cancel via the shared `endActiveOrQueued`, both `finishProvision` outcomes)
+  while still holding `b.mu` — orchestrator personally traced all six and confirmed none were
+  missed; `Rehydrate()` (QUEUED re-enters its FIFO queue sorted by `AcquiredAt` then ID —
+  deliberate v0 design choice, exact pre-crash order not guaranteed, documented rather than
+  solved with a second serialization format; `PROVISIONING`→`FAILED` since no `finishProvision`
+  goroutine survives a crash; `ACTIVE` kept exactly as-is including `Device`, which is the crux of
+  "restart never orphans a real owned clone"; `idSeq` bumped past rehydrated IDs to prevent
+  collisions); `reaper.Reconcile` is now a real thin wrapper over the existing `ScanOrphans`, fed
+  by a new `Broker.KnownDeviceUDIDs()` — same window, same log-only policy, no new deletion
+  capability introduced anywhere in this package.
+- Orchestrator independently reran all gates (green), personally read every changed file (this is
+  the second-most-central package after the broker itself, per the spec's own risk framing), and
+  **personally reproduced the full SIGKILL→restart→reconcile scenario live**, independent of the
+  coder's own live check: acquired a real lease, confirmed the journal on disk, `kill -9`'d the
+  daemon (true hard crash), confirmed the real clone survived untouched while the daemon was dead,
+  restarted against the same `SIMURGH_HOME`, and confirmed via `simurgh list` that the exact same
+  lease reappeared `active` with the exact same UDID. As a bonus correctness signal neither of us
+  set out to test: the restarted daemon's own watcher then correctly noticed the rehydrated
+  lease's pre-crash owner PID was long dead and auto-reclaimed + auto-deleted the device within
+  seconds — proving rehydrated leases stay correctly tracked by the reclaim loop, not just
+  passively displayed.
+- Committed as `c28bbb9 feat(broker): journal persistence + crash-safe restart reconciliation
+  (M1.6)` on `feat/m1.6-persistence`; local-merged to `master` as `8aee920 merge: M1.6 broker
+  journal persistence + crash-safe reconciliation`. Post-merge gate rerun: build/vet/test-race/
+  staticcheck all exit 0. Worktree removed, branch deleted.
+- **M1 milestone gate is now fully green with zero caveats** — every sub-scenario in
+  `docs/ROADMAP.md`'s M1 GATE text (unit race suite, `[mac]` full-lifecycle, two-terminal
+  concurrent-acquire, AND the SIGKILL-restart-reconcile scenario) has been live-proven on this
+  Mac, not just unit-tested.
+
 ## Next action
 
-**M1.6 — broker persistence + reconciliation** is next (newly added, see `docs/ROADMAP.md`'s M1
-section and the gate-closure entry above): wire `internal/store`'s journal into `internal/broker`
-(persist on every state-mutating operation — additive `store.State` schema extension, following
-the pattern `internal/store/store.go`'s own doc comment anticipated back in M0.3), and implement
-real `internal/reaper.Reconcile` (load the journal on daemon start, cross-reference against a live
-`simctl` device scan via the reconciliation-window-respecting pattern `ScanOrphans` already
-established, rehydrate known ACTIVE leases into a fresh in-memory `Broker`, treat anything
-`simurgh-clone[...]`-named with no journal entry as an orphan — log-only, per the M1.5a policy,
-still not auto-reclaimed). This closes the one M1 GATE sub-scenario left open. After M1.6: rerun
-the SIGKILL-mid-provision → restart → reconcile scenario live for real (build, acquire, `kill -9`
-the daemon, restart it against the same `SIMURGH_HOME`, confirm the journal-recovered state and
-zero orphan/non-simurgh deletions) as the actual acceptance evidence for this specific gate item.
-Then M2 (isolation + warm templates) in phase order, followed by M3 (MCP + the two-parallel-
-Claude-Code-sessions dogfood — the v0 exit demo) and M4 (hardening), tagging `v0.0.1` per
+**M2 — Isolation + warm templates** is next, per `docs/ROADMAP.md`: M2.1 isolator (per-lease dirs,
+env/flag emission per the VibeChard seven-resource matrix — attribution comment required per
+`docs/COMPETITOR_NOTES.md`'s reuse rules — `simurgh env`/`simurgh exec` with auto result-bundle
+allocation, `lease.json` snapshot), M2.2 warm templates (`warm create|list|remove`,
+clone-from-warm path threaded into `internal/provisioner`, reaper exclusion so warm templates are
+never treated as reclaimable — the existing `simurgh-warm[...]` pattern already exists in
+`internal/safety.IsSimurghManagedName`, just unused until now), M2.3 prune + doctor extensions
+(prune plan/apply with orphan/held/active buckets — this is also where `internal/reaper`'s
+long-deferred "auto-reclaim orphans" policy question finally gets a real home, via `prune
+--apply` rather than automatic background deletion). **Prep note:** M2's `[mac]` GATE references
+a fixture iOS app at `test/fixtures/SampleApp` that does not exist yet — M2.1's work package should
+either scaffold a minimal one or explicitly scope that as a small first step, since the gate can't
+run without it. After M2: M3 (MCP server + the two-parallel-Claude-Code-sessions dogfood — the v0
+exit demo the owner explicitly wants to see), M4 (hardening), tag `v0.0.1` per
 `~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar.

@@ -79,10 +79,39 @@ func TestTick_OwnerProcessExited_ReleaseOnPIDExit(t *testing.T) {
 	}
 }
 
-func TestTick_OwnerProcessNotAlive_RegardlessOfFlag(t *testing.T) {
+func TestTick_OwnerProcessDead_ReleaseOnPIDExitFalse_NoReclaim(t *testing.T) {
+	// Without --rm, a dead owner PID must not reclaim; CLI acquire is one-shot.
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	lease := baseActive("lease-2", 77, now)
 	lease.ReleaseOnPIDExit = false
+	fb := &fakeBroker{}
+	fb.set(lease)
+
+	aliveCalls := 0
+	w := New(WatcherOptions{
+		Broker: fb,
+		Now:    func() time.Time { return now },
+		IsProcessAlive: func(pid int) bool {
+			aliveCalls++
+			return false
+		},
+	})
+
+	got := w.Tick(context.Background())
+	if len(got) != 0 {
+		t.Fatalf("want 0 decisions (PID death gated on ReleaseOnPIDExit), got %+v", got)
+	}
+	if aliveCalls != 0 {
+		t.Fatalf("IsProcessAlive must not be called when ReleaseOnPIDExit=false, got %d calls", aliveCalls)
+	}
+}
+
+func TestTick_OwnerProcessDead_ReleaseOnPIDExitFalse_TTLStillReclaims(t *testing.T) {
+	// PID gate is scoped; other reclaim triggers still fire independently.
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	lease := baseActive("lease-2-ttl", 77, now)
+	lease.ReleaseOnPIDExit = false
+	lease.ExpiresAt = now.Add(-time.Second)
 	fb := &fakeBroker{}
 	fb.set(lease)
 
@@ -93,8 +122,8 @@ func TestTick_OwnerProcessNotAlive_RegardlessOfFlag(t *testing.T) {
 	})
 
 	got := w.Tick(context.Background())
-	if len(got) != 1 || got[0].LeaseID != "lease-2" || got[0].Reason != "owner process not alive" {
-		t.Fatalf("got %+v", got)
+	if len(got) != 1 || got[0].LeaseID != "lease-2-ttl" || got[0].Reason != "ttl expired" {
+		t.Fatalf("want ttl expired reclaim, got %+v", got)
 	}
 }
 

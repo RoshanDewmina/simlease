@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
+	"github.com/RoshanDewmina/simurgh/internal/isolator"
 	"github.com/RoshanDewmina/simurgh/internal/reaper"
 	"github.com/RoshanDewmina/simurgh/internal/watcher"
 )
@@ -125,7 +127,19 @@ func (h *handlers) acquire(ctx context.Context, req ipc.Request) (json.RawMessag
 	if err != nil {
 		return nil, brokerErrorToIPC(err)
 	}
-	return marshalLeaseResult(lease)
+	// Side-effecting isolation setup once per grant (ACTIVE with a device).
+	// Env is recomputed fresh on every wire response — not stored on the broker lease.
+	if lease.Device != nil && h.deps.LeasesRoot != "" {
+		dirs, err := isolator.EnsureLeaseDir(h.deps.LeasesRoot, lease.ID)
+		if err != nil {
+			return nil, internalErr(err)
+		}
+		env := isolator.BuildEnv(dirs, lease.ID, lease.Device.UDID)
+		if err := isolator.WriteLeaseSnapshot(dirs, lease, env); err != nil {
+			return nil, internalErr(err)
+		}
+	}
+	return h.marshalLeaseResult(lease)
 }
 
 func (h *handlers) renew(ctx context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
@@ -144,7 +158,7 @@ func (h *handlers) renew(ctx context.Context, req ipc.Request) (json.RawMessage,
 	if err != nil {
 		return nil, brokerErrorToIPC(err)
 	}
-	return marshalLeaseResult(lease)
+	return h.marshalLeaseResult(lease)
 }
 
 func (h *handlers) release(ctx context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
@@ -159,7 +173,7 @@ func (h *handlers) release(ctx context.Context, req ipc.Request) (json.RawMessag
 	if err != nil {
 		return nil, brokerErrorToIPC(err)
 	}
-	return marshalLeaseResult(lease)
+	return h.marshalLeaseResult(lease)
 }
 
 func (h *handlers) get(_ context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
@@ -174,7 +188,7 @@ func (h *handlers) get(_ context.Context, req ipc.Request) (json.RawMessage, *ip
 	if !ok {
 		return nil, brokerErrorToIPC(leaseNotFoundErr(p.ID))
 	}
-	return marshalLeaseResult(lease)
+	return h.marshalLeaseResult(lease)
 }
 
 func (h *handlers) list(_ context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
@@ -185,7 +199,11 @@ func (h *handlers) list(_ context.Context, req ipc.Request) (json.RawMessage, *i
 		}
 	}
 	leases := h.deps.Broker.List(broker.ListFilter{Labels: p.Labels})
-	raw, err := json.Marshal(map[string]any{"leases": leases})
+	out := make([]broker.Lease, len(leases))
+	for i, l := range leases {
+		out[i] = h.withIsolationEnv(l)
+	}
+	raw, err := json.Marshal(map[string]any{"leases": out})
 	if err != nil {
 		return nil, internalErr(err)
 	}
@@ -204,7 +222,7 @@ func (h *handlers) wait(ctx context.Context, req ipc.Request) (json.RawMessage, 
 	if err != nil {
 		return nil, brokerErrorToIPC(err)
 	}
-	return marshalLeaseResult(lease)
+	return h.marshalLeaseResult(lease)
 }
 
 // poolStatus returns capacity plus lease counts grouped by State.
@@ -248,12 +266,34 @@ func (h *handlers) poolStatus(_ context.Context, _ ipc.Request) (json.RawMessage
 	return raw, nil
 }
 
-func marshalLeaseResult(lease broker.Lease) (json.RawMessage, *ipc.Error) {
-	raw, err := json.Marshal(map[string]any{"lease": lease})
+// marshalLeaseResult shapes a single-lease wire response, recomputing
+// IsolationEnv when the lease has a Device (pure; does not mutate broker state).
+func (h *handlers) marshalLeaseResult(lease broker.Lease) (json.RawMessage, *ipc.Error) {
+	raw, err := json.Marshal(map[string]any{"lease": h.withIsolationEnv(lease)})
 	if err != nil {
 		return nil, internalErr(err)
 	}
 	return raw, nil
+}
+
+// withIsolationEnv returns a copy of lease with Env populated from LeasesRoot
+// when Device is set. Paths are derived without mkdir — EnsureLeaseDir runs
+// only in acquire.
+func (h *handlers) withIsolationEnv(lease broker.Lease) broker.Lease {
+	if lease.Device == nil || lease.Device.UDID == "" || h.deps.LeasesRoot == "" {
+		return lease
+	}
+	root := filepath.Join(h.deps.LeasesRoot, lease.ID)
+	dirs := isolator.LeaseDirs{
+		Root:        root,
+		DerivedData: filepath.Join(root, "DerivedData"),
+		ModuleCache: filepath.Join(root, "ModuleCache"),
+		SwiftPM:     filepath.Join(root, "SwiftPM"),
+		Results:     filepath.Join(root, "Results"),
+		Tmp:         filepath.Join(root, "tmp"),
+	}
+	lease.Env = isolator.BuildEnv(dirs, lease.ID, lease.Device.UDID)
+	return lease
 }
 
 func decodeParams(raw json.RawMessage, dst any) error {

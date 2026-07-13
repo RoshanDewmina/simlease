@@ -44,6 +44,10 @@ func main() {
 			os.Exit(runStatus(os.Args[2:]))
 		case "list":
 			os.Exit(runList(os.Args[2:]))
+		case "env":
+			os.Exit(runEnv(os.Args[2:]))
+		case "exec":
+			os.Exit(runExec(os.Args[2:]))
 		}
 	}
 
@@ -59,11 +63,15 @@ Usage:
   simurgh renew <lease-id> [--ttl DUR] [--json]
   simurgh status [--queue] [--json]
   simurgh list [--label-selector k=v,...] [--json]
+  simurgh env <lease-id> [--json]
+  simurgh exec <lease-id> -- <cmd...>
   simurgh daemon run
   simurgh doctor [--json]
   simurgh [help]
 
 Acquire/release/renew/status/list are thin IPC clients over the daemon lease RPCs.
+env prints eval-able isolation exports; exec runs a command with those env vars
+(and xcodebuild isolation flags) injected. PATH shim is v0.1 — not built.
 Daemon serves the Unix socket IPC endpoint (daemon.ping + lease.* + pool.status).
 Doctor checks Xcode, simctl, iOS runtimes, socket perms, and daemon liveness.
 See docs/ROADMAP.md for the build plan.`)

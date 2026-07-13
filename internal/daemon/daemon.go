@@ -32,8 +32,8 @@ type Deps struct {
 }
 
 // RegisterLeaseHandlers registers lease.acquire|renew|release|get|list|wait,
-// pool.status, and warm.create|list|remove on server. Call before Serve (or
-// concurrently — RegisterHandler is mutex-guarded).
+// pool.status, warm.create|list|remove, and prune.plan|apply on server. Call
+// before Serve (or concurrently — RegisterHandler is mutex-guarded).
 func RegisterLeaseHandlers(server *ipc.Server, deps Deps) {
 	h := newHandlers(deps)
 	server.RegisterHandler("lease.acquire", h.acquire)
@@ -46,6 +46,8 @@ func RegisterLeaseHandlers(server *ipc.Server, deps Deps) {
 	server.RegisterHandler("warm.create", h.warmCreate)
 	server.RegisterHandler("warm.list", h.warmList)
 	server.RegisterHandler("warm.remove", h.warmRemove)
+	server.RegisterHandler("prune.plan", h.prunePlan)
+	server.RegisterHandler("prune.apply", h.pruneApply)
 }
 
 type handlers struct {
@@ -181,6 +183,15 @@ func (h *handlers) release(ctx context.Context, req ipc.Request) (json.RawMessag
 	lease, err := h.deps.Broker.Release(ctx, p.ID)
 	if err != nil {
 		return nil, brokerErrorToIPC(err)
+	}
+	// Immediate teardown after a successful Release (M2.3). Lease state stays
+	// RELEASED/CANCELLED — this is an operational reaper step, not a
+	// RECLAIMED transition. Best-effort: teardown failure is logged and does
+	// not change the release RPC outcome (mirror ReclaimLoop.applyDecisions).
+	if lease.Device != nil && h.deps.Reaper != nil {
+		if err := h.deps.Reaper.Reclaim(ctx, lease); err != nil {
+			log.Printf("simurgh release: reaper.Reclaim(%s): %v", lease.ID, err)
+		}
 	}
 	return h.marshalLeaseResult(lease)
 }
@@ -478,6 +489,93 @@ func (h *handlers) warmRemove(ctx context.Context, req ipc.Request) (json.RawMes
 	return raw, nil
 }
 
+func (h *handlers) prunePlan(ctx context.Context, _ ipc.Request) (json.RawMessage, *ipc.Error) {
+	if h.deps.Broker == nil || h.deps.Reaper == nil {
+		return nil, internalErr(errors.New("broker/reaper not configured"))
+	}
+	plan, err := h.buildPrunePlan(ctx)
+	if err != nil {
+		return nil, internalErr(err)
+	}
+	return marshalPrunePlan(plan)
+}
+
+func (h *handlers) pruneApply(ctx context.Context, _ ipc.Request) (json.RawMessage, *ipc.Error) {
+	if h.deps.Broker == nil || h.deps.Reaper == nil {
+		return nil, internalErr(errors.New("broker/reaper not configured"))
+	}
+	if h.deps.DeviceLister == nil || h.deps.DeviceDeleter == nil {
+		return nil, internalErr(errors.New("device lister/deleter not configured"))
+	}
+	// Re-derive the plan fresh — never trust a client-supplied plan.
+	plan, err := h.buildPrunePlan(ctx)
+	if err != nil {
+		return nil, internalErr(err)
+	}
+
+	summary := pruneApplySummary{
+		HeldReclaimed:  0,
+		OrphansDeleted: 0,
+		Errors:         nil,
+	}
+	for _, lease := range plan.Held {
+		if err := h.deps.Reaper.Reclaim(ctx, lease); err != nil {
+			summary.Errors = append(summary.Errors, fmt.Sprintf("held %s: %v", lease.ID, err))
+			continue
+		}
+		summary.HeldReclaimed++
+	}
+	for _, udid := range plan.Orphans {
+		if err := safety.DeleteSimulatorClone(ctx, h.deps.DeviceLister, h.deps.DeviceDeleter, udid, nil); err != nil {
+			summary.Errors = append(summary.Errors, fmt.Sprintf("orphan %s: %v", udid, err))
+			continue
+		}
+		summary.OrphansDeleted++
+	}
+	// Active bucket is intentionally never touched.
+	raw, mErr := json.Marshal(summary)
+	if mErr != nil {
+		return nil, internalErr(mErr)
+	}
+	return raw, nil
+}
+
+func (h *handlers) buildPrunePlan(ctx context.Context) (reaper.PruneBucket, error) {
+	leases := h.deps.Broker.List(broker.ListFilter{})
+	return h.deps.Reaper.PlanPrune(ctx, leases, h.deps.Broker.KnownDeviceUDIDs())
+}
+
+type pruneApplySummary struct {
+	HeldReclaimed  int      `json:"heldReclaimed"`
+	OrphansDeleted int      `json:"orphansDeleted"`
+	Errors         []string `json:"errors,omitempty"`
+}
+
+func marshalPrunePlan(plan reaper.PruneBucket) (json.RawMessage, *ipc.Error) {
+	held := plan.Held
+	if held == nil {
+		held = []broker.Lease{}
+	}
+	active := plan.Active
+	if active == nil {
+		active = []broker.Lease{}
+	}
+	orphans := plan.Orphans
+	if orphans == nil {
+		orphans = []string{}
+	}
+	raw, err := json.Marshal(map[string]any{
+		"held":               held,
+		"orphans":            orphans,
+		"active":             active,
+		"orphanScanDeferred": plan.OrphanScanDeferred,
+	})
+	if err != nil {
+		return nil, internalErr(err)
+	}
+	return raw, nil
+}
+
 func findWarmTemplate(templates []broker.Device, model, runtime string) (broker.Device, error) {
 	prefix := fmt.Sprintf("simurgh-warm[%s:", model)
 	var matches []broker.Device
@@ -567,10 +665,10 @@ func copySafetyEnvelope(env *safety.Error) *ipc.Error {
 
 // ReclaimLoop applies watcher decisions and periodically scans for orphans.
 //
-// Orphan policy (M1.5a judgment call): log-and-report only. Auto-reclaim of
-// ScanOrphans results is deferred to a future `prune --apply` path (roadmap
-// M2.3). Watcher-driven reclaim of known ACTIVE leases still deletes via
-// Reaper.Reclaim → safety.DeleteSimulatorClone.
+// Orphan policy (M2.3): the background scan remains log-and-report only.
+// Human-invoked `simurgh prune --apply` is the explicit deletion path for
+// discovered orphans. Watcher-driven reclaim of known ACTIVE leases still
+// deletes via Reaper.Reclaim → safety.DeleteSimulatorClone.
 type ReclaimLoop struct {
 	Deps Deps
 	// Logger defaults to log.Printf.

@@ -215,6 +215,43 @@ func (b *Broker) Renew(ctx context.Context, leaseID string, ttl time.Duration) (
 // teardown / clone deletion after a lease leaves ACTIVE. This method only
 // mutates broker state and starts provisioning the next queued lease.
 func (b *Broker) Release(ctx context.Context, leaseID string) (Lease, error) {
+	return b.endActiveOrQueued(ctx, leaseID, LeaseReleased, "release")
+}
+
+// Reclaim transitions ACTIVE → RECLAIMED, frees capacity, and advances the
+// per-spec FIFO queue. Unlike Release, QUEUED leases cannot be reclaimed
+// (use Release to cancel). Non-ACTIVE leases return InvalidStateError.
+//
+// This only mutates broker state. Actual device/lease-dir teardown is the
+// reaper's job via internal/safety.
+func (b *Broker) Reclaim(ctx context.Context, leaseID string) (Lease, error) {
+	b.mu.Lock()
+	lease, ok := b.leases[leaseID]
+	if !ok {
+		b.mu.Unlock()
+		return Lease{}, leaseNotFound(leaseID)
+	}
+	if lease.State != LeaseActive {
+		state := lease.State
+		b.mu.Unlock()
+		return Lease{}, invalidState(leaseID, state, "reclaim")
+	}
+	lease.State = LeaseReclaimed
+	b.notifyWaitersLocked(leaseID)
+	next := b.tryBeginNextLocked(SpecKey(lease.Spec))
+	out := cloneLease(lease)
+	b.mu.Unlock()
+
+	if next != nil {
+		_, _ = b.finishProvision(ctx, next)
+	}
+	return out, nil
+}
+
+// endActiveOrQueued is the shared ACTIVE/QUEUED termination path used by
+// Release. terminal must be LeaseReleased (ACTIVE) — QUEUED always becomes
+// CANCELLED. Reclaim has its own path because it rejects non-ACTIVE leases.
+func (b *Broker) endActiveOrQueued(ctx context.Context, leaseID string, activeTerminal LeaseState, op string) (Lease, error) {
 	b.mu.Lock()
 	lease, ok := b.leases[leaseID]
 	if !ok {
@@ -229,15 +266,15 @@ func (b *Broker) Release(ctx context.Context, leaseID string) (Lease, error) {
 		lease.State = LeaseCancelled
 		b.notifyWaitersLocked(leaseID)
 	case LeaseActive:
-		lease.State = LeaseReleased
+		lease.State = activeTerminal
 		b.notifyWaitersLocked(leaseID)
 		next = b.tryBeginNextLocked(SpecKey(lease.Spec))
 	case LeaseProvisioning:
 		b.mu.Unlock()
-		return Lease{}, invalidState(leaseID, lease.State, "release")
+		return Lease{}, invalidState(leaseID, lease.State, op)
 	default:
 		b.mu.Unlock()
-		return Lease{}, invalidState(leaseID, lease.State, "release")
+		return Lease{}, invalidState(leaseID, lease.State, op)
 	}
 	out := cloneLease(lease)
 	b.mu.Unlock()
@@ -468,7 +505,7 @@ func (b *Broker) waitForLease(ctx context.Context, leaseID string, ch chan struc
 
 func isWaitTerminal(state LeaseState) bool {
 	switch state {
-	case LeaseActive, LeaseFailed, LeaseCancelled, LeaseReleased:
+	case LeaseActive, LeaseFailed, LeaseCancelled, LeaseReleased, LeaseReclaimed:
 		return true
 	default:
 		return false

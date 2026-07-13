@@ -55,33 +55,16 @@ if [[ -n "$BENCH_BUILD_PREFIX" ]]; then
   prefix_arr=($BENCH_BUILD_PREFIX)
   build_cmd=("${prefix_arr[@]}" "${build_cmd[@]}")
 fi
-if [[ -n "${BENCH_BUILD_PID_FILE:-}" ]]; then
-  # B4 (kill mid-build): background the build and record its PID so
-  # bench/kill_midbuild.sh has a target, then wait for it exactly as
-  # bench_step would. -9 kills leave no exit-code text pattern to match,
-  # so a kill shows up as exit_code 137 with no incidents here — the B4
-  # arm driver classifies "did the reaper clean it up" separately.
-  build_log="$(mktemp)"
-  build_start="$(mono_ns)"
-  "${build_cmd[@]}" >"$build_log" 2>&1 &
-  build_pid=$!
-  echo "$build_pid" >"$BENCH_BUILD_PID_FILE"
-  wait "$build_pid"
-  build_exit=$?
-  build_end="$(mono_ns)"
-  build_incidents="$(bench_classify_log "$build_log")"
-  if [[ "$build_exit" -ne 0 && "$build_incidents" == "[]" ]]; then
-    build_incidents='[{"type":"unclassified_failure","evidence":"nonzero exit (possibly SIGKILLed for B4), no known pattern matched"}]'
-  fi
-  build_json="$(jq -nc --argjson s "$build_start" --argjson e "$build_end" \
-    --argjson d "$((build_end - build_start))" --argjson ec "$build_exit" \
-    --argjson inc "$build_incidents" --arg log "$(tail -c 4000 "$build_log")" \
-    '{step:"build", start_ns:$s, end_ns:$e, duration_ns:$d, exit_code:$ec, incidents:$inc, log:$log}')"
-  rm -f "$build_log"
-else
-  build_json="$(bench_step build "${build_cmd[@]}")"
-  build_exit="$(jq -r '.exit_code' <<<"$build_json")"
-fi
+# B4 (kill mid-build) does NOT hook in here: killing just this build
+# child would leave the surrounding workload.sh/arm_*.sh process alive
+# to run its own normal cleanup on the way out, which defeats the
+# point — the plan wants to know what's left behind when an agent's
+# *whole* process tree dies uncleanly (crash, force-quit, killed
+# terminal), not what happens when only its build step does. run.sh
+# kills the entire agent subshell (and everything under it, including
+# whatever's running here) from outside instead.
+build_json="$(bench_step build "${build_cmd[@]}")"
+build_exit="$(jq -r '.exit_code' <<<"$build_json")"
 echo "$build_json" >>"$STEPS_FILE"
 
 # --- resolve built product path (deterministic via -showBuildSettings,

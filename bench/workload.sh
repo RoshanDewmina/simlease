@@ -182,12 +182,17 @@ clobber_json="$(jq -nc --arg h1 "$hash_after_install" --arg h2 "$hash_before_ter
   '{hash_after_install:$h1, hash_before_terminate:$h2, clobbered:$clobbered}')"
 
 # --- terminate ----------------------------------------------------
+# Order matters: killing the --console-pty wrapper process tears down
+# its attached app too (losing the pty connection cascades), so
+# `simctl terminate` must run FIRST while the app is still actually
+# running — reversed, every single rep logged a spurious "found
+# nothing to terminate" incident regardless of real behavior.
+terminate_json="$(bench_step terminate xcrun simctl terminate "$BENCH_UDID" "$BUNDLE_ID")"
+echo "$terminate_json" >>"$STEPS_FILE"
 term_pid_file="$CONSOLE_LOG.pid"
 if [[ -f "$term_pid_file" ]]; then
   kill "$(cat "$term_pid_file")" >/dev/null 2>&1 || true
 fi
-terminate_json="$(bench_step terminate xcrun simctl terminate "$BENCH_UDID" "$BUNDLE_ID")"
-echo "$terminate_json" >>"$STEPS_FILE"
 
 # --- aggregate incidents (per-step + badge + clobber) ------------------
 all_incidents="$(jq -s '[.[].incidents[]?]' "$STEPS_FILE")"

@@ -7,27 +7,33 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
 	"github.com/RoshanDewmina/simurgh/internal/isolator"
+	"github.com/RoshanDewmina/simurgh/internal/provisioner"
 	"github.com/RoshanDewmina/simurgh/internal/reaper"
+	"github.com/RoshanDewmina/simurgh/internal/safety"
 	"github.com/RoshanDewmina/simurgh/internal/watcher"
 )
 
 // Deps holds the runtime collaborators constructed by cmd/simurgh.
 // This package wires and translates; it does not construct Broker/Reaper.
 type Deps struct {
-	Broker     *broker.Broker
-	Reaper     *reaper.Reaper
-	LeasesRoot string
+	Broker        *broker.Broker
+	Reaper        *reaper.Reaper
+	Provisioner   *provisioner.Provisioner
+	LeasesRoot    string
+	DeviceLister  safety.DeviceLister  // warm.remove → DeleteSimulatorClone
+	DeviceDeleter safety.DeviceDeleter // warm.remove → DeleteSimulatorClone
 }
 
-// RegisterLeaseHandlers registers lease.acquire|renew|release|get|list|wait
-// and pool.status on server. Call before Serve (or concurrently —
-// RegisterHandler is mutex-guarded).
+// RegisterLeaseHandlers registers lease.acquire|renew|release|get|list|wait,
+// pool.status, and warm.create|list|remove on server. Call before Serve (or
+// concurrently — RegisterHandler is mutex-guarded).
 func RegisterLeaseHandlers(server *ipc.Server, deps Deps) {
 	h := newHandlers(deps)
 	server.RegisterHandler("lease.acquire", h.acquire)
@@ -37,6 +43,9 @@ func RegisterLeaseHandlers(server *ipc.Server, deps Deps) {
 	server.RegisterHandler("lease.list", h.list)
 	server.RegisterHandler("lease.wait", h.wait)
 	server.RegisterHandler("pool.status", h.poolStatus)
+	server.RegisterHandler("warm.create", h.warmCreate)
+	server.RegisterHandler("warm.list", h.warmList)
+	server.RegisterHandler("warm.remove", h.warmRemove)
 }
 
 type handlers struct {
@@ -383,6 +392,176 @@ func copyBrokerEnvelope(env *broker.Error) *ipc.Error {
 		pos := *env.QueuePosition
 		out.QueuePosition = &pos
 	}
+	return out
+}
+
+type warmSpecParams struct {
+	Model   string `json:"model"`
+	Runtime string `json:"runtime,omitempty"`
+}
+
+func (h *handlers) warmCreate(ctx context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
+	if h.deps.Provisioner == nil {
+		return nil, internalErr(errors.New("provisioner not configured"))
+	}
+	var p warmSpecParams
+	if err := decodeParams(req.Params, &p); err != nil {
+		return nil, badRequest(err)
+	}
+	if p.Model == "" {
+		return nil, badRequest(errors.New("model is required"))
+	}
+	dev, err := h.deps.Provisioner.CreateWarmTemplate(ctx, broker.DeviceSpec{
+		Platform: "iOS",
+		Model:    p.Model,
+		Runtime:  p.Runtime,
+	})
+	if err != nil {
+		return nil, provisionerErrorToIPC(err)
+	}
+	raw, err := json.Marshal(map[string]any{"device": dev})
+	if err != nil {
+		return nil, internalErr(err)
+	}
+	return raw, nil
+}
+
+func (h *handlers) warmList(ctx context.Context, _ ipc.Request) (json.RawMessage, *ipc.Error) {
+	if h.deps.Provisioner == nil {
+		return nil, internalErr(errors.New("provisioner not configured"))
+	}
+	devices, err := h.deps.Provisioner.ListWarmTemplates(ctx)
+	if err != nil {
+		return nil, provisionerErrorToIPC(err)
+	}
+	if devices == nil {
+		devices = []broker.Device{}
+	}
+	raw, err := json.Marshal(map[string]any{"devices": devices})
+	if err != nil {
+		return nil, internalErr(err)
+	}
+	return raw, nil
+}
+
+func (h *handlers) warmRemove(ctx context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
+	if h.deps.Provisioner == nil {
+		return nil, internalErr(errors.New("provisioner not configured"))
+	}
+	if h.deps.DeviceLister == nil || h.deps.DeviceDeleter == nil {
+		return nil, internalErr(errors.New("device lister/deleter not configured"))
+	}
+	var p warmSpecParams
+	if err := decodeParams(req.Params, &p); err != nil {
+		return nil, badRequest(err)
+	}
+	if p.Model == "" {
+		return nil, badRequest(errors.New("model is required"))
+	}
+
+	templates, err := h.deps.Provisioner.ListWarmTemplates(ctx)
+	if err != nil {
+		return nil, provisionerErrorToIPC(err)
+	}
+	dev, err := findWarmTemplate(templates, p.Model, p.Runtime)
+	if err != nil {
+		return nil, badRequest(err)
+	}
+
+	if err := safety.DeleteSimulatorClone(ctx, h.deps.DeviceLister, h.deps.DeviceDeleter, dev.UDID, nil); err != nil {
+		return nil, safetyErrorToIPC(err)
+	}
+	raw, mErr := json.Marshal(map[string]any{"device": dev})
+	if mErr != nil {
+		return nil, internalErr(mErr)
+	}
+	return raw, nil
+}
+
+func findWarmTemplate(templates []broker.Device, model, runtime string) (broker.Device, error) {
+	prefix := fmt.Sprintf("simurgh-warm[%s:", model)
+	var matches []broker.Device
+	for _, d := range templates {
+		if !strings.HasPrefix(d.Name, prefix) {
+			continue
+		}
+		if runtime != "" && d.Runtime != runtime && d.Name != fmt.Sprintf("simurgh-warm[%s:%s]", model, runtime) {
+			continue
+		}
+		matches = append(matches, d)
+	}
+	switch len(matches) {
+	case 0:
+		if runtime != "" {
+			return broker.Device{}, fmt.Errorf("no warm template for model %q runtime %q", model, runtime)
+		}
+		return broker.Device{}, fmt.Errorf("no warm template for model %q", model)
+	case 1:
+		return matches[0], nil
+	default:
+		return broker.Device{}, fmt.Errorf("multiple warm templates for model %q; pass --runtime", model)
+	}
+}
+
+// provisionerErrorToIPC maps provisioner typed errors to ipc.Error wire triples.
+func provisionerErrorToIPC(err error) *ipc.Error {
+	if err == nil {
+		return nil
+	}
+	var dt *provisioner.DeviceTypeNotFoundError
+	if errors.As(err, &dt) && dt.ErrorEnvelope != nil {
+		return copyProvisionerEnvelope(dt.ErrorEnvelope)
+	}
+	var rt *provisioner.RuntimeNotFoundError
+	if errors.As(err, &rt) && rt.ErrorEnvelope != nil {
+		return copyProvisionerEnvelope(rt.ErrorEnvelope)
+	}
+	var cf *provisioner.CloneFailedError
+	if errors.As(err, &cf) && cf.ErrorEnvelope != nil {
+		return copyProvisionerEnvelope(cf.ErrorEnvelope)
+	}
+	var bt *provisioner.BootTimeoutError
+	if errors.As(err, &bt) && bt.ErrorEnvelope != nil {
+		return copyProvisionerEnvelope(bt.ErrorEnvelope)
+	}
+	return internalErr(err)
+}
+
+func copyProvisionerEnvelope(env *provisioner.Error) *ipc.Error {
+	if env == nil {
+		out, _ := ipc.NewError("INTERNAL", "provisioner error missing envelope", "simurgh doctor")
+		return out
+	}
+	out, _ := ipc.NewError(env.Code, env.Message, env.Fix)
+	return out
+}
+
+// safetyErrorToIPC maps safety typed errors to ipc.Error wire triples.
+func safetyErrorToIPC(err error) *ipc.Error {
+	if err == nil {
+		return nil
+	}
+	var nm *safety.DeviceNotManagedError
+	if errors.As(err, &nm) && nm.ErrorEnvelope != nil {
+		return copySafetyEnvelope(nm.ErrorEnvelope)
+	}
+	var nf *safety.DeviceNotFoundError
+	if errors.As(err, &nf) && nf.ErrorEnvelope != nil {
+		return copySafetyEnvelope(nf.ErrorEnvelope)
+	}
+	var df *safety.DeviceDeleteFailedError
+	if errors.As(err, &df) && df.ErrorEnvelope != nil {
+		return copySafetyEnvelope(df.ErrorEnvelope)
+	}
+	return internalErr(err)
+}
+
+func copySafetyEnvelope(env *safety.Error) *ipc.Error {
+	if env == nil {
+		out, _ := ipc.NewError("INTERNAL", "safety error missing envelope", "simurgh doctor")
+		return out
+	}
+	out, _ := ipc.NewError(env.Code, env.Message, env.Fix)
 	return out
 }
 

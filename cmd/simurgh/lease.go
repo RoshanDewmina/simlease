@@ -13,6 +13,8 @@ import (
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
+	"github.com/RoshanDewmina/simurgh/internal/provisioner"
+	"github.com/RoshanDewmina/simurgh/internal/safety"
 )
 
 const cliAgentName = "simurgh-cli"
@@ -44,9 +46,13 @@ func exitCodeForIPCError(err error) int {
 		switch re.e.Code {
 		case broker.CodeCapacityQueued:
 			return 2
-		case broker.CodeLeaseNotFound, broker.CodeInvalidState:
+		case broker.CodeLeaseNotFound, broker.CodeInvalidState,
+			provisioner.CodeDeviceTypeNotFound, provisioner.CodeRuntimeNotFound,
+			safety.CodeDeviceNotManaged, safety.CodeDeviceNotFound:
 			return 3
-		case broker.CodeProvisionFailed, ipc.CodeDaemonNotRunning:
+		case broker.CodeProvisionFailed, ipc.CodeDaemonNotRunning,
+			provisioner.CodeCloneFailed, provisioner.CodeBootTimeout,
+			safety.CodeDeviceDeleteFailed:
 			return 4
 		default:
 			return 5

@@ -129,19 +129,19 @@ func runDaemon() int {
 	})
 
 	srv := ipc.NewServer(ln)
-	daemon.RegisterLeaseHandlers(srv, daemon.Deps{
-		Broker:     brk,
-		Reaper:     rp,
-		LeasesRoot: leasesRoot,
-	})
+	deps := daemon.Deps{
+		Broker:        brk,
+		Reaper:        rp,
+		Provisioner:   prov,
+		LeasesRoot:    leasesRoot,
+		DeviceLister:  safetyClient,
+		DeviceDeleter: safetyClient,
+	}
+	daemon.RegisterLeaseHandlers(srv, deps)
 
 	// Default reclaim intervals (not yet configurable via config.yaml):
 	// watch every 5s; orphan scan every 5m (log-only; auto-reclaim deferred).
-	loop := &daemon.ReclaimLoop{Deps: daemon.Deps{
-		Broker:     brk,
-		Reaper:     rp,
-		LeasesRoot: leasesRoot,
-	}}
+	loop := &daemon.ReclaimLoop{Deps: deps}
 	go loop.Run(ctx, 5*time.Second, 5*time.Minute)
 
 	if err := srv.Serve(ctx); err != nil {

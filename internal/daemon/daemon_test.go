@@ -15,6 +15,7 @@ import (
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
+	"github.com/RoshanDewmina/simurgh/internal/provisioner"
 	"github.com/RoshanDewmina/simurgh/internal/reaper"
 	"github.com/RoshanDewmina/simurgh/internal/safety"
 )
@@ -673,5 +674,204 @@ func TestPoolStatusCountsByState(t *testing.T) {
 		if _, ok := got.Leases[key]; !ok {
 			t.Fatalf("missing lease count key %q in %v", key, got.Leases)
 		}
+	}
+}
+
+// --- warm.* handler tests ---
+
+type warmFakeSimctl struct {
+	mu       sync.Mutex
+	devices  []provisioner.SimDevice
+	types    []provisioner.DeviceType
+	runtimes []provisioner.Runtime
+	next     int
+	deleted  []string
+}
+
+func newWarmFakeSimctl() *warmFakeSimctl {
+	return &warmFakeSimctl{
+		types: []provisioner.DeviceType{
+			{Name: "iPhone 17 Pro", Identifier: "dt-iphone"},
+		},
+		runtimes: []provisioner.Runtime{
+			{Name: "iOS 27.0", Identifier: "rt-27", Version: "27.0", IsAvailable: true, PlatformName: "iOS"},
+		},
+	}
+}
+
+func (f *warmFakeSimctl) ListDeviceTypes(ctx context.Context) ([]provisioner.DeviceType, error) {
+	_ = ctx
+	return append([]provisioner.DeviceType(nil), f.types...), nil
+}
+func (f *warmFakeSimctl) ListRuntimes(ctx context.Context) ([]provisioner.Runtime, error) {
+	_ = ctx
+	return append([]provisioner.Runtime(nil), f.runtimes...), nil
+}
+func (f *warmFakeSimctl) ListDevices(ctx context.Context) ([]provisioner.SimDevice, error) {
+	_ = ctx
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]provisioner.SimDevice(nil), f.devices...), nil
+}
+func (f *warmFakeSimctl) Create(ctx context.Context, name, deviceTypeID, runtimeID string) (string, error) {
+	_ = ctx
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.next++
+	udid := fmt.Sprintf("WARM-UDID-%d", f.next)
+	f.devices = append(f.devices, provisioner.SimDevice{
+		UDID: udid, Name: name, State: "Shutdown",
+		RuntimeIdentifier: runtimeID, DeviceTypeIdentifier: deviceTypeID, IsAvailable: true,
+	})
+	return udid, nil
+}
+func (f *warmFakeSimctl) Clone(ctx context.Context, sourceUDID, newName string) (string, error) {
+	_ = ctx
+	_ = sourceUDID
+	_ = newName
+	return "", errors.New("clone not used in warm tests")
+}
+func (f *warmFakeSimctl) Rename(ctx context.Context, udid, newName string) error {
+	_ = ctx
+	_ = udid
+	_ = newName
+	return nil
+}
+func (f *warmFakeSimctl) Boot(ctx context.Context, udid string) error {
+	_ = ctx
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.devices {
+		if f.devices[i].UDID == udid {
+			f.devices[i].State = "Booted"
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown %s", udid)
+}
+func (f *warmFakeSimctl) WaitBooted(ctx context.Context, udid string) error {
+	_ = ctx
+	_ = udid
+	return nil
+}
+func (f *warmFakeSimctl) Shutdown(ctx context.Context, udid string) error {
+	_ = ctx
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.devices {
+		if f.devices[i].UDID == udid {
+			f.devices[i].State = "Shutdown"
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown %s", udid)
+}
+
+type warmSafetyBridge struct {
+	sim *warmFakeSimctl
+}
+
+func (b *warmSafetyBridge) ListDevices(ctx context.Context) ([]safety.Device, error) {
+	devs, err := b.sim.ListDevices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]safety.Device, len(devs))
+	for i, d := range devs {
+		out[i] = safety.Device{UDID: d.UDID, Name: d.Name}
+	}
+	return out, nil
+}
+func (b *warmSafetyBridge) Shutdown(ctx context.Context, udid string) error {
+	return b.sim.Shutdown(ctx, udid)
+}
+func (b *warmSafetyBridge) Delete(ctx context.Context, udid string) error {
+	b.sim.mu.Lock()
+	defer b.sim.mu.Unlock()
+	b.sim.deleted = append(b.sim.deleted, udid)
+	kept := b.sim.devices[:0]
+	for _, d := range b.sim.devices {
+		if d.UDID != udid {
+			kept = append(kept, d)
+		}
+	}
+	b.sim.devices = kept
+	return nil
+}
+
+func TestWarmCreateListRemove(t *testing.T) {
+	fake := newWarmFakeSimctl()
+	bridge := &warmSafetyBridge{sim: fake}
+	prov := provisioner.New(fake)
+	deps, _, _ := newTestDeps(t, 2)
+	deps.Provisioner = prov
+	deps.DeviceLister = bridge
+	deps.DeviceDeleter = bridge
+	h := newHandlers(deps)
+
+	resp := callHandler(t, h.warmCreate, "wc1", map[string]any{
+		"model": "iPhone 17 Pro",
+	})
+	if !resp.OK {
+		t.Fatalf("warm.create: %+v", resp.Error)
+	}
+	var created struct {
+		Device broker.Device `json:"device"`
+	}
+	if err := json.Unmarshal(resp.Result, &created); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if created.Device.Name != "simurgh-warm[iPhone 17 Pro:27.0]" {
+		t.Fatalf("name=%q", created.Device.Name)
+	}
+	if created.Device.Booted {
+		t.Fatal("warm template must be shutdown")
+	}
+
+	listResp := callHandler(t, h.warmList, "wl1", map[string]any{})
+	if !listResp.OK {
+		t.Fatalf("warm.list: %+v", listResp.Error)
+	}
+	var listed struct {
+		Devices []broker.Device `json:"devices"`
+	}
+	if err := json.Unmarshal(listResp.Result, &listed); err != nil {
+		t.Fatalf("unmarshal list: %v", err)
+	}
+	if len(listed.Devices) != 1 {
+		t.Fatalf("list len=%d want 1", len(listed.Devices))
+	}
+
+	rmResp := callHandler(t, h.warmRemove, "wr1", map[string]any{
+		"model": "iPhone 17 Pro",
+	})
+	if !rmResp.OK {
+		t.Fatalf("warm.remove: %+v", rmResp.Error)
+	}
+	if len(fake.deleted) != 1 || fake.deleted[0] != created.Device.UDID {
+		t.Fatalf("deleted=%v want [%s]", fake.deleted, created.Device.UDID)
+	}
+
+	listResp2 := callHandler(t, h.warmList, "wl2", map[string]any{})
+	if !listResp2.OK {
+		t.Fatalf("warm.list after remove: %+v", listResp2.Error)
+	}
+	if err := json.Unmarshal(listResp2.Result, &listed); err != nil {
+		t.Fatalf("unmarshal list2: %v", err)
+	}
+	if len(listed.Devices) != 0 {
+		t.Fatalf("list after remove len=%d want 0", len(listed.Devices))
+	}
+}
+
+func TestWarmCreate_NilProvisioner(t *testing.T) {
+	deps, _, _ := newTestDeps(t, 1)
+	h := newHandlers(deps)
+	resp := callHandler(t, h.warmCreate, "wc-nil", map[string]any{"model": "iPhone 17 Pro"})
+	if resp.OK {
+		t.Fatal("expected failure with nil provisioner")
+	}
+	if resp.Error == nil || resp.Error.Code != "INTERNAL" {
+		t.Fatalf("error=%+v want INTERNAL", resp.Error)
 	}
 }

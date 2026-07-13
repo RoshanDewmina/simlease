@@ -115,6 +115,10 @@ func (r *Reaper) ScanOrphans(ctx context.Context, knownLeaseUDIDs map[string]boo
 		if !safety.IsSimurghManagedName(d.Name) {
 			continue
 		}
+		// Warm templates are deliberately persistent and never lease-owned.
+		if safety.IsWarmTemplateName(d.Name) {
+			continue
+		}
 		if knownLeaseUDIDs != nil && knownLeaseUDIDs[d.UDID] {
 			continue
 		}

@@ -10,11 +10,22 @@ import (
 // intentionally do not match.
 var managedNamePattern = regexp.MustCompile(`^simurgh-(clone|warm)\[.*\]$`)
 
+// warmTemplateNamePattern matches deliberately-persistent warm templates.
+// Anchored; clones and bases do not match.
+var warmTemplateNamePattern = regexp.MustCompile(`^simurgh-warm\[.*\]$`)
+
 // IsSimurghManagedName reports whether name matches the deletion-allowlist
 // pattern ^simurgh-(clone|warm)\[.*\]$. Exported so orphan scanners and prune
 // planners can classify without duplicating the regex.
 func IsSimurghManagedName(name string) bool {
 	return managedNamePattern.MatchString(name)
+}
+
+// IsWarmTemplateName reports whether name matches ^simurgh-warm\[.*\]$.
+// Warm templates are managed (deletable via DeleteSimulatorClone) but are
+// never orphans — the reaper skips them during ScanOrphans.
+func IsWarmTemplateName(name string) bool {
+	return warmTemplateNamePattern.MatchString(name)
 }
 
 // Device is a minimal simulator device identity used by this package.

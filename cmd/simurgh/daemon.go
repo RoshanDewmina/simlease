@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -135,10 +136,20 @@ func runDaemon() int {
 
 	prov := provisioner.New(provisioner.NewExecClient())
 	st := store.New(statePath)
+	capacity := 0 // 0 = broker.New computes it from the RAM/CPU seams
+	if v := os.Getenv("SIMURGH_CAPACITY"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			fmt.Fprintf(os.Stderr, "simurgh daemon run: SIMURGH_CAPACITY must be a positive integer, got %q\n", v)
+			return 1
+		}
+		capacity = n
+	}
 	brk := broker.New(broker.BrokerOptions{
 		Provisioner: prov,
 		Store:       st,
 		Logger:      printf,
+		Capacity:    capacity,
 		PressureOK: func() (bool, string) {
 			r := pressure.Check(leasesRoot)
 			return r.OK, r.Reason

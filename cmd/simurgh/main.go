@@ -52,6 +52,8 @@ func main() {
 			os.Exit(runWarm(os.Args[2:]))
 		case "prune":
 			os.Exit(runPrune(os.Args[2:]))
+		case "init":
+			os.Exit(runInit(os.Args[2:]))
 		case "mcp":
 			if len(os.Args) > 2 {
 				switch os.Args[2] {
@@ -89,6 +91,7 @@ Usage:
   simurgh prune [--apply] [--json]
   simurgh daemon run
   simurgh doctor [--json]
+  simurgh init [--force] [--json]
   simurgh mcp
   simurgh [help]
 
@@ -97,6 +100,7 @@ warm create|list|remove manages primed shut-down clone sources.
 prune plans (and optionally applies) cleanup of orphan devices and held leases.
 env prints eval-able isolation exports; exec runs a command with those env vars
 (and xcodebuild isolation flags) injected. PATH shim is v0.1 — not built.
+init writes .simurgh.yaml, registers simurgh mcp in .mcp.json, and prints an agent rules snippet.
 mcp runs the stdio MCP server exposing the five agent tools from ARCHITECTURE §8.
 Daemon serves the Unix socket IPC endpoint (daemon.ping + lease.* + pool.status + warm.* + prune.*).
 Doctor checks Xcode, simctl, iOS runtimes, socket perms, daemon liveness, stale leases, and disk usage.

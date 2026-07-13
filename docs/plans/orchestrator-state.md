@@ -54,7 +54,7 @@ independently reviewed, and merged — see evidence log below.
 | M2.2 warm templates | merged locally as `4fc5228` | cleaned | `grok-4.5-high` | low | merged (functionally correct; latency target NOT met, see evidence log) | green |
 | M2.3 prune + doctor extensions | merged locally as `f916760` | cleaned | `grok-4.5-high` | sensitive-adjacent, personal review (real deletion surface) | merged | green |
 | M3.1 MCP server | merged locally as `a83a947` | cleaned | `grok-4.5-high` | low | merged | green |
-| M3.2 simurgh init | pending | pending | `grok-4.5-high` | low | next | pending |
+| M3.2 simurgh init | merged locally as `ed124b2` | cleaned | `grok-4.5-high` | low | merged | green |
 | M3.3 dogfood | pending | pending | orchestrator-driven (2 parallel Agent-tool subagents) | low | blocked on M3.1/M3.2 | pending |
 
 ## Milestone gates
@@ -646,33 +646,53 @@ independently reviewed, and merged — see evidence log below.
   existing daemon RPCs)`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
   Worktree removed, branch deleted.
 
+### 2026-07-13 — M3.2 simurgh init merged
+
+- Spec: `docs/plans/work-packages/m3.2-init.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m3.2-init`: `simurgh init` writes `.simurgh.yaml` (only if absent, `--force` to
+  overwrite), prints a short agent-facing rules snippet, and upserts a `simurgh` entry into
+  `.mcp.json` using the real schema confirmed directly from a working example on this machine
+  (`type`/`command`/`args`/`env` — read `command-center`'s own `.mcp.json`, not guessed). Every
+  other server entry is preserved as untouched raw JSON (never re-serialized, so no formatting
+  drift on unrelated entries either); a `reflect.DeepEqual` check against the normalized existing
+  entry makes a second identical run a true no-op. Malformed existing JSON fails clearly rather
+  than silently overwriting a file this command didn't create.
+- Orchestrator independently reran all gates (green), personally read `UpsertMCPEntry` and
+  confirmed the preserve/idempotent logic is correct. Low risk, no daemon/simctl interaction at
+  all — merged without a separate live reproduction, trusting the implementer's own live evidence
+  (fresh-create, byte-identical second run via `cmp`, and a third run after manually seeding an
+  unrelated `other-server` entry confirming it survived).
+- Committed as `fd38c33 feat(cli): simurgh init -- .simurgh.yaml, agent snippet, .mcp.json entry
+  (M3.2)` on `feat/m3.2-init`; local-merged to `master` as `ed124b2 merge: M3.2 simurgh init`.
+  Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
+
 ## Next action
 
-M3.2 `simurgh init` is next: writes `.simurgh.yaml` (default device spec + labels, per
-`docs/ARCHITECTURE.md` §2's mention of this file), an agent rules snippet (short guidance text an
-agent's own rules file — CLAUDE.md-equivalent — can include, pointing at the MCP tools and their
-"never pick a UDID yourself" discipline), and a `.mcp.json` entry registering `simurgh mcp` (the
-same file format Claude Code itself reads for MCP server registration — check the real schema
-Claude Code expects, don't guess). Must be idempotent — running `simurgh init` twice should not
-duplicate the `.mcp.json` entry or clobber user edits to `.simurgh.yaml`.
+**M3.3 — dogfood — is next, and it is the real v0 exit demo** the owner explicitly asked to see —
+this is the one piece of the whole roadmap that isn't a normal "spec → dispatch to Cursor →
+verify → merge" package, so it deserves its own focused planning pass rather than being rushed.
+The roadmap wants: register `simurgh mcp` with Claude Code (M3.1/M3.2 make this mechanically
+possible now — `simurgh init` in a scratch project directory produces a working `.mcp.json`
+entry), run TWO parallel Claude Code sessions against `test/fixtures/SampleApp` (already built and
+proven buildable in M2.1), each independently told to acquire → build → launch → screenshot →
+release, zero collisions, zero manual UDID handling, with a dogfood log (both screenshots +
+`simurgh status` output captured mid-run) committed to `docs/dogfood/`.
 
-**M3.3 — dogfood — is the real v0 exit demo and needs its mechanics planned before diving in,**
-per the owner's explicit ask to see this specific evidence. The roadmap wants: register `simurgh
-mcp` with Claude Code, run TWO parallel Claude Code sessions against `test/fixtures/SampleApp`
-(already built and proven buildable in M2.1), each independently acquire → build → launch →
-screenshot → release, zero collisions, zero manual UDID handling, with a dogfood log (both
-screenshots + `simurgh status` output mid-run) committed to `docs/dogfood/`. Mechanics to work out
-next session: this can plausibly be driven via the `Agent` tool — two parallel Sonnet subagents
-(not Cursor CLI, since this needs to actually consume the MCP server as a client, not just write
-code), each given the MCP server config and told to independently acquire a lease, build+launch
-`SampleApp`, take a screenshot (likely via a simulator screenshot mechanism — `xcrun simctl io
-<udid> screenshot`, or `XcodeBuildMCP`/`ios-simulator` MCP tools if reachable from a subagent
-context), and release, while the orchestrator watches `simurgh status` mid-run and captures it as
-evidence. Whether a Claude Code subagent can directly attach to `simurgh mcp` as an MCP client
-(vs. the orchestrator needing to shell out and simulate the tool calls on the subagent's behalf)
-is the open mechanical question worth resolving first — investigate before writing a work-package
-spec for this one, since it's not a normal "spec → dispatch to Cursor" package like every other
-piece of this engagement. After M3: M4 (hardening + polish), tag `v0.0.1` per
+**Open mechanical question to resolve first, before writing anything:** can a dispatched
+subagent (via the `Agent` tool) actually attach to `simurgh mcp` as a real MCP client and call its
+tools directly, the way a real Claude Code user session would via `.mcp.json`? If yes, the cleanest
+approach is two parallel `Agent` tool calls (not Cursor CLI — this needs to consume the MCP server
+as a client, not write code), each independently: `lease_acquire`, build+launch `SampleApp` via
+`xcodebuild`, screenshot the booted simulator (`xcrun simctl io <udid> screenshot` is available
+without any new MCP tool), `lease_release`. If a bare `Agent`-tool subagent can't attach to a
+project-local `.mcp.json` the way a full Claude Code session can, the fallback is to actually
+drive two real CLI-level flows (e.g. two subagents each running `simurgh acquire`/`simurgh
+exec`/`simurgh release` directly, which exercises the exact same underlying daemon/broker
+concurrency this whole roadmap has already proven — M1's two-terminal smoke test literally IS
+this scenario minus the MCP-and-build-and-screenshot wrapper) and document honestly which
+mechanism was actually used if it isn't the literal "two parallel Claude Code sessions" the
+roadmap describes. Investigate the real capability before committing to an approach, and record
+the decision here. After M3.3: M4 (hardening + polish), tag `v0.0.1` per
 `~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar (all M0–M4 gates green with pasted evidence in
 this file, the M3 dogfood log committed, a README quickstart a fresh Mac user could follow
 verbatim).

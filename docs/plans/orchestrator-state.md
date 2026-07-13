@@ -57,7 +57,7 @@ independently reviewed, and merged — see evidence log below.
 | M3.2 simurgh init | merged locally as `ed124b2` | cleaned | `grok-4.5-high` | low | merged | green |
 | M3.3 dogfood | committed `a01b792` (docs) + fix `66ae3f6` (watcher bug) | cleaned | orchestrator-driven (2 parallel Agent-tool subagents) | found+fixed a real reclaim bug | done | green (run 2, after fix) |
 | M4.1 pressure monitoring | merged locally as `700eb93` | cleaned | `grok-4.5-high` | low | merged | green |
-| M4.2 log rotation + daemon status --logs | pending | pending | `grok-4.5-high` | low | next | pending |
+| M4.2 log rotation + daemon status --logs | merged locally as `02ceab1` | cleaned | `grok-4.5-high` | low | merged | green |
 | M4.3 error-message audit | pending | pending | `grok-4.5-high` | low | pending | pending |
 | M4.4 docs (README/agent guide/troubleshooting) | pending | pending | `grok-4.5-high` | low | pending | pending |
 
@@ -748,24 +748,51 @@ independently reviewed, and merged — see evidence log below.
   monitoring (RAM/thermal/disk)`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit
   0.
 
+### 2026-07-13 — M4.2 log rotation + daemon status merged (after a session hiccup)
+
+- Spec: `docs/plans/work-packages/m4.2-logs-daemon-status.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m4.2-logs`: new dependency-free `internal/logrotate` (mutex-guarded, size-based
+  rotating `io.Writer`, 10MiB/3 backups default); the daemon's own logging now reaches
+  `DefaultLogPath()` for real via a `slog.Logger` over that writer, with `broker.Logger`/
+  `ReclaimLoop.Logger` fed through a thin adapter rather than widening either seam's existing
+  signature (zero behavioral change to what gets logged, only how); `simurgh daemon status
+  [--logs] [--json]` dials the socket directly (never `ipc.Dial`, which auto-starts) so a status
+  check can never itself spawn a daemon. `daemon stop`/`daemon install` deliberately deferred
+  again, explicitly noted rather than silently dropped — `daemon run &` remains the accepted path.
+- **Process note:** this dispatch's own background-process wrapper was interrupted mid-run by an
+  apparent session-level hiccup (MCP servers briefly disconnected/reconnected); the orchestrator
+  recovered by directly inspecting the worktree's actual git/build state rather than assuming
+  anything from the (empty) dispatch log — the underlying `cursor-agent` work turned out to be
+  complete and correct despite the wrapper never writing its final report. Lesson applied from
+  earlier in this session: verify real state, don't trust — or distrust — a transcript.
+- Orchestrator independently reran all gates (green) and personally verified the code (rotation
+  logic, the non-auto-starting status probe, the log-adapter's signature-preserving design).
+  **Personally live-verified**, including one real-world complication: a full acquire-triggered
+  log-activity test hit this Mac's genuine current RAM pressure (M4.1) and hung on `--wait` rather
+  than granting — real available RAM (~3.5GB, confirmed via raw `vm_stat` page counts) is below
+  the 4GB floor right now, an expected consequence of M4.1 working correctly, not a defect here.
+  Retested without forcing an acquire: real structured log content written at daemon startup and
+  correctly tailed by `--logs`; `daemon status` correctly reported reachable while up and
+  unreachable (exit 4) after `kill`, confirmed via `ps` and `xcrun simctl list devices` that
+  checking status never itself spawned a daemon or touched any device.
+- Committed as `3f87048 feat(daemon): log rotation + simurgh daemon status [--logs] (M4.2)` on
+  `feat/m4.2-logs`; local-merged to `master` as `02ceab1 merge: M4.2 log rotation + simurgh daemon
+  status`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
+
 ## Next action
 
-M4.2 is next: **log rotation + `simurgh daemon status --logs`.** The daemon currently uses bare
-`log.Printf` (stderr) for its reclaim-loop/persist-failure logging — nothing rotates, and
-`DefaultLogPath()` (`~/.simurgh/logs/simurghd.log`, from M0.2b) exists but the running daemon never
-actually writes to it. Also, `simurgh daemon status|stop|install` were never built at all — only
-`daemon run` exists (M0.2b/M1.5a explicitly deferred the rest). M4.2 should: (a) make the daemon's
-own logging actually go to a real, size-or-time-rotating file at `DefaultLogPath()`; (b) build at
-least `simurgh daemon status [--logs]` (report whether the daemon is reachable — reuse the
-existing non-auto-starting ping-style probe pattern `internal/cli/doctor.go` already has — and
-with `--logs`, tail recent log lines). `daemon install`/`daemon stop` are lower priority (`daemon
-run &` remains an acceptable dev-path per the M0 GATE's own "or install" wording) — build `status`
-first, add `stop`/`install` only if time allows, note explicitly if deferred rather than silently
-skipping. After M4.2: M4.3 error-message audit (a grep-able test asserting every error-triple
-constructor across the codebase actually supplies non-empty code/message/fix — this is mostly a
-verification task over already-built code, not new functionality, should be fast), M4.4
-documentation (README quickstart, agent guide, troubleshooting — real remaining work, not yet
-started). Then the M4 GATE (full `[mac]` suite green, a clean dogfood rerun — expect real
-RAM-pressure queuing per the note above, use `--wait` — and the README quickstart actually
-followed verbatim), then tag `v0.0.1` (private, no public remote) per
-`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar.
+M4.3 is next: **error-message audit.** A grep-able test asserting every error-triple constructor
+across the codebase (`internal/broker/errors.go`, `internal/provisioner/errors.go`,
+`internal/safety/errors.go`, `internal/ipc`'s `NewError`, and any others found by a repo-wide
+search for the `NewError(code, message, fix)`-shaped pattern) genuinely supplies non-empty
+code/message/fix at every call site — this is mostly verification over already-built code (every
+package already validates the triple at construction time, per `REVIEW_STANDARDS.md`'s original
+rule), so this should be a fast, mechanical package: write the audit test, run it, fix anything it
+actually finds (should be nothing new, but verify rather than assume). After M4.3: M4.4
+documentation — README quickstart, agent guide, troubleshooting doc — this is real remaining work,
+not yet started, and matters for the done-bar's "a fresh Mac user could follow it verbatim"
+requirement (ideally verified by actually following it, not just written and assumed correct).
+Then the M4 GATE (full `[mac]` suite green, a clean dogfood rerun — expect possible real
+RAM-pressure queuing on this Mac per the note above, use `--wait`), then tag `v0.0.1` (private, no
+public remote) per `~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar — this is the last milestone
+before the engagement's natural end point.

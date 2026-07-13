@@ -150,6 +150,24 @@ def render_green_table(lines, green_log):
     lines.append("")
 
 
+def window_sensitivity(runs):
+    """Per (scenario, arm): success under a 5s badge deadline vs the run's
+    actual health window — only for runs new enough to record both."""
+    groups = {}
+    for r in runs:
+        for step in r.get("steps", []):
+            if step.get("step") == "launch" and step.get("health_window_s") is not None:
+                key = (r["scenario"], r["arm"], step["health_window_s"])
+                g = groups.setdefault(key, {"n": 0, "ok_window": 0, "ok_5s": 0})
+                g["n"] += 1
+                if r.get("success"):
+                    g["ok_window"] += 1
+                    ttb = step.get("time_to_badge_ns")
+                    if ttb is not None and ttb <= 5_000_000_000:
+                        g["ok_5s"] += 1
+    return groups
+
+
 def render(results_dir, runs, residue_log, green_log):
     lines = []
     lines.append(f"# Bench summary — {os.path.basename(results_dir.rstrip('/'))}")
@@ -193,6 +211,20 @@ def render(results_dir, runs, residue_log, green_log):
             lines.append(
                 f"| {scenario} | {arm} | {len(vals)} | {fmt_ns(statistics.median(vals))} "
                 f"| {fmt_ns(vals[0])} | {fmt_ns(vals[-1])} |"
+            )
+        lines.append("")
+
+    windows = window_sensitivity(runs)
+    if any(w != 5 for (_, _, w) in windows.keys()):
+        lines.append("## Health-window sensitivity (success at 5s vs full window, first attempts)")
+        lines.append("")
+        lines.append("| Scenario | Arm | Window | n | Success @5s | Success @window |")
+        lines.append("|---|---|---|---|---|---|")
+        for key in sorted(windows.keys()):
+            scenario, arm, w = key
+            g = windows[key]
+            lines.append(
+                f"| {scenario} | {arm} | {w}s | {g['n']} | {g['ok_5s']}/{g['n']} | {g['ok_window']}/{g['n']} |"
             )
         lines.append("")
 

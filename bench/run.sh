@@ -195,6 +195,7 @@ run_rep() {
     N) arm_name="naive"; arm_script="$HERE/arm_naive.sh" ;;
     D) arm_name="diy"; arm_script="$HERE/arm_diy.sh" ;;
     S) arm_name="simurgh"; arm_script="$HERE/arm_simurgh.sh"; ensure_daemon ;;
+    L) arm_name="simurgh-late"; arm_script="$HERE/arm_simurgh_late.sh"; ensure_daemon ;;
     *) echo "run.sh: unknown arm code '$arm_code'" >&2; return 2 ;;
   esac
 

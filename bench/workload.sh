@@ -20,7 +20,14 @@ source "$HERE/lib.sh"
 
 : "${BENCH_ARM:?BENCH_ARM required (naive|diy|simurgh)}"
 : "${BENCH_AGENT:?BENCH_AGENT required (A|B|C|D)}"
-: "${BENCH_UDID:?BENCH_UDID required}"
+# Late-acquire mode (B5 rework, P1-6 option b): the device is leased AFTER
+# the build, right before install — builds don't need a booted device, so
+# holding lease capacity through them is pure queue pressure. When
+# BENCH_LATE_ACQUIRE_SCRIPT is set, BENCH_UDID starts empty and the script
+# (sourced after the build step) acquires and exports it.
+if [[ -z "${BENCH_LATE_ACQUIRE_SCRIPT:-}" ]]; then
+  : "${BENCH_UDID:?BENCH_UDID required}"
+fi
 : "${BENCH_SCENARIO:?BENCH_SCENARIO required}"
 : "${BENCH_REP:?BENCH_REP required}"
 : "${BENCH_OUT:?BENCH_OUT required}"
@@ -84,6 +91,23 @@ if [[ "$build_exit" -eq 0 ]]; then
   full_product_name="$(grep -m1 'FULL_PRODUCT_NAME =' <<<"$settings_out" | sed 's/.*= //')"
   if [[ -n "$target_build_dir" && -n "$full_product_name" ]]; then
     app_path="$target_build_dir/$full_product_name"
+  fi
+fi
+
+if [[ -n "${BENCH_LATE_ACQUIRE_SCRIPT:-}" ]]; then
+  # Sourced, not exec'd: the script must export BENCH_UDID into this
+  # shell and append its own timed "acquire" step JSON to $STEPS_FILE.
+  source "$BENCH_LATE_ACQUIRE_SCRIPT"
+  if [[ -z "${BENCH_UDID:-}" ]]; then
+    echo "workload.sh: late acquire failed to produce BENCH_UDID" >&2
+    jq -n --arg scenario "$BENCH_SCENARIO" --arg arm "$BENCH_ARM" --arg agent "$BENCH_AGENT" \
+      --arg rep "$BENCH_REP" --arg ts "$(iso_ts)" --argjson steps "$(jq -s '.' "$STEPS_FILE")" \
+      '{scenario:$scenario, arm:$arm, agent:$agent, rep:($rep|tonumber), udid:"", timestamp:$ts,
+        steps:$steps, badge:{expected:$agent, actual:"none", match:false},
+        incidents:[{type:"launch_destination_failure", evidence:"late acquire failed, no device"}],
+        total_duration_ns:(($steps | map(.duration_ns) | add) // 0), success:false}' >"$BENCH_OUT"
+    cat "$BENCH_OUT"
+    exit 1
   fi
 fi
 

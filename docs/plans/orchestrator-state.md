@@ -44,9 +44,9 @@ independently reviewed, and merged — see evidence log below.
 | M0.3 store | merged locally as `8e4a185` | cleaned | `grok-4.5-high` | low | merged | green |
 | M0.4 doctor | merged locally as `ca76ddc` | cleaned | `grok-4.5-high` | low | merged | green |
 | M1.1 lease broker | merged locally as `38fe554` | cleaned | `grok-4.5-high` | low | merged | green |
-| M1.2 provisioner | pending | pending | `grok-4.5-high` | low (interface-faked; `[mac]` suite is real) | next | pending |
+| M1.2 provisioner | merged locally as `87de11c` | cleaned | `grok-4.5-high` | low (interface-faked; `[mac]` suite is real, live-verified twice) | merged | green |
+| M1.4 safety | pending | pending | `grok-4.5-high` + Sonnet full-diff review | **sensitive** | next (reordered ahead of M1.3 — reaper depends on it; owner said proceed at orchestrator discretion, no stop-and-ask, mandatory Sonnet review still applies) | pending |
 | M1.3 watcher + reaper | pending | pending | `grok-4.5-high` | low (no deletion itself — calls into M1.4 safety) | blocked on M1.4 | pending |
-| M1.4 safety | pending | pending | `grok-4.5-high` + Sonnet full-diff review | **sensitive** | blocked on owner-visible approval | pending |
 | M1.5 CLI | pending | pending | `grok-4.5-high` | low | blocked on M1.1–M1.4 | pending |
 
 ## Milestone gates
@@ -233,17 +233,60 @@ independently reviewed, and merged — see evidence log below.
   (state machine, FIFO queue, capacity gate)`. Post-merge gate rerun: build/vet/test-race/
   staticcheck all exit 0. Worktree removed, branch deleted.
 
+### 2026-07-13 — M1.2 provisioner merged; owner switched to autonomous /loop mode
+
+- **Owner directive (2026-07-13, supersedes the per-sensitive-package stop-and-ask default from
+  the original brief):** "use /loop and keep looping and dont ask me any quesitons, use whatever
+  you think is best, test thoroughly." The orchestrator will continue through the full roadmap
+  (M1.3 → M1.4 → M1.5 → M1 gate → M2 → M3 → M4) without pausing for owner approval, INCLUDING at
+  `sensitive` checkpoints like M1.4 safety. The mandatory Sonnet-or-orchestrator full-diff review
+  on every sensitive-path diff still applies in full — "no stop-and-ask" is not "no review."
+  Reordered M1.3/M1.4: M1.3 reaper calls into M1.4 safety for actual deletion, so safety is built
+  first, not after.
+- Spec: `docs/plans/work-packages/m1.2-provisioner.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m1.2-provisioner`: real `simctl`-backed `Provisioner` — resolves `DeviceSpec.Model`
+  to a device type and `.Runtime` to an installed iOS runtime (correct numeric version compare,
+  confirmed not lexicographic — verified `27.0` ranks above `9.0`; correctly filters out the
+  watchOS runtime also installed on this Mac), reuses/creates an idempotent
+  `simurgh-base[<model>:<runtime>]` device (deliberately outside the
+  `simurgh-(clone|warm)[...]` deletion-invariant pattern — confirmed by regex reasoning, not just
+  eyeballing), clones to `simurgh-clone[<lease-id>:<model>:<runtime>]`, boots, waits `Booted`.
+  `broker.Provisioner`'s signature grew `ProvisionRequest{Spec, LeaseID}` (mechanical, reviewed).
+- Orchestrator independently reran all mechanical gates (green) AND **independently reproduced
+  the live `[mac]` integration test myself** — real clone created (`simurgh-clone[test-m1.2:...]`),
+  reached `Booted`, its own cleanup left zero leftover devices, confirmed via `xcrun simctl list
+  devices` before/after both times.
+- Fresh independent Claude subagent review: grepped the whole package for
+  delete/erase/shutdown (zero product-code hits), verified the base/clone naming against the
+  deletion-invariant regex, **independently ran its own live `[mac]` test** (third live
+  reproduction total) with clean before/after `simctl list devices`. Found one **major/plausible**
+  real bug: `ensureBaseDevice`'s list-then-create was unsynchronized, so two concurrent
+  `Acquire`s for an identical `DeviceSpec` (capacity ≥2 — the roadmap's own flagship concurrency
+  scenario) could race into creating two same-named base devices, breaking the idempotent-reuse
+  guarantee. Not a deletion-safety violation (the spec's hard blocking bar), but a real
+  correctness bug against the core clone-per-lease model.
+- **One bounded fix loop:** per-`(model, runtime)` mutex around the list-check-create in
+  `ensureBaseDevice` only — never held during `Clone`/`Boot`/`WaitBooted`, and different specs
+  stay unserialized against each other. New test
+  `TestConcurrentSameSpecProvisionCreatesBaseOnce` (delay-forced race window, mirroring
+  `internal/broker`'s own concurrent-acquire test pattern) proved red-without-the-lock,
+  green-with-it. Orchestrator independently reread the lock scope to confirm it doesn't
+  over-serialize distinct specs, and reran the full suite at `-count=5` under `-race`.
+- Committed as `5662ca5 feat(provisioner): real simctl-backed clone/boot provisioner (M1.2)` on
+  `feat/m1.2-provisioner`; local-merged to `master` as `87de11c merge: M1.2 real simctl
+  provisioner (clone/boot)`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
+  Worktree removed, branch deleted.
+
 ## Next action
 
-M1.1 (broker) is done — the foundational type system (`Lease`/`DeviceSpec`/`Device`/`Owner`) and
-state machine the rest of M1 builds on. M1.2 provisioner is next: real `simctl`-backed clone/boot
-implementing the `Provisioner` interface `internal/broker` already defines (interface-faked in
-unit tests; real behavior only provable in the `[mac]` integration suite). M1.3 watcher+reaper
-follows (liveness/TTL/reclamation — calls into M1.4 safety for actual deletion, so it's blocked on
-M1.4 landing first, not just spec'd). **M1.4 safety is `sensitive`** (the centralized deletion
-guards — `internal/safety`, invoked by every destructive call) and requires the same owner-visible
-approval checkpoint as M0.2b before dispatch; the orchestrator will interrupt again when the
-roadmap reaches it rather than assuming continued blanket approval. M1.5 CLI wraps the broker once
-M1.1–M1.4 are stable. `docs/ARCHITECTURE.md` §11's concurrency-proof gate and M1.4's property
-tests over adversarial fixtures are the product's actual differentiator — budget real attention
-there, not just gate-passing, when M1.4 is reached.
+M1.1 and M1.2 are done — the broker's state machine and a real, live-verified `simctl` provisioner
+now exist. **M1.4 safety is next** (reordered ahead of M1.3, which depends on it): the centralized
+deletion guards in `internal/safety` enforcing the invariant from `docs/ARCHITECTURE.md` §2 —
+recursive deletion only under `~/.simurgh/leases/`, simulator deletion only for devices matching
+`^simurgh-(clone|warm)\[.*\]$` AND present in Simurgh state or matching by name pattern via
+`simctl list -j`. Per the owner's autonomous-loop directive this proceeds without a stop-and-ask,
+but keeps the mandatory Sonnet-or-orchestrator full-diff review, plus the roadmap's own demand for
+property tests over adversarial fixtures — this package is the actual safety backstop for
+everything M1.3's reaper and M2's prune will do, so it gets real scrutiny, not just gate-passing.
+Then M1.3 watcher+reaper (now unblocked), M1.5 CLI, the M1 milestone gate (unit race suite +
+`[mac]` full-lifecycle integration + the two-terminal manual smoke), and on to M2 in phase order.

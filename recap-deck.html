@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simurgh Benchmark — Recap</title>
+
+<!-- Fonts: Source Serif 4 (opsz axis engaged) + JetBrains Mono, per Editorial Forest design.md -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<!-- GSAP: reveal timelines + SplitText for headline reveals -->
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/SplitText.min.js"></script>
+
+<style>
+/* ===========================================
+   THEME — Editorial Forest (bold-template-pack)
+   deep forest green / dusty rose pink / oat cream paper
+   =========================================== */
+:root {
+    --green: #2e4a2a;
+    --green-deep: #243a21;
+    --green-lite: #3a5a36;
+    --pink: #e89cb1;
+    --pink-deep: #d27e96;
+    --cream: #efe7d4;
+    --cream-2: #e6dcc4;
+    --ink: #1a1a17;
+
+    --serif: 'Source Serif 4', 'Source Serif Pro', Georgia, serif;
+    --mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+
+    --stage-bg: var(--green-deep);
+    --slide-bg: var(--cream);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--serif); }
+
+/* ===========================================
+   PASTE: viewport-base.css (mandatory, in full)
+   =========================================== */
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--stage-bg, #000); }
+.deck-viewport { position: fixed; inset: 0; overflow: hidden; background: var(--stage-bg, #000); }
+.deck-stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; overflow: hidden; transform-origin: 0 0; background: var(--slide-bg, #fff); }
+.slide { position: absolute; inset: 0; width: 1920px; height: 1080px; overflow: hidden; display: block; visibility: hidden; opacity: 0; pointer-events: none; background: var(--slide-bg, #fff); }
+.slide.active, .slide.visible { visibility: visible; opacity: 1; pointer-events: auto; z-index: 1; }
+img, video, canvas, svg { max-width: 100%; max-height: 100%; }
+.deck-controls { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 1000; }
+@media print {
+    html, body { width: 1920px; height: auto; overflow: visible; background: #fff; }
+    .deck-viewport { position: static; overflow: visible; background: #fff; }
+    .deck-stage { position: static; width: auto; height: auto; transform: none !important; background: none; }
+    .slide { position: relative; display: block !important; visibility: visible !important; opacity: 1 !important; pointer-events: auto !important; width: 1920px; height: 1080px; break-after: page; page-break-after: always; }
+    .slide:last-child { break-after: auto; page-break-after: auto; }
+    .deck-controls { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.2s !important; }
+}
+
+/* ===========================================
+   EDITORIAL FOREST — chrome (topbar / footline / monogram)
+   =========================================== */
+.topbar {
+    position: absolute; top: 64px; left: 120px; right: 120px;
+    display: flex; justify-content: space-between; align-items: baseline;
+    z-index: 2;
+}
+.slide.on-cream .topbar { color: var(--green); }
+.slide.on-green .topbar { color: var(--pink); }
+.label {
+    font-family: var(--mono); font-size: 26px; font-weight: 500;
+    letter-spacing: 0.18em; text-transform: uppercase;
+}
+.monogram {
+    width: 90px; height: 90px; border-radius: 50%;
+    border: 2px solid var(--pink);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: 0.1em;
+    color: inherit;
+}
+.footline {
+    position: absolute; bottom: 60px; left: 120px; right: 120px;
+    display: flex; justify-content: space-between;
+    font-family: var(--mono); font-size: 22px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;
+    z-index: 2;
+}
+.slide.on-cream .footline { color: var(--green); }
+.slide.on-green .footline { color: var(--pink); }
+.rule { border: none; border-top: 2px solid var(--green); }
+.slide.on-green .rule { border-top-color: var(--pink); }
+
+/* Slide surfaces */
+.slide.on-cream { background: var(--cream); color: var(--ink); }
+.slide.on-green { background: var(--green); color: var(--cream); }
+
+/* ===========================================
+   REVEAL ANIMATION HOOK — GSAP drives .reveal children
+   =========================================== */
+.reveal { opacity: 0; }
+
+/* ===========================================
+   SLIDE 1 — COVER
+   =========================================== */
+.cover-content {
+    position: absolute; left: 140px; right: 140px; top: 320px;
+}
+.cover-headline {
+    font-family: var(--serif); font-weight: 500; font-size: 190px;
+    line-height: 0.92; letter-spacing: -0.03em; color: var(--pink);
+    max-width: 1500px;
+}
+.cover-sub {
+    margin-top: 48px; font-family: var(--serif); font-weight: 400; font-size: 32px;
+    line-height: 1.38; color: var(--cream); max-width: 980px;
+}
+
+/* ===========================================
+   SLIDE 2 — HARNESS BUILT (topic-tile grid)
+   =========================================== */
+.headline-xl { font-family: var(--serif); font-weight: 500; font-size: 88px; line-height: 0.98; letter-spacing: -0.02em; color: var(--green); }
+.tile-grid { position: absolute; left: 120px; right: 120px; top: 340px; bottom: 140px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+.tile { border-radius: 6px; padding: 40px 36px 32px; display: flex; flex-direction: column; }
+.tile-green { background: var(--green); color: var(--cream); }
+.tile-pink { background: var(--pink); color: var(--green-deep); }
+.tile-cream2 { background: var(--cream-2); border: 2px solid var(--green); color: var(--green); }
+.tile-ord { font-family: var(--mono); font-size: 24px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.75; }
+.tile-title { font-family: var(--serif); font-weight: 500; font-size: 46px; line-height: 1.02; letter-spacing: -0.01em; margin-top: 18px; }
+.tile-body { font-family: var(--serif); font-weight: 400; font-size: 24px; line-height: 1.34; margin-top: 18px; flex: 1; }
+.tile-foot { font-family: var(--mono); font-size: 20px; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 18px; opacity: 0.75; }
+
+/* ===========================================
+   SLIDE 3 — B1 NAIVE COLLISION (stat + evidence)
+   =========================================== */
+.b1-layout { position: absolute; left: 120px; right: 120px; top: 300px; bottom: 140px; display: grid; grid-template-columns: 560px 1fr; gap: 72px; }
+.b1-stats { display: flex; flex-direction: column; gap: 44px; }
+.stat-block { border-top: 2px solid var(--green); padding-top: 20px; }
+.stat-figure { font-family: var(--serif); font-weight: 500; font-size: 130px; line-height: 0.9; letter-spacing: -0.02em; color: var(--green); }
+.stat-tag { font-family: var(--mono); font-size: 22px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--green); opacity: 0.75; margin-top: 8px; }
+.evidence-card { background: var(--green); color: var(--cream); border-radius: 8px; padding: 48px 52px; height: 100%; display: flex; flex-direction: column; justify-content: center; }
+.evidence-label { font-family: var(--mono); font-size: 22px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pink); }
+.evidence-quote { font-family: var(--serif); font-weight: 500; font-size: 46px; line-height: 1.15; letter-spacing: -0.01em; margin-top: 24px; }
+.evidence-quote em { font-style: normal; color: var(--pink); }
+.evidence-detail { font-family: var(--mono); font-size: 22px; letter-spacing: 0.05em; margin-top: 32px; color: var(--cream); opacity: 0.85; line-height: 1.7; }
+
+/* ===========================================
+   SLIDE 4 — B2 STEP TILES (symptom -> root cause -> fix -> result)
+   =========================================== */
+.step-row { position: absolute; left: 120px; right: 120px; top: 320px; bottom: 140px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+.step-tile { border-radius: 8px; padding: 36px 30px 28px; min-height: 470px; display: flex; flex-direction: column; }
+.step-cream { background: var(--cream-2); border: 2.5px solid var(--green); color: var(--green); }
+.step-green { background: var(--green); color: var(--cream); }
+.step-pink { background: var(--pink); color: var(--green-deep); }
+.step-ord { font-family: var(--mono); font-size: 22px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.7; }
+.step-title { font-family: var(--serif); font-weight: 500; font-size: 44px; line-height: 1.0; letter-spacing: -0.01em; margin-top: 16px; }
+.step-body { font-family: var(--serif); font-weight: 400; font-size: 22px; line-height: 1.36; margin-top: 18px; flex: 1; }
+.step-marker { font-family: var(--mono); font-size: 18px; letter-spacing: 0.1em; text-transform: uppercase; border-top: 2px solid currentColor; padding-top: 14px; margin-top: 14px; opacity: 0.85; }
+
+/* ===========================================
+   SLIDE 5 — B3 HONEST COST (KPI comparison on green)
+   =========================================== */
+.kpi-row { position: absolute; left: 140px; right: 140px; top: 340px; bottom: 160px; display: flex; align-items: flex-end; gap: 140px; }
+.kpi-block { display: flex; flex-direction: column; }
+.kpi-tag { font-family: var(--mono); font-size: 24px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--pink); }
+.kpi-figure { font-family: var(--serif); font-weight: 500; font-size: 220px; line-height: 0.9; letter-spacing: -0.03em; color: var(--cream); margin-top: 12px; }
+.kpi-unit { font-size: 100px; }
+.kpi-desc { font-family: var(--serif); font-weight: 400; font-size: 28px; line-height: 1.3; color: var(--cream); opacity: 0.85; margin-top: 20px; max-width: 420px; }
+.kpi-vs { font-family: var(--mono); font-size: 40px; color: var(--pink); align-self: center; padding-bottom: 60px; }
+
+/* ===========================================
+   SLIDE 6 — B4 ARM COMPARISON TILES
+   =========================================== */
+.arm-grid { position: absolute; left: 120px; right: 120px; top: 320px; bottom: 140px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+.arm-tile { border-radius: 6px; padding: 40px 36px; display: flex; flex-direction: column; }
+.arm-status { font-family: var(--mono); font-size: 20px; letter-spacing: 0.1em; text-transform: uppercase; padding: 8px 16px; border-radius: 4px; align-self: flex-start; margin-top: 24px; }
+
+/* ===========================================
+   SLIDE 7 — WARM-DD (statement + step row)
+   =========================================== */
+.statement-quote { position: absolute; left: 160px; right: 240px; top: 300px; font-family: var(--serif); font-weight: 500; font-size: 92px; line-height: 1.04; letter-spacing: -0.02em; color: var(--green); }
+.statement-quote em { font-style: normal; color: var(--pink-deep); }
+.mini-steps { position: absolute; left: 160px; right: 160px; bottom: 150px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; }
+.mini-step { border-top: 2px solid var(--green); padding-top: 18px; }
+.mini-step-num { font-family: var(--mono); font-size: 20px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--green); opacity: 0.7; }
+.mini-step-body { font-family: var(--serif); font-size: 26px; line-height: 1.34; margin-top: 10px; color: var(--ink); }
+
+/* ===========================================
+   SLIDE 8 — STATUS / CLOSING
+   =========================================== */
+.status-grid { position: absolute; left: 120px; right: 120px; top: 300px; bottom: 140px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 28px 40px; align-content: start; }
+.status-row { display: flex; align-items: baseline; gap: 24px; border-bottom: 2px solid var(--pink); padding-bottom: 18px; }
+.status-mark { font-family: var(--mono); font-size: 28px; width: 44px; flex-shrink: 0; }
+.status-label { font-family: var(--serif); font-weight: 500; font-size: 34px; letter-spacing: -0.01em; }
+.status-note { font-family: var(--mono); font-size: 18px; letter-spacing: 0.06em; opacity: 0.7; margin-left: auto; text-align: right; }
+
+/* ===========================================
+   EDIT MODE (inline editing affordance)
+   =========================================== */
+.edit-hotzone { position: fixed; top: 0; left: 0; width: 80px; height: 80px; z-index: 10000; cursor: pointer; }
+.edit-toggle {
+    position: fixed; top: 16px; left: 16px; z-index: 10001;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--green); color: var(--cream); border: none; font-size: 18px; cursor: pointer;
+    opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+}
+.edit-toggle.show, .edit-toggle.active { opacity: 1; pointer-events: auto; }
+.editable-hover:hover { outline: 1px dashed var(--pink-deep); outline-offset: 2px; cursor: text; }
+
+/* ===========================================
+   DECK CONTROLS
+   =========================================== */
+.deck-controls {
+    display: flex; gap: 14px; align-items: center;
+    font-family: var(--mono); font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--cream); background: rgba(0,0,0,0.35); padding: 8px 18px; border-radius: 999px;
+}
+.deck-controls button { background: none; border: none; color: inherit; font-family: inherit; font-size: inherit; letter-spacing: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="deck-viewport">
+<main class="deck-stage" id="deckStage">
+
+<!-- ============ SLIDE 1: COVER ============ -->
+<section class="slide active on-green">
+    <div class="topbar">
+        <span class="label reveal">Bench / Recap</span>
+        <div class="monogram reveal">SB</div>
+    </div>
+    <div class="cover-content">
+        <h1 class="cover-headline reveal editable-hover">Simurgh<br>Benchmark</h1>
+        <p class="cover-sub reveal editable-hover">A running recap of building and executing BENCHMARK_PLAN.md — with vs without isolation, on real Xcode builds, updated as the work happens.</p>
+    </div>
+    <div class="footline">
+        <span class="reveal">Started 2026-07-13</span>
+        <span class="reveal">Editorial Forest</span>
+    </div>
+</section>
+
+<!-- ============ SLIDE 2: HARNESS BUILT ============ -->
+<section class="slide on-cream">
+    <div class="topbar">
+        <span class="label reveal">01 — Harness</span>
+        <span class="label reveal">2026-07-13</span>
+    </div>
+    <h2 class="headline-xl reveal editable-hover" style="position:absolute; left:120px; top:180px;">Harness built, detectors proven</h2>
+    <div class="tile-grid">
+        <div class="tile tile-green reveal">
+            <span class="tile-ord">01</span>
+            <div class="tile-title">Fixture badge</div>
+            <div class="tile-body">Compile-flag full-screen color + name for agents A-F, with a genuinely ax-queryable accessibility id — proven via a real XCUITest, not just visually.</div>
+            <div class="tile-foot">test/fixtures/SampleApp</div>
+        </div>
+        <div class="tile tile-cream2 reveal">
+            <span class="tile-ord">02</span>
+            <div class="tile-title">bench/ scripts</div>
+            <div class="tile-body">lib.sh, preflight.sh, workload.sh, three arm drivers, run.sh, report.py — bash + jq + python3 stdlib only, per plan spec.</div>
+            <div class="tile-foot">Per BENCHMARK_PLAN.md §7</div>
+        </div>
+        <div class="tile tile-pink reveal">
+            <span class="tile-ord">03</span>
+            <div class="tile-title">Detector proof</div>
+            <div class="tile-body">Seeded real faults on purpose — two naive agents on one device — and confirmed every incident detector actually fires before trusting any number from it.</div>
+            <div class="tile-foot">No proof, no benchmark run</div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ SLIDE 3: B1 NAIVE COLLISION ============ -->
+<section class="slide on-cream">
+    <div class="topbar">
+        <span class="label reveal">02 — B1</span>
+        <span class="label reveal">2 agents · 10 reps</span>
+    </div>
+    <h2 class="headline-xl reveal editable-hover" style="position:absolute; left:120px; top:180px; font-size:80px;">Naive agents really do screenshot each other</h2>
+    <div class="b1-layout">
+        <div class="b1-stats">
+            <div class="stat-block reveal">
+                <div class="stat-figure">10<span style="font-size:60px;">/20</span></div>
+                <div class="stat-tag">Naive success rate</div>
+            </div>
+            <div class="stat-block reveal">
+                <div class="stat-figure">20<span style="font-size:60px;">/20</span></div>
+                <div class="stat-tag">Simurgh success rate (after fix)</div>
+            </div>
+        </div>
+        <div class="evidence-card reveal">
+            <span class="evidence-label">Real captured evidence</span>
+            <div class="evidence-quote">Agent A's own screenshot showed <em>Agent B's</em> badge.</div>
+            <div class="evidence-detail">expected: agent-badge-A<br>observed: agent-badge-B<br>run-B1-naive-rep2-A.json</div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ SLIDE 4: B2 BROKER BUG ============ -->
+<section class="slide on-cream">
+    <div class="topbar">
+        <span class="label reveal">03 — B2</span>
+        <span class="label reveal">4 agents · real bug found</span>
+    </div>
+    <h2 class="headline-xl reveal editable-hover" style="position:absolute; left:120px; top:180px;">A real daemon bug, found and fixed</h2>
+    <div class="step-row">
+        <div class="step-tile step-cream reveal">
+            <span class="step-ord">Symptom</span>
+            <div class="step-title">Stuck queue</div>
+            <div class="step-body">2 leases sat QUEUED for 20+ minutes with capacity fully idle — active: 0.</div>
+            <div class="step-marker">20+ min hang</div>
+        </div>
+        <div class="step-tile step-green reveal">
+            <span class="step-ord">Root cause</span>
+            <div class="step-title">No retry</div>
+            <div class="step-body">A Release()-triggered promotion that loses to a transient RAM-pressure dip has no other trigger to retry once pressure recovers.</div>
+            <div class="step-marker">canGrantLocked</div>
+        </div>
+        <div class="step-tile step-pink reveal">
+            <span class="step-ord">Fix</span>
+            <div class="step-title">RetryQueues</div>
+            <div class="step-body">New Broker.RetryQueues, wired into the daemon's existing 5s reclaim loop. Regression test reproduces the exact race.</div>
+            <div class="step-marker">commit 058a101</div>
+        </div>
+        <div class="step-tile step-green reveal">
+            <span class="step-ord">Result</span>
+            <div class="step-title">20/20</div>
+            <div class="step-body">Re-run after the fix: Simurgh 100% success, zero incidents under real 4-agent / capacity-2 pressure.</div>
+            <div class="step-marker">go test -race clean</div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ SLIDE 5: B3 HONEST COST ============ -->
+<section class="slide on-green">
+    <div class="topbar">
+        <span class="label reveal">04 — B3</span>
+        <span class="label reveal">Solo overhead · 10 reps</span>
+    </div>
+    <h2 class="reveal editable-hover" style="position:absolute; left:140px; top:180px; font-family:var(--serif); font-weight:500; font-size:84px; letter-spacing:-0.02em; color:var(--cream);">The honest cost, published as-is</h2>
+    <div class="kpi-row">
+        <div class="kpi-block reveal">
+            <span class="kpi-tag">Naive median</span>
+            <div class="kpi-figure">7.3<span class="kpi-unit">s</span></div>
+            <div class="kpi-desc">10/10 success, zero incidents — no isolation overhead to pay.</div>
+        </div>
+        <div class="kpi-vs reveal">vs</div>
+        <div class="kpi-block reveal">
+            <span class="kpi-tag">Simurgh median</span>
+            <div class="kpi-figure">48.7<span class="kpi-unit">s</span></div>
+            <div class="kpi-desc">10/10 success, zero incidents — the real price of isolated, cold DerivedData.</div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ SLIDE 6: B4 CRASH CLEANUP ============ -->
+<section class="slide on-cream">
+    <div class="topbar">
+        <span class="label reveal">05 — B4</span>
+        <span class="label reveal">Kill mid-build · in progress</span>
+    </div>
+    <h2 class="headline-xl reveal editable-hover" style="position:absolute; left:120px; top:180px;">Does crash cleanup actually work?</h2>
+    <div class="arm-grid">
+        <div class="arm-tile tile-cream2 reveal">
+            <span class="tile-ord">Naive</span>
+            <div class="tile-title" style="font-size:40px;">No lease concept</div>
+            <div class="tile-body">Shared persistent device — no orphan device to leave behind, but no automatic recovery either.</div>
+            <span class="arm-status" style="background:var(--green); color:var(--cream);">measuring</span>
+        </div>
+        <div class="arm-tile tile-pink reveal">
+            <span class="tile-ord">DIY</span>
+            <div class="tile-title" style="font-size:40px;">Orphan confirmed</div>
+            <div class="tile-body">Killed victim's simulator stays booted forever — nothing left to run the cleanup line.</div>
+            <span class="arm-status" style="background:var(--green-deep); color:var(--pink);">device_still_present: true</span>
+        </div>
+        <div class="arm-tile tile-green reveal">
+            <span class="tile-ord">Simurgh</span>
+            <div class="tile-title" style="font-size:40px;">Reaper's turn</div>
+            <div class="tile-body">This is the categorical win the plan expects — the daemon's watcher should reclaim what the killed process couldn't clean up itself.</div>
+            <span class="arm-status" style="background:var(--pink); color:var(--green-deep);">results pending</span>
+        </div>
+    </div>
+</section>
+
+<!-- ============ SLIDE 7: WARM-DD LATENCY ============ -->
+<section class="slide on-cream">
+    <div class="topbar">
+        <span class="label reveal">06 — Latency</span>
+        <span class="label reveal">Validated before implementing</span>
+    </div>
+    <p class="statement-quote reveal editable-hover">Most of the overhead is a <em>cold-cache tax</em>, not a Simurgh tax.</p>
+    <div class="mini-steps">
+        <div class="mini-step reveal">
+            <div class="mini-step-num">Finding</div>
+            <div class="mini-step-body">DIY pays nearly the same cost (38.6s) as Simurgh (48.7s) — it's isolation itself, not the mechanism.</div>
+        </div>
+        <div class="mini-step reveal">
+            <div class="mini-step-num">Validated</div>
+            <div class="mini-step-body">APFS clonefile seeds a DerivedData tree in &lt;1s. Real build: 2.9s seeded vs 4.2-4.5s cold.</div>
+        </div>
+        <div class="mini-step reveal">
+            <div class="mini-step-num">Scoped</div>
+            <div class="mini-step-body">Same-path only for now — never across git worktrees, so B6 stays zero-risk while the win ships today.</div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ SLIDE 7B: TEST SUITE SPEED ============ -->
+<section class="slide on-cream">
+    <div class="topbar">
+        <span class="label reveal">07 — Test speed</span>
+        <span class="label reveal">go test -race ./...</span>
+    </div>
+    <h2 class="headline-xl reveal editable-hover" style="position:absolute; left:120px; top:180px; font-size:76px;">Not a hardware limit — an algorithmic one</h2>
+    <div class="b1-layout">
+        <div class="b1-stats">
+            <div class="stat-block reveal">
+                <div class="stat-figure" style="font-size:100px;">34.3<span style="font-size:50px;">s</span></div>
+                <div class="stat-tag">Before — go test -race ./...</div>
+            </div>
+            <div class="stat-block reveal">
+                <div class="stat-figure" style="font-size:100px;">6.2<span style="font-size:50px;">s</span></div>
+                <div class="stat-tag">After — same suite, same machine</div>
+            </div>
+        </div>
+        <div class="evidence-card reveal">
+            <span class="evidence-label">Root cause, not a CPU count</span>
+            <div class="evidence-quote" style="font-size:38px;">One test walked the whole repo tree on disk — <em>ignoring .gitignore</em> — and a real bench run had left 26,000+ files under bench/results/.</div>
+            <div class="evidence-detail">filepath.WalkDir has no concept of .gitignore<br>fix: skip bench/results, bench/.bin, .worktrees, __pycache__<br>bonus: broker + ipc tests also sped up (less disk contention)</div>
+        </div>
+    </div>
+</section>
+
+<!-- ============ SLIDE 8: STATUS ============ -->
+<section class="slide on-green">
+    <div class="topbar">
+        <span class="label reveal">Status</span>
+        <div class="monogram reveal">SB</div>
+    </div>
+    <h2 class="reveal editable-hover" style="position:absolute; left:120px; top:180px; font-family:var(--serif); font-weight:500; font-size:84px; letter-spacing:-0.02em; color:var(--cream);">Where this stands</h2>
+    <div class="status-grid" style="color: var(--cream);">
+        <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">Harness + detector proof</span><span class="status-note">done</span></div>
+        <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">B1 — naive collision</span><span class="status-note">done</span></div>
+        <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">B2 — broker bug fixed</span><span class="status-note">done</span></div>
+        <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">B3 — honest cost</span><span class="status-note">done</span></div>
+        <div class="status-row reveal"><span class="status-mark">→</span><span class="status-label">B4 — crash cleanup</span><span class="status-note">running</span></div>
+        <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">Warm-DD latency fix</span><span class="status-note">shipped</span></div>
+        <div class="status-row reveal"><span class="status-mark">✓</span><span class="status-label">Test suite 34.3s → 6.2s</span><span class="status-note">shipped</span></div>
+        <div class="status-row reveal"><span class="status-mark">○</span><span class="status-label">B5 — thundering herd</span><span class="status-note">next</span></div>
+        <div class="status-row reveal"><span class="status-mark">○</span><span class="status-label">B6 — real Lancer app</span><span class="status-note">next</span></div>
+    </div>
+    <div class="footline">
+        <span class="reveal">This deck updates as work continues</span>
+        <span class="reveal">recap-log.json</span>
+    </div>
+</section>
+
+</main>
+</div>
+
+<div class="edit-hotzone" id="editHotzone"></div>
+<button class="edit-toggle" id="editToggle" title="Edit mode (E)">✏️</button>
+
+<script>
+if (typeof SplitText !== 'undefined') { gsap.registerPlugin(SplitText); }
+
+/* ===========================================
+   SLIDE REVEAL — GSAP timeline per slide (stagger .reveal children)
+   =========================================== */
+function revealSlide(slide) {
+    const tl = gsap.timeline({ defaults: { duration: 0.7, ease: "power3.out" } });
+    tl.set(slide.querySelectorAll('.reveal'), { autoAlpha: 0, y: 24 });
+    tl.to(slide.querySelectorAll('.reveal'), { autoAlpha: 1, y: 0, stagger: 0.1 });
+    return tl;
+}
+
+/* ===========================================
+   STAGE SCALING + NAVIGATION CONTROLLER
+   =========================================== */
+class SlidePresentation {
+    constructor() {
+        this.slides = document.querySelectorAll('.slide');
+        this.currentSlide = 0;
+        this.stage = document.getElementById('deckStage');
+        this.setupStageScale();
+        this.setupKeyboardNav();
+        this.setupTouchNav();
+        this.showSlide(0);
+    }
+    setupStageScale() {
+        const scale = () => {
+            const factor = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+            const x = (window.innerWidth - 1920 * factor) / 2;
+            const y = (window.innerHeight - 1080 * factor) / 2;
+            this.stage.style.transform = `translate(${x}px, ${y}px) scale(${factor})`;
+        };
+        scale();
+        window.addEventListener('resize', scale);
+    }
+    setupKeyboardNav() {
+        document.addEventListener('keydown', (e) => {
+            if (e.target.getAttribute('contenteditable')) return;
+            if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { this.showSlide(this.currentSlide + 1); e.preventDefault(); }
+            if (e.key === 'ArrowLeft' || e.key === 'PageUp') { this.showSlide(this.currentSlide - 1); e.preventDefault(); }
+        });
+    }
+    setupTouchNav() {
+        let startX = 0;
+        this.stage.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; }, { passive: true });
+        this.stage.addEventListener('touchend', (e) => {
+            const dx = e.changedTouches[0].clientX - startX;
+            if (Math.abs(dx) > 50) this.showSlide(this.currentSlide + (dx < 0 ? 1 : -1));
+        }, { passive: true });
+    }
+    showSlide(index) {
+        this.currentSlide = Math.max(0, Math.min(index, this.slides.length - 1));
+        this.slides.forEach((slide, i) => {
+            slide.classList.toggle('active', i === this.currentSlide);
+            slide.classList.toggle('visible', i === this.currentSlide);
+        });
+        revealSlide(this.slides[this.currentSlide]);
+    }
+}
+const presentation = new SlidePresentation();
+
+/* ===========================================
+   INLINE EDITING — JS-based hover (400ms grace), click, or 'E' key
+   =========================================== */
+const editor = {
+    isActive: false,
+    toggleEditMode() {
+        this.isActive = !this.isActive;
+        document.getElementById('editToggle').classList.toggle('active', this.isActive);
+        document.querySelectorAll('.editable-hover').forEach(el => {
+            el.setAttribute('contenteditable', this.isActive ? 'true' : 'false');
+        });
+        if (!this.isActive) this.save();
+    },
+    save() {
+        try {
+            const html = document.documentElement.outerHTML;
+            localStorage.setItem('simurgh-recap-deck', html);
+        } catch (e) { /* storage full or unavailable — non-fatal */ }
+    }
+};
+const hotzone = document.getElementById('editHotzone');
+const editToggle = document.getElementById('editToggle');
+let hideTimeout = null;
+hotzone.addEventListener('mouseenter', () => { clearTimeout(hideTimeout); editToggle.classList.add('show'); });
+hotzone.addEventListener('mouseleave', () => { hideTimeout = setTimeout(() => { if (!editor.isActive) editToggle.classList.remove('show'); }, 400); });
+editToggle.addEventListener('mouseenter', () => { clearTimeout(hideTimeout); });
+editToggle.addEventListener('mouseleave', () => { hideTimeout = setTimeout(() => { if (!editor.isActive) editToggle.classList.remove('show'); }, 400); });
+editToggle.addEventListener('click', () => editor.toggleEditMode());
+hotzone.addEventListener('click', () => editor.toggleEditMode());
+document.addEventListener('keydown', (e) => {
+    if ((e.key === 'e' || e.key === 'E') && !e.target.getAttribute('contenteditable')) editor.toggleEditMode();
+});
+</script>
+</body>
+</html>

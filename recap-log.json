@@ -1,0 +1,75 @@
+{
+  "project": "Simurgh Benchmark",
+  "style": {
+    "source": "bold-template",
+    "template_slugs": ["editorial-forest"],
+    "density": "high",
+    "notes": "Editorial Forest locked per explicit user request (\"use the forest theme\")."
+  },
+  "entries": [
+    {
+      "date": "2026-07-13",
+      "topic": "Harness built: fixture badge + bench/ per BENCHMARK_PLAN.md",
+      "summary": "Added a compile-flag agent badge (A-F) to the SampleApp fixture with an accessibility id, proven genuinely ax-queryable via a real UI test. Built the full bench/ harness (lib.sh, preflight.sh, workload.sh, three arm scripts, run.sh, report.py). Seeded real faults on purpose to prove every incident detector actually fires before trusting any number from it.",
+      "decisions": [
+        "Extended badges past the plan's literal A-D to A-F so B5's 6-agent scenario gets a distinct badge per agent",
+        "Detector proof required before any timed rep counts, per the plan's own gate"
+      ],
+      "open_items": []
+    },
+    {
+      "date": "2026-07-13",
+      "topic": "B1: naive parallel agents really do screenshot each other's app",
+      "summary": "2 agents, 3 arms (naive/DIY/Simurgh), 10 reps. Naive collided badly: real evidence of one agent's screenshot showing the other agent's badge. DIY (hand-rolled isolation) worked but paid full setup cost. Simurgh reached 100% success after a harness bug (boot-readiness check) was found and fixed mid-run.",
+      "decisions": [
+        "First B1 attempt's ARM-S numbers were discarded and re-run clean rather than published with a known measurement bug"
+      ],
+      "open_items": []
+    },
+    {
+      "date": "2026-07-13",
+      "topic": "B2: found and fixed a real daemon bug under 4-agent load",
+      "summary": "4 agents pushed the daemon's lease queue into a stuck state: two leases sat QUEUED forever with capacity fully idle. Root cause: a Release()-triggered promotion attempt that loses to a transient RAM-pressure dip has no retry mechanism. Added Broker.RetryQueues, wired into the daemon's existing 5s reclaim loop, with a regression test reproducing the exact race. Re-run after the fix: Simurgh hit 20/20 (100%) with zero incidents; naive collapsed further at higher concurrency (3/20 success).",
+      "decisions": [
+        "Fixed the daemon bug properly (with a regression test) rather than working around it in the benchmark harness"
+      ],
+      "open_items": []
+    },
+    {
+      "date": "2026-07-13",
+      "topic": "B3: the honest cost, published as-is",
+      "summary": "Solo overhead scenario, 10 reps. Naive median 7.33s vs Simurgh median 48.67s -- both 10/10 success, zero incidents. This is the real price of isolation on this Mac, reported without softening it.",
+      "decisions": [
+        "Publish the unflattering number rather than hide it, per the plan's own ground rule"
+      ],
+      "open_items": []
+    },
+    {
+      "date": "2026-07-13",
+      "topic": "B4: does crash cleanup actually work? (in progress)",
+      "summary": "Kill an agent's whole process tree ~8s into its build, then check 90s later what's left behind per arm. Early results already show the expected shape: DIY's killed victim leaves an orphaned simulator behind (no automatic cleanup), which is exactly the categorical gap Simurgh's reaper exists to close.",
+      "decisions": [],
+      "open_items": [
+        "Full B4 results across all three arms still running"
+      ]
+    },
+    {
+      "date": "2026-07-13",
+      "topic": "Latency investigation: same-path DerivedData seeding",
+      "summary": "B3's ~41s overhead gap is mostly a cold-vs-warm DerivedData tax shared by any isolation approach, not something specific to Simurgh -- DIY pays nearly the same tax. Validated a fix with a real build before writing product code: APFS clonefile (cp -Rc) seeds a DerivedData tree in under a second, and a real xcodebuild into a seeded cache ran 2.9s vs 4.2-4.5s cold. Implemented same-path-only seeding in simurgh exec, unit-tested, full suite green.",
+      "decisions": [
+        "Scoped deliberately narrow: seeding only applies when the exact same absolute project path + scheme repeats across leases, never across git worktrees (B6's real scenario) -- avoids any correctness risk from cross-path cache reuse"
+      ],
+      "open_items": [
+        "Real-world magnitude (a big app like Lancer with real dependencies) not yet measured -- expected to be a bigger win than the toy fixture showed"
+      ]
+    },
+    {
+      "date": "2026-07-13",
+      "topic": "Test suite speed: not a hardware limit, an algorithmic one",
+      "summary": "Asked whether the test suite could run faster given hardware headroom. It wasn't CPU/RAM-bound at all: one test (TestNoEmptyErrorTripleLiteralsInRepo) walks the whole repo tree via filepath.WalkDir, which doesn't know about .gitignore -- a real bench run had left 26,000+ files under bench/results/, and walking that dominated the package's runtime for zero .go files examined. Fixed by skipping results/ and .bin/ under bench/, plus .worktrees/ and __pycache__/ anywhere, with a regression test planting a bait finding inside each bulk dir to catch a silent regression.",
+      "decisions": [],
+      "open_items": []
+    }
+  ]
+}

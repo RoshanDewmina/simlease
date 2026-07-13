@@ -36,8 +36,9 @@
 | Package | Branch | Worktree | Model | Risk | Status | Gate |
 |---|---|---|---|---|---|---|
 | M0.1 repo scaffold | merged locally as `93b6d84` | cleaned | `composer-2.5` | low | merged | green |
-| M0.2 IPC + daemon | pending | pending | `grok-4.5-high` | sensitive | blocked on M0.1 + owner-visible approval | pending |
-| M0.3 store | `feat/m0-state-store` | `.worktrees/m0-state-store` | `grok-4.5-high` | low | spec'd | pending |
+| M0.2a IPC protocol/framing | `feat/m0-ipc-protocol` | `.worktrees/m0-ipc-protocol` | `grok-4.5-high` | low | spec'd | pending |
+| M0.2b daemon socket/startup | pending | pending | `grok-4.5-high` + Sonnet review | sensitive | blocked on M0.2a + owner-visible approval | pending |
+| M0.3 store | merged locally as `8e4a185` | cleaned | `grok-4.5-high` | low | merged | green |
 | M0.4 doctor | pending | pending | `grok-4.5-high` | low | blocked on M0.2 | pending |
 
 ## Milestone gates
@@ -75,6 +76,14 @@
 - Review verdict: `approve`; one `minor/likely` finding at `.github/workflows/ci.yml:26` because Staticcheck uses `@latest`. Logged for conscious pinning; it did not block under the review policy.
 - Worktree removed and feature branch deleted after merge.
 
+### 2026-07-12 — M0.3 merged
+
+- Branch commit: `a034519 feat(store): add atomic state journal`.
+- Local merge commit on `master`: `8e4a185 merge: M0.3 atomic state journal`.
+- Orchestrator rerun: `go build ./...` exit 0; `go vet ./...` exit 0; `go test -race -count=1 ./...` exit 0 with `internal/store` passing in 1.363s; `staticcheck ./...` exit 0; `git diff --check` exit 0.
+- Review verdict: `approve`. Non-blocking findings: contextual wrapping for raw read errors (`minor/certain`); internal-vs-user error mapping (`minor/likely`, adjudicated as boundary-only and added to review standards); tests for rejected save/temp cleanup (`nit`).
+- Worktree removed and feature branch deleted after merge.
+
 ## Next action
 
-Dispatch M0.3 from `docs/plans/work-packages/m0.3-state-store.md`. M0.2 remains held for Roshan's sensitive-path approval.
+Dispatch low-risk M0.2a protocol framing from `docs/plans/work-packages/m0.2a-ipc-protocol.md`. Hold M0.2b socket/startup for Roshan's sensitive-path approval.

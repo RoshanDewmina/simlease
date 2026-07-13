@@ -44,6 +44,15 @@ func NewServer(ln net.Listener) *Server {
 	return s
 }
 
+// RegisterHandler adds or replaces the handler for method. Safe to call
+// concurrently with Serve (the handlers map is mutex-guarded for both
+// registration and dispatch lookup).
+func (s *Server) RegisterHandler(method string, h HandlerFunc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.handlers[method] = h
+}
+
 // Serve accepts connections until ctx is cancelled or the listener fails.
 // Each connection runs in its own goroutine. Serve returns nil when shutdown
 // is due to ctx cancellation.
@@ -115,7 +124,9 @@ func (s *Server) serveConn(ctx context.Context, conn net.Conn) {
 }
 
 func (s *Server) dispatch(ctx context.Context, req Request) Response {
+	s.mu.Lock()
 	h, ok := s.handlers[req.Method]
+	s.mu.Unlock()
 	if !ok {
 		env, err := NewError(
 			CodeMethodNotFound,

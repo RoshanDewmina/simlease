@@ -13,6 +13,12 @@ func main() {
 		case "-h", "--help", "help":
 			printHelp()
 			return
+		case "daemon":
+			if len(os.Args) > 2 && os.Args[2] == "run" {
+				os.Exit(runDaemon())
+			}
+			fmt.Fprintf(os.Stderr, "usage: simurgh daemon run\n")
+			os.Exit(2)
 		}
 	}
 
@@ -23,8 +29,9 @@ func printHelp() {
 	fmt.Println(`simurgh — iOS simulator lease broker (pre-v0 scaffold)
 
 Usage:
+  simurgh daemon run
   simurgh [help]
 
-This binary is a placeholder. Daemon, CLI, and MCP commands arrive in M0+ milestones.
+Daemon serves the Unix socket IPC endpoint (daemon.ping).
 See docs/ROADMAP.md for the build plan.`)
 }

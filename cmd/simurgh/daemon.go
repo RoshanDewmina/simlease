@@ -15,6 +15,7 @@ import (
 	"github.com/RoshanDewmina/simurgh/internal/broker"
 	"github.com/RoshanDewmina/simurgh/internal/daemon"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
+	"github.com/RoshanDewmina/simurgh/internal/pressure"
 	"github.com/RoshanDewmina/simurgh/internal/provisioner"
 	"github.com/RoshanDewmina/simurgh/internal/reaper"
 	"github.com/RoshanDewmina/simurgh/internal/safety"
@@ -114,7 +115,10 @@ func runDaemon() int {
 	brk := broker.New(broker.BrokerOptions{
 		Provisioner: prov,
 		Store:       st,
-		// Capacity / RAM / pressure use Broker defaults (formula + always-OK).
+		PressureOK: func() (bool, string) {
+			r := pressure.Check(leasesRoot)
+			return r.OK, r.Reason
+		},
 	})
 	// Rehydrate before any client can connect so ownership is crash-durable.
 	if err := brk.Rehydrate(); err != nil {

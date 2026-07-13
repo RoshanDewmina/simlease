@@ -1,0 +1,87 @@
+name: Simurgh Bench
+
+# Manually-triggered so it never runs on every push (real Xcode builds
+# across 3 arms x N reps are not something to burn CI minutes on
+# automatically). Runs on macos-latest specifically because the
+# benchmark's whole point is measuring simulator/DerivedData contention
+# under Xcode — this cannot be emulated on a Linux runner.
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: "Scenario (B1-B5; B6 needs a real command-center checkout, not run here)"
+        required: true
+        default: "B1"
+      reps:
+        description: "Reps per arm"
+        required: false
+        default: "1"
+      arms:
+        description: "Arms to run, comma-separated (N,D,S)"
+        required: false
+        default: "S"
+
+jobs:
+  bench:
+    runs-on: macos-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Diagnostics (what this runner actually has)
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun simctl list runtimes
+          xcrun simctl list devicetypes | grep -i iphone
+
+      - name: Go gates
+        run: |
+          go build ./...
+          go vet ./...
+
+      - name: Regenerate fixture project
+        run: |
+          brew install xcodegen
+          cd test/fixtures/SampleApp
+          xcodegen generate
+
+      - name: Ensure an "iPhone 17 Pro"-named simulator exists
+        # BENCHMARK_PLAN.md ground rule 2 pins the destination name to
+        # "iPhone 17 Pro". CI runners carry whatever real device types
+        # Apple ships as of the image build — simctl create's NAME
+        # argument is free text independent of the underlying device
+        # type identifier, so we can satisfy the plan's fixed device
+        # name against whatever's actually available here.
+        run: |
+          set -euo pipefail
+          if xcrun simctl list devices | grep -q "iPhone 17 Pro ("; then
+            echo "already present"
+            exit 0
+          fi
+          devtype="$(xcrun simctl list devicetypes | grep -iE 'iPhone (17|16) Pro ' | head -1 | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.[A-Za-z0-9-]+')"
+          runtime="$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(r["identifier"] for r in d["runtimes"] if r.get("isAvailable") and r["name"].startswith("iOS")))')"
+          echo "devtype=$devtype runtime=$runtime"
+          xcrun simctl create "iPhone 17 Pro" "$devtype" "$runtime"
+
+      - name: Pre-flight
+        run: bash bench/preflight.sh
+
+      - name: Run bench
+        run: |
+          bash bench/run.sh \
+            --scenario "${{ github.event.inputs.scenario }}" \
+            --reps "${{ github.event.inputs.reps }}" \
+            --arms "${{ github.event.inputs.arms }}"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-results-${{ github.event.inputs.scenario }}
+          path: bench/results/
+          if-no-files-found: warn

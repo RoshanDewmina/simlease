@@ -48,6 +48,22 @@ Packages:
   tests over adversarial fixtures.
 - **M1.5 CLI**: acquire/release/renew/status/list + `--json` + last-lease
   pointer + exit-code contract.
+- **M1.6 broker persistence + reconciliation** *(added 2026-07-13, not in
+  the original plan)*: M1.1 deliberately built the broker in-memory-only
+  and deferred `internal/store` wiring; M1.2–M1.5 all built on top of that
+  without needing it. This left the M1 `[mac]` GATE's "daemon SIGKILL
+  mid-provision → restart reconciles with zero orphans" scenario
+  provably unmet — `internal/reaper.Reconcile` is a stub. M1.6 wires the
+  broker to `internal/store`'s journal (persist on every state-mutating
+  op), and implements real `Reconcile`: on daemon start, load the journal,
+  cross-reference against a live `simctl` device scan, and reconcile
+  (rehydrate known ACTIVE leases; anything `simurgh-clone[...]`-named with
+  no matching journal entry is a true orphan, logged per M1.5a's existing
+  log-only policy — auto-reclaim of orphans is still deferred to M2.3
+  `prune`, this package doesn't change that policy, only makes orphan
+  detection cross-restart instead of same-process-only). Added *before*
+  M2 so isolation/warm-template state (M2.1–M2.2) doesn't compound on top
+  of an unpersisted broker.
 
 GATE (unit): `go test -race ./internal/broker/... ./internal/safety/...` — includes:
 - two concurrent same-spec acquires → distinct UDIDs, both ACTIVE

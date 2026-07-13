@@ -48,15 +48,14 @@ independently reviewed, and merged — see evidence log below.
 | M1.4 safety | merged locally as `fd1773a` | cleaned | `grok-4.5-high` + Sonnet personal full-diff review | **sensitive** | merged | green |
 | M1.3 watcher + reaper | merged locally as `60dfe1b` | cleaned | `grok-4.5-high` | low (no deletion itself — calls into M1.4 safety only) | merged | green |
 | M1.5a daemon lease RPC + reclaim loop | merged locally as `6fc5529` | cleaned | `grok-4.5-high` | low, personal review (unattended deletion capability) | merged | green |
-| M1.5b CLI client commands | pending | pending | `grok-4.5-high` | low | next | pending |
+| M1.5b CLI client commands | merged locally as `512a427` | cleaned | `grok-4.5-high` | low | merged | green |
 
 ## Milestone gates
 
 | Milestone | Mechanical gates | macOS/integration gate | Status |
 |---|---|---|---|
 | M0 | build, vet, race tests, staticcheck — **PASS** | `daemon run` + `doctor` exit 0, all 5 checks green — **PASS**, live-run 2026-07-12 | **COMPLETE** |
-| M1 | `go test -race ./internal/broker/... ./internal/safety/...` — broker portion green (see evidence log); safety portion not started | `go test -race -tags darwin_sim ./test/integration/...` + manual two-terminal-acquire smoke — not started | in progress (1/5 packages) |
-| M1 | broker/safety race + concurrency proofs | tagged real-sim lifecycle/reconciliation | not started |
+| M1 | `go test -race -count=1 ./...` (whole repo) — **PASS**, all 11 testable packages green | `[mac]` full-lifecycle + two-terminal concurrent-acquire smoke — **PASS**, live-run 2026-07-13. **Partial**: the GATE's "daemon SIGKILL mid-provision → restart reconciles with zero orphans" sub-scenario is NOT satisfied — it needs broker persistence, which doesn't exist yet (see M1.6 below, added to close this honestly rather than claim an unqualified pass). | **M1.1–M1.5 all merged and live-verified; M1.6 (new, persistence) added before M2 to close the one unmet GATE sub-scenario** |
 | M2 | full Go gates | isolated concurrent sample builds + warm latency | not started |
 | M3 | MCP tests | two-agent dogfood + screenshots/status evidence | not started |
 | M4 | full suite + error audit | clean dogfood rerun + fresh-account quickstart | not started |
@@ -393,19 +392,79 @@ independently reviewed, and merged — see evidence log below.
   lease RPC wiring + reclaim loop`. Post-merge gate rerun: build/vet/test-race/staticcheck all
   exit 0. Worktree removed, branch deleted.
 
+### 2026-07-13 — M1.5b merged; M1 milestone gate closed (with one honest caveat); M1.6 added
+
+- Spec: `docs/plans/work-packages/m1.5b-cli-commands.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m1.5b-cli`: `simurgh acquire|release|renew|status|list`, matching `cmd/simurgh`'s
+  existing hand-rolled flag style (no new CLI-framework dependency added). Added an additive
+  `pool.status` RPC (capacity + lease counts by state) since `simurgh status` needed it and it
+  wasn't in M1.5a's six `lease.*` methods. `exitCodeForIPCError` implements the full ARCHITECTURE
+  §9 exit-code contract. Honestly documented gap: `--reuse-if-exists` is wired end-to-end but
+  inert server-side (the M1.1 gap it inherits — `broker.Acquire` never reads the field).
+- Orchestrator independently reran all gates (green after discarding one stray trailing-whitespace
+  edit the coder made to this state file mid-session — `git diff --check` caught it, `git checkout`
+  reverted it, since this file gets its authoritative update from the orchestrator anyway).
+- **Personally re-ran the live check in a single clean shell** rather than trusting the coder's
+  report at face value: real acquire, `status`/`list` JSON, a real `LEASE_NOT_FOUND` exit-3 error
+  path, `renew`, and `release` via the no-arg last-lease-pointer fallback all round-tripped
+  correctly over the real socket against a real daemon. Confirmed `release` leaves the device
+  intact (matches M1.5a). No blocking findings — merged without a separate subagent pass.
+- Committed as `1f470ef feat(cli): acquire/release/renew/status/list commands (M1.5b)` on
+  `feat/m1.5b-cli`; local-merged to `master` as `512a427 merge: M1.5b CLI acquire/release/renew/
+  status/list commands`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
+  Worktree removed, branch deleted.
+
+### 2026-07-13 — M1 milestone gate: mechanical PASS, `[mac]`/manual-smoke PASS, one honest gap
+
+- **Mechanical:** `go build ./... && go vet ./... && go test -race -count=1 ./...` — all 11
+  testable packages green. `staticcheck ./...` clean.
+- **`[mac]` two-terminal manual smoke (the roadmap's own flagship scenario), run for real by the
+  orchestrator:** built the binary, exported a fresh `SIMURGH_HOME`, backgrounded TWO concurrent
+  real `simurgh acquire --model "iPhone 17 Pro"` processes (this Mac's computed capacity is 2:
+  `min(floor(16GB/6), 10cores/2, 4) = min(2,5,4) = 2`, so both could grant concurrently rather than
+  one queuing) — both returned `exit 0` with `state:active`, distinct lease IDs (`lease-1`,
+  `lease-2`) and **distinct UDIDs**, confirmed via `xcrun simctl list devices` showing two
+  separate `Booted` `simurgh-clone[...]` devices. Zero collisions. This is the exact "two terminal
+  `simurgh acquire`... two booted clones... distinct UDIDs" smoke test `docs/ROADMAP.md` calls for
+  under M1's `[mac]` GATE, and it's the first time it was actually runnable (the CLI didn't exist
+  before M1.5b).
+- **Testing-hygiene incident (own mistake, not a product bug, logged so it doesn't repeat):**
+  mid-verification, a `SIMURGH_HOME` shell-variable lookup across separate Bash tool calls (which
+  don't share shell state) evaluated to an empty string; an empty string is falsy in
+  `simurghHomeDir()`'s `if h := os.Getenv("SIMURGH_HOME"); h != ""` check, so a `release` call fell
+  through to the REAL default `~/.simurgh` and `ipc.Dial` auto-started a real daemon bound there.
+  Caught immediately by checking `~/.simurgh` right after — it contained only an empty
+  `leases/`+`logs/` scaffold and an empty log file (no state.json since persistence doesn't exist
+  yet, no real lease directories, no simctl side effects, since `release` alone never provisions or
+  deletes anything). The stray daemon process was already dead (an unrelated `pkill` in the same
+  script coincidentally matched its command line). Removed the accidental `~/.simurgh` scaffold
+  (my own artifact from seconds earlier, not pre-existing user data) and reconfirmed real device
+  state was untouched throughout. **Lesson for future live-`[mac]` sessions: always `export
+  SIMURGH_HOME` and verify it's non-empty within the SAME shell invocation as the command that uses
+  it — Bash tool calls do not share environment state.**
+- **The one gap, stated plainly:** the `[mac]` GATE's "daemon SIGKILL mid-provision → restart
+  reconciles with zero orphans" sub-scenario is NOT satisfied. It requires broker persistence via
+  `internal/store`, which was deliberately deferred starting at M1.1 and never revisited since
+  M1.2–M1.5 didn't strictly need it. Rather than claim an unqualified milestone pass, this is
+  logged honestly and **M1.6 (broker persistence + reconciliation) has been added to
+  `docs/ROADMAP.md`'s M1 package list** (a real SSOT update, not just a note here) as the next
+  package, before M2, so isolation/warm-template state doesn't compound on top of an unpersisted
+  broker.
+
 ## Next action
 
-M1.5b is next: the CLI client commands (`simurgh acquire|release|renew|status|list`) that consume
-the RPCs M1.5a just wired — `--json` on every command, the `~/.simurgh/last-lease` pointer
-convention (no lease-id argument → most recent lease owned by caller), and the exit-code contract
-from `docs/ARCHITECTURE.md` §9 (0 ok, 2 queued/blocked, 3 invalid input, 4 environment problem, 5
-internal). These are thin `internal/ipc.Dial`-based clients (auto-starting the daemon on
-connection failure, per `internal/ipc.Dial`'s existing behavior — M1.5b should not reimplement
-that). After M1.5b: the M1 milestone gate — unit race suite across
-broker+provisioner+watcher+reaper+daemon (all real now, no more interface-fakes needed for the
-roadmap's "two concurrent same-spec acquires," "exclusive same-device → QUEUED," and "SIGKILL'd
-owner → RECLAIMED within one watcher interval" scenarios), the `[mac]` full-lifecycle integration
-test, and the two-terminal manual `simurgh acquire` smoke test described in the roadmap (now
-actually possible to run for real, since the CLI will exist). Then a decision point on the
-persistence/crash-recovery gap (`internal/reaper.Reconcile` is still a stub) before M2 isolation
-work compounds on top of an unpersisted broker. Then M2 in phase order.
+**M1.6 — broker persistence + reconciliation** is next (newly added, see `docs/ROADMAP.md`'s M1
+section and the gate-closure entry above): wire `internal/store`'s journal into `internal/broker`
+(persist on every state-mutating operation — additive `store.State` schema extension, following
+the pattern `internal/store/store.go`'s own doc comment anticipated back in M0.3), and implement
+real `internal/reaper.Reconcile` (load the journal on daemon start, cross-reference against a live
+`simctl` device scan via the reconciliation-window-respecting pattern `ScanOrphans` already
+established, rehydrate known ACTIVE leases into a fresh in-memory `Broker`, treat anything
+`simurgh-clone[...]`-named with no journal entry as an orphan — log-only, per the M1.5a policy,
+still not auto-reclaimed). This closes the one M1 GATE sub-scenario left open. After M1.6: rerun
+the SIGKILL-mid-provision → restart → reconcile scenario live for real (build, acquire, `kill -9`
+the daemon, restart it against the same `SIMURGH_HOME`, confirm the journal-recovered state and
+zero orphan/non-simurgh deletions) as the actual acceptance evidence for this specific gate item.
+Then M2 (isolation + warm templates) in phase order, followed by M3 (MCP + the two-parallel-
+Claude-Code-sessions dogfood — the v0 exit demo) and M4 (hardening), tagging `v0.0.1` per
+`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar.

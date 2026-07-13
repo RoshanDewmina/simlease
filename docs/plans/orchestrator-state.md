@@ -35,9 +35,9 @@
 
 | Package | Branch | Worktree | Model | Risk | Status | Gate |
 |---|---|---|---|---|---|---|
-| M0.1 repo scaffold | `feat/m0-repo-scaffold` | `.worktrees/m0-repo-scaffold` | `composer-2.5` | low | spec'd | pending |
+| M0.1 repo scaffold | merged locally as `93b6d84` | cleaned | `composer-2.5` | low | merged | green |
 | M0.2 IPC + daemon | pending | pending | `grok-4.5-high` | sensitive | blocked on M0.1 + owner-visible approval | pending |
-| M0.3 store | pending | pending | `grok-4.5-high` | low | blocked on M0.1 | pending |
+| M0.3 store | `feat/m0-state-store` | `.worktrees/m0-state-store` | `grok-4.5-high` | low | spec'd | pending |
 | M0.4 doctor | pending | pending | `grok-4.5-high` | low | blocked on M0.2 | pending |
 
 ## Milestone gates
@@ -54,6 +54,7 @@
 
 - No private Git remote has been supplied. This does not block local milestone implementation, but it blocks real PRs and the hosted third-review action.
 - M0.2 touches socket creation and permissions, a security-sensitive path. Dispatch requires owner-visible approval after the M0.1 scaffold is integrated.
+- M0.1 cross-model review attempt 1 (`grok-4.5-high`, fresh Cursor ask session) emitted no output for more than four minutes and was terminated with exit 130. The bounded fresh-session retry approved the diff with one non-blocking minor: pin Staticcheck instead of `@latest` in CI.
 
 ## Evidence log
 
@@ -64,7 +65,16 @@
 - Verified Cursor model slugs from live `cursor-agent models`; no model names were guessed.
 - Installed Staticcheck using its official Go installation command; version is `2026.1 (v0.7.0)`.
 - `xcrun simctl list devices` showed iOS 27.0 and an available iPhone 17 Pro simulator.
+- M0.1 coder and orchestrator mechanical gates were green. The first independent review attempt timed out without a verdict; this is not treated as approval or as a code finding.
+
+### 2026-07-12 — M0.1 merged
+
+- Branch commit: `7774c57 chore: scaffold Simurgh Go module`.
+- Local merge commit on `master`: `93b6d84 merge: M0.1 repository scaffold`.
+- Orchestrator rerun: `go build ./...` exit 0; `go vet ./...` exit 0; `go test -race ./...` exit 0 for `cmd/simurgh` plus all ten internal packages; `staticcheck ./...` exit 0; `git diff --check` exit 0.
+- Review verdict: `approve`; one `minor/likely` finding at `.github/workflows/ci.yml:26` because Staticcheck uses `@latest`. Logged for conscious pinning; it did not block under the review policy.
+- Worktree removed and feature branch deleted after merge.
 
 ## Next action
 
-Dispatch M0.1 from `docs/plans/work-packages/m0.1-repo-scaffold.md`, run the complete Go/staticcheck gate independently, then obtain the sensitive-path approval for M0.2 while M0.3 proceeds on a disjoint worktree.
+Dispatch M0.3 from `docs/plans/work-packages/m0.3-state-store.md`. M0.2 remains held for Roshan's sensitive-path approval.

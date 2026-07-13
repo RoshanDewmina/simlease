@@ -39,15 +39,27 @@ else
   add_check "stray_processes" true "none found"
 fi
 
-# 2. Free+inactive RAM >= 8GB.
+# 2. Free+inactive RAM >= floor (default 8GB, BENCHMARK_PLAN.md §4).
+#    BENCH_RAM_FLOOR_GB=0 disables the gate (still records the real
+#    number for provenance) — macOS pages to swap/compressor under
+#    pressure rather than failing outright, so a hard absolute floor
+#    tuned for one machine's total RAM doesn't transfer to a smaller
+#    box (e.g. GitHub's standard macOS runner has 7GB total RAM,
+#    physically incapable of ever showing 8GB free+inactive). Owner
+#    call: disabled for CI, left at the plan's default locally.
+RAM_FLOOR_GB="${BENCH_RAM_FLOOR_GB:-8}"
 vmstat="$(vm_stat)"
 page_size="$(echo "$vmstat" | head -1 | grep -oE '[0-9]+' | head -1)"
 free_pages="$(echo "$vmstat" | awk -F'[: .]+' '/Pages free/ {print $3}')"
 inactive_pages="$(echo "$vmstat" | awk -F'[: .]+' '/Pages inactive/ {print $3}')"
 free_inactive_bytes=$(( (free_pages + inactive_pages) * page_size ))
 free_inactive_gb=$(python3 -c "print(round($free_inactive_bytes / 1024**3, 2))")
-ram_ok=$(python3 -c "print('true' if $free_inactive_bytes >= 8*1024**3 else 'false')")
-add_check "ram_pressure" "$ram_ok" "free+inactive = ${free_inactive_gb}GB (floor: 8GB)"
+if [[ "$RAM_FLOOR_GB" == "0" ]]; then
+  add_check "ram_pressure" true "free+inactive = ${free_inactive_gb}GB (floor disabled via BENCH_RAM_FLOOR_GB=0)"
+else
+  ram_ok=$(python3 -c "print('true' if $free_inactive_bytes >= $RAM_FLOOR_GB*1024**3 else 'false')")
+  add_check "ram_pressure" "$ram_ok" "free+inactive = ${free_inactive_gb}GB (floor: ${RAM_FLOOR_GB}GB)"
+fi
 
 # 3. No simurgh-clone or bench-* leftover simulators.
 residue_simurgh="$(bench_residue_check "simurgh-clone")"

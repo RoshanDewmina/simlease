@@ -48,6 +48,17 @@ jobs:
         # for, so checking after Go gates + xcodegen (as this workflow
         # first tried) measures the CI job's own footprint, not the
         # runner's actual starting condition.
+        #
+        # RAM floor disabled here deliberately: GitHub's standard macOS
+        # runner has 7GB total physical RAM (hw.memsize, confirmed via
+        # the diagnostics step above) — the plan's 8GB floor is a hard
+        # physical impossibility on this box, not a contention signal.
+        # macOS pages to swap/compressor under pressure rather than
+        # failing outright; owner decision (2026-07-13) was to run and
+        # observe actual behavior rather than gate on absolute RAM here.
+        # Real number is still recorded per rep for provenance.
+        env:
+          BENCH_RAM_FLOOR_GB: "0"
         run: bash bench/preflight.sh
 
       - name: Go gates

@@ -56,6 +56,23 @@ RUN_ID="${SCENARIO}-${RUN_TS}"
 RESULTS_DIR="$OUT_ROOT/$RUN_TS"
 mkdir -p "$RESULTS_DIR"
 
+# Sweep leftover bench-*-named devices from earlier scenario runs before
+# starting — ARM-D deliberately doesn't delete its own devices within a
+# run (that residue is the measured DIY cost), so without this sweep
+# they accumulate silently across separate run.sh invocations. Safe per
+# the harness's own naming invariant: only ever deletes bench-*-named
+# devices, never simurgh-* or anything else.
+for udid in $(xcrun simctl list devices -j 2>/dev/null | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for rt, devs in d.get("devices", {}).items():
+    for dev in devs:
+        if dev.get("name", "").startswith("bench-"):
+            print(dev["udid"])
+'); do
+  xcrun simctl delete "$udid" >/dev/null 2>&1 || true
+done
+
 SIMURGH_BIN="${SIMURGH_BIN:-$HERE/.bin/simurgh}"
 DAEMON_STARTED_BY_US=0
 # B5 (BENCHMARK_PLAN.md §2: "6 agents (capacity 3)") needs a

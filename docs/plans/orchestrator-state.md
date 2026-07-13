@@ -43,12 +43,18 @@ independently reviewed, and merged — see evidence log below.
 | M0.2b daemon socket/startup | merged locally as `1983874` | cleaned | `grok-4.5-high` + Sonnet full-diff review | sensitive | merged | green |
 | M0.3 store | merged locally as `8e4a185` | cleaned | `grok-4.5-high` | low | merged | green |
 | M0.4 doctor | merged locally as `ca76ddc` | cleaned | `grok-4.5-high` | low | merged | green |
+| M1.1 lease broker | merged locally as `38fe554` | cleaned | `grok-4.5-high` | low | merged | green |
+| M1.2 provisioner | pending | pending | `grok-4.5-high` | low (interface-faked; `[mac]` suite is real) | next | pending |
+| M1.3 watcher + reaper | pending | pending | `grok-4.5-high` | low (no deletion itself — calls into M1.4 safety) | blocked on M1.4 | pending |
+| M1.4 safety | pending | pending | `grok-4.5-high` + Sonnet full-diff review | **sensitive** | blocked on owner-visible approval | pending |
+| M1.5 CLI | pending | pending | `grok-4.5-high` | low | blocked on M1.1–M1.4 | pending |
 
 ## Milestone gates
 
 | Milestone | Mechanical gates | macOS/integration gate | Status |
 |---|---|---|---|
 | M0 | build, vet, race tests, staticcheck — **PASS** | `daemon run` + `doctor` exit 0, all 5 checks green — **PASS**, live-run 2026-07-12 | **COMPLETE** |
+| M1 | `go test -race ./internal/broker/... ./internal/safety/...` — broker portion green (see evidence log); safety portion not started | `go test -race -tags darwin_sim ./test/integration/...` + manual two-terminal-acquire smoke — not started | in progress (1/5 packages) |
 | M1 | broker/safety race + concurrency proofs | tagged real-sim lifecycle/reconciliation | not started |
 | M2 | full Go gates | isolated concurrent sample builds + warm latency | not started |
 | M3 | MCP tests | two-agent dogfood + screenshots/status evidence | not started |
@@ -181,15 +187,63 @@ independently reviewed, and merged — see evidence log below.
   0600, `daemon.ping ok`), `doctor_exit=0`, daemon then killed cleanly (`daemon_exit=0`).
   **M0 — Skeleton is COMPLETE.**
 
+### 2026-07-12 — M1.1 lease broker merged
+
+- Owner approved continuing into M1 (AskUserQuestion at the M0→M1 boundary). Spec:
+  `docs/plans/work-packages/m1.1-broker.md`. Scope: in-memory `Lease` state machine
+  (`QUEUED→PROVISIONING→ACTIVE→RELEASED`/`CANCELLED`/`FAILED`), per-`DeviceSpec` FIFO queue,
+  capacity gate (RAM/CPU formula + override), `Acquire/Renew/Release/Get/List/Wait`. Deliberately
+  transport- and persistence-agnostic (no `internal/ipc` or `internal/store` import — a local
+  duplicated error-triple helper, noted for future extraction) and provisioner-agnostic (depends
+  only on a `Provisioner` interface it defines; a fake drives all unit tests — no `simctl` calls
+  anywhere in this package). Deletion is explicitly out of scope: `Release` only transitions state
+  and advances the queue; M1.3's reaper owns teardown via M1.4 safety.
+- Implemented by `grok-4.5-high` in `.worktrees/m1.1-broker` (branch `feat/m1.1-broker`), 1528
+  lines (well over the ~600-line soft target — logged, not blocking; this is the foundational
+  concurrency-sensitive package the rest of M1 builds on, judged not worth fragmenting).
+- Orchestrator independently reran gates before review: build/vet/staticcheck/gofmt/diff-check
+  all exit 0; `go test -race ./internal/broker/...` green, all required GATE scenarios present
+  (concurrent same-spec acquire → distinct UDIDs both ACTIVE; capacity-full → QUEUED with
+  position; `Wait=true` blocks until `Release` frees a slot; queued `Release` → CANCELLED without
+  provisioning; provisioner error → FAILED + typed error).
+- Own direct read of the concurrency logic: capacity is reserved synchronously under `b.mu`
+  before `Provisioner.Provision` runs with the lock released, so concurrent `Acquire`s can't
+  overcommit a spec key's capacity; `tryBeginNextLocked` (queue advance) only ever runs under
+  lock.
+- Fresh independent Claude subagent review (concurrency-focused: mutex-discipline trace,
+  overcommit/double-provision/lost-wakeup analysis, `-race -count=5`): confirmed no overcommit,
+  no double-provision, no lost wakeup. Found one **major/likely**: cancelling a `Wait()` before
+  the lease reaches a terminal state never removed that waiter's channel from `b.waiters`, so
+  repeated short-deadline `Wait`/`Acquire(Wait=true)` polling against a permanently-queued lease
+  (a realistic CLI pattern) grew that slice unboundedly. Plus two minor/nit: `Wait`-woken callers
+  on a FAILED lease got a nil provisioning-error cause (only the direct `Acquire` caller saw the
+  real error); recursive queue-advance on consecutive provisioner failures has stack depth
+  proportional to queue length (untested at scale, low real risk given capacity ≤4).
+- **One bounded fix loop** (per the pipeline's fix-loop rule — major findings don't auto-block
+  forever, but do get one correction pass): dispatched the major + the cheap minor together.
+  Fix verified directly by the orchestrator (not re-delegated — narrowly scoped, easy to check by
+  reading the diff): `removeWaiterLocked` now swap-removes this call's channel by identity and
+  deletes the map entry when empty, race-safe against a concurrent `notifyWaitersLocked` (no
+  double-close — if the whole entry is already gone, remove is a no-op); a `failCauses
+  map[string]error` now carries the real `Provisioner` error to `Wait`-woken callers. Two new
+  tests (`TestWaitCancelRemovesWaiter`, `TestWaitOnProvisionFailurePreservesCause`). Full suite
+  reran clean at `-count=3` under `-race`.
+- Committed as `de511ff feat(broker): in-memory lease broker (state machine, FIFO queue, capacity
+  gate)` on `feat/m1.1-broker`; local-merged to `master` as `38fe554 merge: M1.1 lease broker
+  (state machine, FIFO queue, capacity gate)`. Post-merge gate rerun: build/vet/test-race/
+  staticcheck all exit 0. Worktree removed, branch deleted.
+
 ## Next action
 
-M0 is done (4/4 packages merged, mechanical + `[mac]` integration gates both green, live-verified
-on this Mac). M1 — Lease core is next in phase order: M1.1 broker (acquire/renew/release/get/
-list/wait, FIFO queue, capacity formula, error triple), M1.2 provisioner (clone/boot, interface-
-faked in unit tests), M1.3 watcher+reaper (liveness/TTL/reclamation), M1.4 safety package
-(**sensitive** — the centralized deletion guards; owner-visible approval required before
-dispatch, same as M0.2b), M1.5 CLI. M1.4's property tests over adversarial fixtures and the M1
-concurrency-proof gate (`docs/ARCHITECTURE.md` §11) are the product's actual differentiator —
-budget real attention there, not just gate-passing. Owner digest delivered this turn; awaiting
-go/no-go on M1 dispatch order (broker first, in parallel with the non-sensitive provisioner
-interface, holding M1.4 safety for explicit approval) vs. any owner-directed reprioritization.
+M1.1 (broker) is done — the foundational type system (`Lease`/`DeviceSpec`/`Device`/`Owner`) and
+state machine the rest of M1 builds on. M1.2 provisioner is next: real `simctl`-backed clone/boot
+implementing the `Provisioner` interface `internal/broker` already defines (interface-faked in
+unit tests; real behavior only provable in the `[mac]` integration suite). M1.3 watcher+reaper
+follows (liveness/TTL/reclamation — calls into M1.4 safety for actual deletion, so it's blocked on
+M1.4 landing first, not just spec'd). **M1.4 safety is `sensitive`** (the centralized deletion
+guards — `internal/safety`, invoked by every destructive call) and requires the same owner-visible
+approval checkpoint as M0.2b before dispatch; the orchestrator will interrupt again when the
+roadmap reaches it rather than assuming continued blanket approval. M1.5 CLI wraps the broker once
+M1.1–M1.4 are stable. `docs/ARCHITECTURE.md` §11's concurrency-proof gate and M1.4's property
+tests over adversarial fixtures are the product's actual differentiator — budget real attention
+there, not just gate-passing, when M1.4 is reached.

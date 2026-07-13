@@ -45,9 +45,9 @@ independently reviewed, and merged — see evidence log below.
 | M0.4 doctor | merged locally as `ca76ddc` | cleaned | `grok-4.5-high` | low | merged | green |
 | M1.1 lease broker | merged locally as `38fe554` | cleaned | `grok-4.5-high` | low | merged | green |
 | M1.2 provisioner | merged locally as `87de11c` | cleaned | `grok-4.5-high` | low (interface-faked; `[mac]` suite is real, live-verified twice) | merged | green |
-| M1.4 safety | pending | pending | `grok-4.5-high` + Sonnet full-diff review | **sensitive** | next (reordered ahead of M1.3 — reaper depends on it; owner said proceed at orchestrator discretion, no stop-and-ask, mandatory Sonnet review still applies) | pending |
-| M1.3 watcher + reaper | pending | pending | `grok-4.5-high` | low (no deletion itself — calls into M1.4 safety) | blocked on M1.4 | pending |
-| M1.5 CLI | pending | pending | `grok-4.5-high` | low | blocked on M1.1–M1.4 | pending |
+| M1.4 safety | merged locally as `fd1773a` | cleaned | `grok-4.5-high` + Sonnet personal full-diff review | **sensitive** | merged | green |
+| M1.3 watcher + reaper | pending | pending | `grok-4.5-high` | low (no deletion itself — calls into M1.4 safety) | next (unblocked) | pending |
+| M1.5 CLI | pending | pending | `grok-4.5-high` | low | blocked on M1.1–M1.4 (now unblocked) | pending |
 
 ## Milestone gates
 
@@ -277,16 +277,53 @@ independently reviewed, and merged — see evidence log below.
   provisioner (clone/boot)`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
   Worktree removed, branch deleted.
 
+### 2026-07-13 — M1.4 safety merged (sensitive, personal full-diff review)
+
+- Spec: `docs/plans/work-packages/m1.4-safety.md`, written with extreme precision given this is
+  the single most safety-critical package in the product — a bug here deletes a user's real files
+  or real simulators. Implemented by `grok-4.5-high` in `.worktrees/m1.4-safety`:
+  `ValidateLeasePath`/`DeleteLeaseDir` (the ONLY way to obtain/act on a deletable filesystem path —
+  strict `^lease-[0-9]+$` allowlist before any join, symlink-resolved path-separator-bounded
+  prefix check against an injected `leasesRoot`, resolved-target-equal-to-root rejected) and
+  `ValidateDeviceDeletion`/`DeleteSimulatorClone` (always re-queries the LIVE device list and
+  checks the live name against `IsSimurghManagedName` — `^simurgh-(clone|warm)\[.*\]$` — a
+  caller-supplied name is never trusted, and `knownLeaseUDIDs` membership never overrides a
+  failing name check).
+- Orchestrator independently reran all gates, then **independently reproduced the live `[mac]`
+  test myself** (not delegated): real throwaway clone created+deleted; the real pre-existing
+  `simurgh-base[iPhone 17 Pro:27.0]` device (same UDID from M1.2's runs) confirmed refused and
+  left untouched, verified via `xcrun simctl list devices` before/after.
+- **Personal full-diff trace by the orchestrator (mandatory per the brief's "no exceptions" rule
+  for this package — not delegated to a subagent, unlike every other package this session):**
+  traced every path from a public function to `os.RemoveAll`/`deleter.Delete` and confirmed
+  validation is unconditionally on that path with no raw-path overload and no cacheable/skippable
+  prior-validation shortcut. Read `paths_test.go`'s symlink-escape and root-equality tests closely
+  — they plant real symlinks on disk (not just adversarial string fixtures) and assert the
+  outside file is provably untouched afterward, plus a 500-iteration `testing/quick` property
+  test (no new dependency — stdlib) asserting no escape and no panic across randomized lease IDs.
+  Verdict: **approve**. Two non-blocking notes: a TOCTOU window between validation and the actual
+  delete syscall (accepted — same-user local threat model per this product's stated design, no
+  privilege boundary crossed); `DeleteSimulatorClone` swallows all `Shutdown` errors
+  unconditionally rather than differentiating "already shutdown" from other failures (an
+  observability gap, not a safety issue — `Delete` still fails and propagates if the device
+  genuinely can't be removed).
+- Committed as `57fc48c feat(safety): centralized deletion guards (M1.4)` on `feat/m1.4-safety`;
+  local-merged to `master` as `fd1773a merge: M1.4 centralized deletion safety guards`.
+  Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0. Worktree removed, branch
+  deleted.
+
 ## Next action
 
-M1.1 and M1.2 are done — the broker's state machine and a real, live-verified `simctl` provisioner
-now exist. **M1.4 safety is next** (reordered ahead of M1.3, which depends on it): the centralized
-deletion guards in `internal/safety` enforcing the invariant from `docs/ARCHITECTURE.md` §2 —
-recursive deletion only under `~/.simurgh/leases/`, simulator deletion only for devices matching
-`^simurgh-(clone|warm)\[.*\]$` AND present in Simurgh state or matching by name pattern via
-`simctl list -j`. Per the owner's autonomous-loop directive this proceeds without a stop-and-ask,
-but keeps the mandatory Sonnet-or-orchestrator full-diff review, plus the roadmap's own demand for
-property tests over adversarial fixtures — this package is the actual safety backstop for
-everything M1.3's reaper and M2's prune will do, so it gets real scrutiny, not just gate-passing.
-Then M1.3 watcher+reaper (now unblocked), M1.5 CLI, the M1 milestone gate (unit race suite +
-`[mac]` full-lifecycle integration + the two-terminal manual smoke), and on to M2 in phase order.
+M1.1, M1.2, and M1.4 are done. M1.3 watcher+reaper is next (now unblocked — reaper calls into the
+safety package that now exists): PID liveness (`kill(pid,0)`), heartbeat/TTL/inactivity/hard
+timeouts, `--rm` (release on client-PID exit), reclamation (shutdown+delete via
+`internal/safety.DeleteSimulatorClone`, never a raw `simctl` call), startup reconciliation window
+(reaper must not run destructive actions during the first 10s after daemon start per
+`docs/ARCHITECTURE.md` §10), orphan scan by device-name pattern
+(`internal/safety.IsSimurghManagedName`). This package is itself risk-adjacent (it's the thing
+that actually DECIDES what gets reclaimed and calls safety to do it) even though it never deletes
+directly — treat the decision logic (what counts as an orphan, what counts as reclaimable) with
+real scrutiny in review, not just gate-passing, per the same standard applied to M1.4. Then M1.5
+CLI, the M1 milestone gate (unit race suite including the SIGKILL'd-owner-reclaimed-within-one-
+watcher-interval scenario + `[mac]` full-lifecycle integration + the two-terminal manual acquire
+smoke), then M2 in phase order.

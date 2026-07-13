@@ -53,6 +53,9 @@ independently reviewed, and merged — see evidence log below.
 | M2.1 isolator | merged locally as `2fe9991` | cleaned | `grok-4.5-high` | low | merged | green |
 | M2.2 warm templates | merged locally as `4fc5228` | cleaned | `grok-4.5-high` | low | merged (functionally correct; latency target NOT met, see evidence log) | green |
 | M2.3 prune + doctor extensions | merged locally as `f916760` | cleaned | `grok-4.5-high` | sensitive-adjacent, personal review (real deletion surface) | merged | green |
+| M3.1 MCP server | merged locally as `a83a947` | cleaned | `grok-4.5-high` | low | merged | green |
+| M3.2 simurgh init | pending | pending | `grok-4.5-high` | low | next | pending |
+| M3.3 dogfood | pending | pending | orchestrator-driven (2 parallel Agent-tool subagents) | low | blocked on M3.1/M3.2 | pending |
 
 ## Milestone gates
 
@@ -605,24 +608,71 @@ independently reviewed, and merged — see evidence log below.
   across M1.5a/M1.6 now has its real, explicit, owner-visible answer: `prune --apply`, run by a
   human on purpose — automatic background deletion was never built, by design.
 
+### 2026-07-13 — M3.1 MCP server merged
+
+- Spec: `docs/plans/work-packages/m3.1-mcp-server.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m3.1-mcp`: `simurgh mcp` — exactly the five tools `docs/ARCHITECTURE.md` §8
+  specifies (`lease_acquire|renew|release|status`, `pool_status`), via the official
+  `github.com/modelcontextprotocol/go-sdk` pinned to `v1.6.1` (required bumping `go.mod` to
+  `go 1.25.0`, comfortably under the installed `go1.26.5`). Structurally a thin translation layer
+  — dials the daemon via the existing `internal/ipc.Dial`, calls the same `lease.*`/`pool.status`
+  RPCs the CLI and every prior package already exercise, no new business logic. `lease_acquire`'s
+  result includes `env`/`xcodebuildFlags` (not just the UDID) and writes `~/.simurgh/last-lease`
+  on success; `lease_status` with no `lease_id` reads that same pointer (one last-lease
+  convention, not a second one); `lease_renew` requires an explicit `lease_id` per the
+  architecture's params column. Tool descriptions were written carefully as real agent-facing API
+  surface (each states when to call and what not to do), not boilerplate — reviewed below.
+- Orchestrator independently reran all gates (green), personally traced the code: confirmed
+  exactly 5 `AddTool` calls (no scope creep past the "five tools, not eighty" non-negotiable),
+  confirmed the acquire result type carries `Env`/`XcodebuildFlags`, confirmed the last-lease
+  write/read symmetry. Given the low risk (pure translation, zero new destructive capability —
+  every RPC it calls was already reviewed in a prior package) and the depth of this direct trace
+  plus the implementer's own detailed live evidence (real device UDID, 6 env keys, 6 xcodebuild
+  flags, `pool_status` reflecting the live lease, confirmed device teardown on release), merged
+  without a redundant live reproduction or separate subagent pass.
+- **Tool descriptions reviewed as API surface** (verbatim, all five): `lease_acquire` — "Acquire
+  an isolated iOS Simulator lease before any simulator interaction. Never pick a UDID from simctl
+  yourself... Call once per parallel agent or session that needs its own simulator; do not share
+  one lease across concurrent agents." `lease_renew` — "...Do not acquire a second lease just to
+  keep working — renew the lease you already hold." `lease_release` — "...Always release before
+  ending your session. Do not leave leases dangling..." `lease_status` — "...If lease_id is
+  omitted, uses the caller's most recently acquired lease... Do not invent UDIDs from simctl
+  list." `pool_status` — "...Do not use this to pick a device or UDID — always go through
+  lease_acquire for that." These read well and directly support the M3.3 dogfood's core claim
+  (zero manual UDID handling) — an agent following these descriptions literally cannot bypass the
+  lease system.
+- Committed as `c6e80c2 feat(mcp): stdio MCP server -- 5 tools over existing daemon RPCs (M3.1)`
+  on `feat/m3.1-mcp`; local-merged to `master` as `a83a947 merge: M3.1 MCP server (5 tools over
+  existing daemon RPCs)`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
+  Worktree removed, branch deleted.
+
 ## Next action
 
-**M3 — Agent surface (MCP + onboarding) & dogfood** is next, per `docs/ROADMAP.md`: M3.1 MCP
-server (`simurgh mcp`, stdio — the five tools from `docs/ARCHITECTURE.md` §8: `lease_acquire`,
-`lease_renew`, `lease_release`, `lease_status`, `pool_status`; tool descriptions are written for
-agent consumption and reviewed as API surface per the doc's own instruction — this is a thin
-translation layer over the already-existing, already-tested `internal/daemon` RPCs, using the
-official `modelcontextprotocol/go-sdk`, pinned in `go.mod`), M3.2 `simurgh init` (writes
-`.simurgh.yaml` + an agent rules snippet + a `.mcp.json` entry, idempotent), M3.3 **dogfood** —
-the actual v0 exit demo the owner explicitly wants to see: register `simurgh mcp` with Claude
-Code, run TWO parallel Claude Code sessions against the `test/fixtures/SampleApp` fixture (already
-built and proven in M2.1), each independently told to acquire → build → launch → screenshot →
-release, with zero collisions and zero manual UDID handling, capturing a real dogfood log
-(committed to `docs/dogfood/`) with both screenshots and `simurgh status` output mid-run as
-evidence. This is a genuinely different kind of verification than every prior package — it needs
-two real Claude Code sessions actually running concurrently against this MCP server, not just a
-live `[mac]` `simctl`/CLI check — worth planning the mechanics of how to actually drive two
-parallel Claude Code sessions from within this orchestration before diving in. After M3: M4
-(hardening + polish), tag `v0.0.1` per `~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar (all
-M0–M4 gates green with pasted evidence in this file, the M3 dogfood log committed, a README
-quickstart a fresh Mac user could follow verbatim).
+M3.2 `simurgh init` is next: writes `.simurgh.yaml` (default device spec + labels, per
+`docs/ARCHITECTURE.md` §2's mention of this file), an agent rules snippet (short guidance text an
+agent's own rules file — CLAUDE.md-equivalent — can include, pointing at the MCP tools and their
+"never pick a UDID yourself" discipline), and a `.mcp.json` entry registering `simurgh mcp` (the
+same file format Claude Code itself reads for MCP server registration — check the real schema
+Claude Code expects, don't guess). Must be idempotent — running `simurgh init` twice should not
+duplicate the `.mcp.json` entry or clobber user edits to `.simurgh.yaml`.
+
+**M3.3 — dogfood — is the real v0 exit demo and needs its mechanics planned before diving in,**
+per the owner's explicit ask to see this specific evidence. The roadmap wants: register `simurgh
+mcp` with Claude Code, run TWO parallel Claude Code sessions against `test/fixtures/SampleApp`
+(already built and proven buildable in M2.1), each independently acquire → build → launch →
+screenshot → release, zero collisions, zero manual UDID handling, with a dogfood log (both
+screenshots + `simurgh status` output mid-run) committed to `docs/dogfood/`. Mechanics to work out
+next session: this can plausibly be driven via the `Agent` tool — two parallel Sonnet subagents
+(not Cursor CLI, since this needs to actually consume the MCP server as a client, not just write
+code), each given the MCP server config and told to independently acquire a lease, build+launch
+`SampleApp`, take a screenshot (likely via a simulator screenshot mechanism — `xcrun simctl io
+<udid> screenshot`, or `XcodeBuildMCP`/`ios-simulator` MCP tools if reachable from a subagent
+context), and release, while the orchestrator watches `simurgh status` mid-run and captures it as
+evidence. Whether a Claude Code subagent can directly attach to `simurgh mcp` as an MCP client
+(vs. the orchestrator needing to shell out and simulate the tool calls on the subagent's behalf)
+is the open mechanical question worth resolving first — investigate before writing a work-package
+spec for this one, since it's not a normal "spec → dispatch to Cursor" package like every other
+piece of this engagement. After M3: M4 (hardening + polish), tag `v0.0.1` per
+`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar (all M0–M4 gates green with pasted evidence in
+this file, the M3 dogfood log committed, a README quickstart a fresh Mac user could follow
+verbatim).

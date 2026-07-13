@@ -1,0 +1,64 @@
+{
+  "scenario": "B6",
+  "arm": "simurgh",
+  "agent": "A",
+  "rep": 1,
+  "udid": "79D514A5-3772-41CE-822A-BFE86FF11926",
+  "worktree": "/Users/OWNER/Documents/simurgh/bench/results/20260713T214256Z/wt-simurgh-rep1-A",
+  "timestamp": "2026-07-13T21:51:29Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 32920446343000,
+      "end_ns": 33385466283541,
+      "duration_ns": 465019940541,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "�🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢] 100% archived en\r[🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢] 100% archived 1 locales/Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/Metadata.appintents/nlu\n/Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/Metadata.appintents/nlu/8db8e5e58f646b1e3c8ab42ce01d7157.version\n\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/Lancer.debug.dylib (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T214256Z/wt-simurgh-rep1-A\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/Lancer.debug.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/__preview.dylib (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T214256Z/wt-simurgh-rep1-A\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/__preview.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T214256Z/wt-simurgh-rep1-A\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --entitlements /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Intermediates.noindex/Lancer.build/Debug-iphonesimulator/Lancer.build/Lancer.app.xcent --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app\n\nRegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T214256Z/wt-simurgh-rep1-A\n    builtin-RegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app\n\nValidate /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T214256Z/wt-simurgh-rep1-A\n    builtin-validationUtility /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T214256Z/wt-simurgh-rep1-A\n    /usr/bin/touch -c /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-117/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [283.825 sec]"
+    },
+    {
+      "step": "install",
+      "start_ns": 33399049103333,
+      "end_ns": 33418057161541,
+      "duration_ns": 19008058208,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 33419351879291,
+      "end_ns": 33425714995250,
+      "duration_ns": 6363115959,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 33425830823583,
+      "end_ns": 33427825923166,
+      "duration_ns": 1995099583,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 8CA12E03-E90F-4C13-9280-1CA8A73D55D0 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T214256Z/run-B6-simurgh-rep1-A.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 33428560395583,
+      "end_ns": 33429332713750,
+      "duration_ns": 772318167,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "install_clobber": {
+    "hash_after_install": "eb25223d1bbe6fa80f03d8650aa47785e0914515c02b965798957aa327d2a494",
+    "hash_before_terminate": "eb25223d1bbe6fa80f03d8650aa47785e0914515c02b965798957aa327d2a494",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 493158532458,
+  "success": true
+}

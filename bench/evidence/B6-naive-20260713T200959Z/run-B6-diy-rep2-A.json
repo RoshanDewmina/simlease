@@ -1,0 +1,38 @@
+{
+  "scenario": "B6",
+  "arm": "diy",
+  "agent": "A",
+  "rep": 2,
+  "udid": "7FE18A0C-2E98-41AC-B8FE-9A2AD2777CDA",
+  "worktree": "/Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-diy-rep2-A",
+  "timestamp": "2026-07-13T20:50:55Z",
+  "steps": [
+    {
+      "step": "terminate",
+      "start_ns": 29795390739916,
+      "end_ns": 29795558202500,
+      "duration_ns": 167462584,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "unclassified_failure",
+          "evidence": "nonzero exit, no known pattern matched"
+        }
+      ],
+      "log": ""
+    }
+  ],
+  "install_clobber": {
+    "hash_after_install": "",
+    "hash_before_terminate": "",
+    "clobbered": false
+  },
+  "incidents": [
+    {
+      "type": "unclassified_failure",
+      "evidence": "nonzero exit, no known pattern matched"
+    }
+  ],
+  "total_duration_ns": 167462584,
+  "success": false
+}

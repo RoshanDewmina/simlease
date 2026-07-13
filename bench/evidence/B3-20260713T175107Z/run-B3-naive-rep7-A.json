@@ -1,0 +1,77 @@
+{
+  "scenario": "B3",
+  "arm": "naive",
+  "agent": "A",
+  "rep": 7,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "timestamp": "2026-07-13T17:52:15Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 19066736993166,
+      "end_ns": 19067851261625,
+      "duration_ns": 1114268459,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Command line invocation:\n    /Applications/Xcode-beta.app/Contents/Developer/usr/bin/xcodebuild build -project /Users/OWNER/Documents/simurgh/bench/../test/fixtures/SampleApp/SampleApp.xcodeproj -scheme SampleApp -configuration Debug -destination \"platform=iOS Simulator,name=iPhone 17 Pro\" OTHER_SWIFT_FLAGS=-DAGENT_A\n\nBuild settings from command line:\n    OTHER_SWIFT_FLAGS = -DAGENT_A\n\nBuild Preparation\nBuild task concurrency set to 6 via user default IDEBuildOperationMaxNumberOfConcurrentCompileTasks\n\nComputePackagePrebuildTargetDependencyGraph\n\nPrepare packages\n\nCreateBuildRequest\n\nSendProjectDescription\n\nCreateBuildOperation\n\nComputeTargetDependencyGraph\nnote: Building targets in dependency order\nnote: Target dependency graph (1 target)\n    Target 'SampleApp' in project 'SampleApp' (no dependencies)\n\nGatherProvisioningInputs\n\nCreateBuildDescription\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -x c -c /dev/null\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details\n\nBuild description signature: 052d25813545e03bb4c27e94de9e9abb\nBuild description path: /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/XCBuildData/052d25813545e03bb4c27e94de9e9abb.xcbuilddata\nClangStatCache /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk /Users/OWNER/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A5355p-802b3160ec225d8f0f354b513c6f7a323243818bda632a4370e1cc7a9fd181c5.sdkstatcache\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/SampleApp.xcodeproj\n    /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -o /Users/OWNER/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A5355p-802b3160ec225d8f0f354b513c6f7a323243818bda632a4370e1cc7a9fd181c5.sdkstatcache\n\nProcessInfoPlistFile /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/Info.plist (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-infoPlistUtility /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -o /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [0.594 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 19068555638916,
+      "end_ns": 19068660245708,
+      "duration_ns": 104606792,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for iPhone 17 Pro (095F8B3A-FEA3-4031-A2A5-561755740730).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 19068711398666,
+      "end_ns": 19068963493208,
+      "duration_ns": 252094542,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 19069141183625,
+      "end_ns": 19074290392083,
+      "duration_ns": 5149208458,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "AGENT_BADGE=A\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 19074320331125,
+      "end_ns": 19074760747541,
+      "duration_ns": 440416416,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: CCB3D382-DE5E-4588-B3BA-14912473C7C0 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T175107Z/run-B3-naive-rep7-A.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 19074934167166,
+      "end_ns": 19075056113958,
+      "duration_ns": 121946792,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "A",
+    "actual": "A",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "c6acc6f6b7861a6ce6363164e589e769a2d6aa16572892fef294b2dc5056cfa7",
+    "hash_before_terminate": "c6acc6f6b7861a6ce6363164e589e769a2d6aa16572892fef294b2dc5056cfa7",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 7182541459,
+  "success": true
+}

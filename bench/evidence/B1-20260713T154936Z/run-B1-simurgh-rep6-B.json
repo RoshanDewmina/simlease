@@ -1,0 +1,91 @@
+{
+  "scenario": "B1",
+  "arm": "simurgh",
+  "agent": "B",
+  "rep": 6,
+  "udid": "DA018664-A925-4025-B0BE-54AAD7304187",
+  "timestamp": "2026-07-13T16:16:12Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 13197196799250,
+      "end_ns": 13244290942208,
+      "duration_ns": 47094142958,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "leapp --product-path /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app --extracted-metadata-path /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Metadata.appintents --metadata-file-list /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyMetadataFileList --source-file /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist --archive-ssu-assets\n2026-07-13 12:15:03.671 appintentsnltrainingprocessor[29880:790099] Parsing options for appintentsnltrainingprocessor\n2026-07-13 12:15:03.673 appintentsnltrainingprocessor[29880:790099] Starting AppIntents SSU YAML Generation\n2026-07-13 12:15:03.676 appintentsnltrainingprocessor[29880:790099] No AppShortcuts found - Skipping.\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nRegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-RegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    /usr/bin/touch -c /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-35/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [35.172 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 13266618953708,
+      "end_ns": 13269470243625,
+      "duration_ns": 2851289917,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for simurgh-clone[lease-35:iPhone 17 Pro:27.0] (DA018664-A925-4025-B0BE-54AAD7304187).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 13270034973125,
+      "end_ns": 13299618011708,
+      "duration_ns": 29583038583,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 13300501251666,
+      "end_ns": 13306111779791,
+      "duration_ns": 5610528125,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "no AGENT_BADGE print observed within 5s healthy window"
+        }
+      ],
+      "log": ""
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [],
+      "log": "skipped: app not healthy"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 13311491426916,
+      "end_ns": 13312455234125,
+      "duration_ns": 963807209,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "B",
+    "actual": "none",
+    "match": false
+  },
+  "install_clobber": {
+    "hash_after_install": "d4e2981df58afbf3af520a1ff9839137940c27c2dc8a49052fbf1d4216f74a5d",
+    "hash_before_terminate": "d4e2981df58afbf3af520a1ff9839137940c27c2dc8a49052fbf1d4216f74a5d",
+    "clobbered": false
+  },
+  "incidents": [
+    {
+      "type": "launch_destination_failure",
+      "evidence": "no AGENT_BADGE print observed within 5s healthy window"
+    },
+    {
+      "type": "wrong_variant",
+      "evidence": "expected agent-badge-B, observed none"
+    }
+  ],
+  "total_duration_ns": 86102806792,
+  "success": false
+}

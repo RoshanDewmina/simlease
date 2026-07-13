@@ -1,0 +1,77 @@
+{
+  "scenario": "B1",
+  "arm": "diy",
+  "agent": "A",
+  "rep": 7,
+  "udid": "B210C073-839C-44B0-93C5-EF4E360EC8CB",
+  "timestamp": "2026-07-13T16:02:00Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 12411603400583,
+      "end_ns": 12429860023458,
+      "duration_ns": 18256622875,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "5d8f0f354b513c6f7a323243818bda632a4370e1cc7a9fd181c5.sdkstatcache\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/SampleApp.xcodeproj\n    /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -o /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A5355p-802b3160ec225d8f0f354b513c6f7a323243818bda632a4370e1cc7a9fd181c5.sdkstatcache\n\nProcessInfoPlistFile /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/Info.plist (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-infoPlistUtility /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -o /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist\n\nCopySwiftLibs /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib --scan-folder /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Frameworks --scan-folder /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/PlugIns --scan-folder /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SystemExtensions --scan-folder /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.1.5194.15.4q2Nzh/Metal.xctoolchain --toolchain /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os\n\nPruneExplicitPrecompiledModules /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/A-B1-20260713T154936Z/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [3.823 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 12435575326083,
+      "end_ns": 12435989153750,
+      "duration_ns": 413827667,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for bench-diy-A-B1-20260713T154936Z (B210C073-839C-44B0-93C5-EF4E360EC8CB).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 12436332915708,
+      "end_ns": 12447129798583,
+      "duration_ns": 10796882875,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 12448223116791,
+      "end_ns": 12455082524791,
+      "duration_ns": 6859408000,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "AGENT_BADGE=A\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 12455175373583,
+      "end_ns": 12459091957000,
+      "duration_ns": 3916583417,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: C0E0B378-A31E-4826-B651-815F59BB7F48 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T154936Z/run-B1-diy-rep7-A.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 12459798688166,
+      "end_ns": 12460316801541,
+      "duration_ns": 518113375,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "A",
+    "actual": "A",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "38f65d1ded786c842ae3c388ad1835f7b91d12eed8abb2fe46f03f742b287684",
+    "hash_before_terminate": "38f65d1ded786c842ae3c388ad1835f7b91d12eed8abb2fe46f03f742b287684",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 40761438209,
+  "success": true
+}

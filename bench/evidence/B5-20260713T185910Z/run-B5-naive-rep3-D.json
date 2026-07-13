@@ -1,0 +1,95 @@
+{
+  "scenario": "B5",
+  "arm": "naive",
+  "agent": "D",
+  "rep": 3,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "timestamp": "2026-07-13T19:00:00Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 23129580738875,
+      "end_ns": 23133304232333,
+      "duration_ns": 3723493458,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "dxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/Frameworks --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/PlugIns --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/SystemExtensions --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.1.5194.15.4q2Nzh/Metal.xctoolchain --toolchain /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [2.419 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 23134444821416,
+      "end_ns": 23134672572500,
+      "duration_ns": 227751084,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for iPhone 17 Pro (095F8B3A-FEA3-4031-A2A5-561755740730).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 23134785174833,
+      "end_ns": 23135179767666,
+      "duration_ns": 394592833,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 23135435695333,
+      "end_ns": 23140633805125,
+      "duration_ns": 5198109792,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "no AGENT_BADGE print observed within 5s healthy window"
+        }
+      ],
+      "log": "An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):\nSimulator device failed to launch dev.simurgh.fixtures.sampleapp.\nNo such process\nUnderlying error (domain=NSPOSIXErrorDomain, code=3):\n\tApplication launch for 'dev.simurgh.fixtures.sampleapp' did not return a process handle nor launch error.\n\tNo such process"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [],
+      "log": "skipped: app not healthy"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 23140811618041,
+      "end_ns": 23140950985833,
+      "duration_ns": 139367792,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "D",
+    "actual": "none",
+    "match": false
+  },
+  "install_clobber": {
+    "hash_after_install": "12fba56a7a5b747bf585a8440c564d1aa0b00716ac1fd6b00ca817a010e594a7",
+    "hash_before_terminate": "69bfc09990c78e4e1cb063af8dee9b8de584c24622105d686f718196e8040a0e",
+    "clobbered": true
+  },
+  "incidents": [
+    {
+      "type": "launch_destination_failure",
+      "evidence": "no AGENT_BADGE print observed within 5s healthy window"
+    },
+    {
+      "type": "wrong_variant",
+      "evidence": "expected agent-badge-D, observed none"
+    },
+    {
+      "type": "install_clobber",
+      "evidence": "installed binary hash changed between install and terminate"
+    }
+  ],
+  "total_duration_ns": 9683314959,
+  "success": false
+}

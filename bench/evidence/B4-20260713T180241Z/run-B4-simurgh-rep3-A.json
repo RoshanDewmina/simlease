@@ -1,0 +1,77 @@
+{
+  "scenario": "B4",
+  "arm": "simurgh",
+  "agent": "A",
+  "rep": 3,
+  "udid": "A9ABE756-7C0B-4752-AFA4-4D75E0154A05",
+  "timestamp": "2026-07-13T18:52:14Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 22632219781875,
+      "end_ns": 22647791084666,
+      "duration_ns": 15571302791,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "pp --product-path /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app --extracted-metadata-path /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Metadata.appintents --metadata-file-list /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyMetadataFileList --source-file /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist --archive-ssu-assets\n2026-07-13 14:51:47.493 appintentsnltrainingprocessor[77279:1690427] Parsing options for appintentsnltrainingprocessor\n2026-07-13 14:51:47.493 appintentsnltrainingprocessor[77279:1690427] Starting AppIntents SSU YAML Generation\n2026-07-13 14:51:47.493 appintentsnltrainingprocessor[77279:1690427] No AppShortcuts found - Skipping.\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nRegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-RegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    /usr/bin/touch -c /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-91/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [10.902 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 22649970192250,
+      "end_ns": 22656172081750,
+      "duration_ns": 6201889500,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for simurgh-clone[lease-91:iPhone 17 Pro:27.0] (A9ABE756-7C0B-4752-AFA4-4D75E0154A05).\n[2026-07-13 18:51:50 +0000] Status=2, isTerminal=NO, Elapsed=00:19.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)\n\t\tMigration Elapsed:00:17 seconds\n\n[2026-07-13 18:51:52 +0000] Status=2, isTerminal=NO, Elapsed=00:20.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)\n\t\tMigration Elapsed:00:18 seconds\n\n[2026-07-13 18:51:56 +0000] Status=4294967295, isTerminal=YES, Elapsed=00:24.\n\tFinished"
+    },
+    {
+      "step": "install",
+      "start_ns": 22656379873500,
+      "end_ns": 22665640030875,
+      "duration_ns": 9260157375,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 22666097011000,
+      "end_ns": 22671400684375,
+      "duration_ns": 5303673375,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "AGENT_BADGE=A\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 22671460363250,
+      "end_ns": 22673647059916,
+      "duration_ns": 2186696666,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 67808A4F-389B-4EA1-8B01-D0D629578E54 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T180241Z/run-B4-simurgh-rep3-A.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 22674115738125,
+      "end_ns": 22674416061583,
+      "duration_ns": 300323458,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "A",
+    "actual": "A",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "3dd92f0098ab9941417d98ff47b83b7720398d7d39dc71e0ca5903eccf1c9c31",
+    "hash_before_terminate": "3dd92f0098ab9941417d98ff47b83b7720398d7d39dc71e0ca5903eccf1c9c31",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 38824043165,
+  "success": true
+}

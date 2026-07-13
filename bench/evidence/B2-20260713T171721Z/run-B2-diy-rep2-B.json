@@ -1,0 +1,77 @@
+{
+  "scenario": "B2",
+  "arm": "diy",
+  "agent": "B",
+  "rep": 2,
+  "udid": "7137DC38-0AF9-497A-8697-A98CBEBFC8DC",
+  "timestamp": "2026-07-13T17:23:51Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 17287979848916,
+      "end_ns": 17314040103458,
+      "duration_ns": 26060254542,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "497A-8697-A98CBEBFC8DC\" OTHER_SWIFT_FLAGS=-DAGENT_B -derivedDataPath /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B2-20260713T171721Z/DerivedData -clonedSourcePackagesDirPath /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B2-20260713T171721Z/SwiftPM\n\nBuild settings from command line:\n    OTHER_SWIFT_FLAGS = -DAGENT_B\n\nBuild Preparation\nBuild task concurrency set to 6 via user default IDEBuildOperationMaxNumberOfConcurrentCompileTasks\n\nComputePackagePrebuildTargetDependencyGraph\n\nPrepare packages\n\nCreateBuildRequest\n\nSendProjectDescription\n\nCreateBuildOperation\n\nComputeTargetDependencyGraph\nnote: Building targets in dependency order\nnote: Target dependency graph (1 target)\n    Target 'SampleApp' in project 'SampleApp' (no dependencies)\n\nGatherProvisioningInputs\n\nCreateBuildDescription\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -x c -c /dev/null\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details\n\nBuild description signature: c0c29c5d11b3b393c42d6190d59d9cf6\nBuild description path: /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B2-20260713T171721Z/DerivedData/Build/Intermediates.noindex/XCBuildData/c0c29c5d11b3b393c42d6190d59d9cf6.xcbuilddata\nClangStatCache /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B2-20260713T171721Z/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A5355p-802b3160ec225d8f0f354b513c6f7a323243818bda632a4370e1cc7a9fd181c5.sdkstatcache\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/SampleApp.xcodeproj\n    /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -o /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B2-20260713T171721Z/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A5355p-802b3160ec225d8f0f354b513c6f7a323243818bda632a4370e1cc7a9fd181c5.sdkstatcache\n\nProcessInfoPlistFile /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B2-20260713T171721Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/Info.plist (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-infoPlistUtility /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B2-20260713T171721Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -o /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B2-20260713T171721Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist\n\nPruneExplicitPrecompiledModules /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B2-20260713T171721Z/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B2-20260713T171721Z/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [5.705 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 17323613987958,
+      "end_ns": 17324901462708,
+      "duration_ns": 1287474750,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for bench-diy-B-B2-20260713T171721Z (7137DC38-0AF9-497A-8697-A98CBEBFC8DC).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 17325400474208,
+      "end_ns": 17347376803125,
+      "duration_ns": 21976328917,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 17348447714500,
+      "end_ns": 17354533714916,
+      "duration_ns": 6086000416,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "AGENT_BADGE=B\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 17354620065375,
+      "end_ns": 17366653212500,
+      "duration_ns": 12033147125,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: AA920762-3D67-4484-B9AD-2A68600CFE68 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T171721Z/run-B2-diy-rep2-B.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 17369867903541,
+      "end_ns": 17371752369000,
+      "duration_ns": 1884465459,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "B",
+    "actual": "B",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "d260950ef270b45812f100b402b73da72617b4ace22a49772af8ebe99f692f65",
+    "hash_before_terminate": "d260950ef270b45812f100b402b73da72617b4ace22a49772af8ebe99f692f65",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 69327671209,
+  "success": true
+}

@@ -1,0 +1,104 @@
+{
+  "scenario": "B2",
+  "arm": "naive",
+  "agent": "A",
+  "rep": 3,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "timestamp": "2026-07-13T17:17:57Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 17008565754083,
+      "end_ns": 17010548287000,
+      "duration_ns": 1982532917,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "llvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp --dependency-file /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/Objects-normal/arm64/SampleApp_dependency_info.dat --stringsdata-file /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/Objects-normal/arm64/SampleApp.SwiftFileList --metadata-file-list /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyMetadataFileList --static-metadata-file-list /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyStaticMetadataFileList --swift-const-vals-list /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/Objects-normal/arm64/SampleApp.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization\n2026-07-13 13:17:50.360 appintentsmetadataprocessor[28984:1127382] Starting appintentsmetadataprocessor export\n2026-07-13 13:17:50.361 appintentsmetadataprocessor[28984:1127382] warning: Metadata extraction skipped, no AppIntents.framework dependency found\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [1.255 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 17011454396291,
+      "end_ns": 17011615266041,
+      "duration_ns": 160869750,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for iPhone 17 Pro (095F8B3A-FEA3-4031-A2A5-561755740730).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 17011730050208,
+      "end_ns": 17012236615500,
+      "duration_ns": 506565292,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 17012458987833,
+      "end_ns": 17017604709375,
+      "duration_ns": 5145721542,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "no AGENT_BADGE print observed within 5s healthy window"
+        }
+      ],
+      "log": "dev.simurgh.fixtures.sampleapp: 29427"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [],
+      "log": "skipped: app not healthy"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 17017774946500,
+      "end_ns": 17017901330708,
+      "duration_ns": 126384208,
+      "exit_code": 3,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "Simulator device failed to terminate dev.simurgh.fixtures.sampleapp."
+        }
+      ],
+      "log": "An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):\nSimulator device failed to terminate dev.simurgh.fixtures.sampleapp.\nfound nothing to terminate\nUnderlying error (domain=NSPOSIXErrorDomain, code=3):\n\tThe request to terminate \"dev.simurgh.fixtures.sampleapp\" failed. found nothing to terminate\n\tfound nothing to terminate"
+    }
+  ],
+  "badge": {
+    "expected": "A",
+    "actual": "none",
+    "match": false
+  },
+  "install_clobber": {
+    "hash_after_install": "c6acc6f6b7861a6ce6363164e589e769a2d6aa16572892fef294b2dc5056cfa7",
+    "hash_before_terminate": "a31c8805a88739df8191ed7dd5b9ea3a0f022252a8fd67f069a535fd5d60884b",
+    "clobbered": true
+  },
+  "incidents": [
+    {
+      "type": "launch_destination_failure",
+      "evidence": "no AGENT_BADGE print observed within 5s healthy window"
+    },
+    {
+      "type": "launch_destination_failure",
+      "evidence": "Simulator device failed to terminate dev.simurgh.fixtures.sampleapp."
+    },
+    {
+      "type": "wrong_variant",
+      "evidence": "expected agent-badge-A, observed none"
+    },
+    {
+      "type": "install_clobber",
+      "evidence": "installed binary hash changed between install and terminate"
+    }
+  ],
+  "total_duration_ns": 7922073709,
+  "success": false
+}

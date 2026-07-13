@@ -1,0 +1,77 @@
+{
+  "scenario": "B3",
+  "arm": "naive",
+  "agent": "A",
+  "rep": 9,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "timestamp": "2026-07-13T17:52:31Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 19083886858000,
+      "end_ns": 19084733749166,
+      "duration_ns": 846891166,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "ary/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A5355p-802b3160ec225d8f0f354b513c6f7a323243818bda632a4370e1cc7a9fd181c5.sdkstatcache\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/SampleApp.xcodeproj\n    /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -o /Users/OWNER/Library/Developer/Xcode/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A5355p-802b3160ec225d8f0f354b513c6f7a323243818bda632a4370e1cc7a9fd181c5.sdkstatcache\n\nProcessInfoPlistFile /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/Info.plist (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-infoPlistUtility /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -o /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist\n\nCopySwiftLibs /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/Frameworks --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/PlugIns --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/SystemExtensions --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.1.5194.15.4q2Nzh/Metal.xctoolchain --toolchain /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Products/Debug-iphonesimulator/SampleApp.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [0.334 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 19085439594500,
+      "end_ns": 19085542884791,
+      "duration_ns": 103290291,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for iPhone 17 Pro (095F8B3A-FEA3-4031-A2A5-561755740730).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 19085594887041,
+      "end_ns": 19085834956500,
+      "duration_ns": 240069459,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 19086019609375,
+      "end_ns": 19091167125083,
+      "duration_ns": 5147515708,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "AGENT_BADGE=A\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 19091196232125,
+      "end_ns": 19091650973291,
+      "duration_ns": 454741166,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: CCB3D382-DE5E-4588-B3BA-14912473C7C0 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T175107Z/run-B3-naive-rep9-A.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 19091827215166,
+      "end_ns": 19091950406000,
+      "duration_ns": 123190834,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "A",
+    "actual": "A",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "c6acc6f6b7861a6ce6363164e589e769a2d6aa16572892fef294b2dc5056cfa7",
+    "hash_before_terminate": "c6acc6f6b7861a6ce6363164e589e769a2d6aa16572892fef294b2dc5056cfa7",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 6915698624,
+  "success": true
+}

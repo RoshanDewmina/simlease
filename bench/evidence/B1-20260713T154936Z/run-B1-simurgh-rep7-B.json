@@ -1,0 +1,77 @@
+{
+  "scenario": "B1",
+  "arm": "simurgh",
+  "agent": "B",
+  "rep": 7,
+  "udid": "2D5BED4E-FD27-437B-BF98-EB96B4E4D23B",
+  "timestamp": "2026-07-13T16:18:11Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 13322211663583,
+      "end_ns": 13357409666000,
+      "duration_ns": 35198002417,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "leapp --product-path /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app --extracted-metadata-path /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Metadata.appintents --metadata-file-list /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyMetadataFileList --source-file /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist --archive-ssu-assets\n2026-07-13 12:16:56.968 appintentsnltrainingprocessor[32733:803117] Parsing options for appintentsnltrainingprocessor\n2026-07-13 12:16:56.969 appintentsnltrainingprocessor[32733:803117] Starting AppIntents SSU YAML Generation\n2026-07-13 12:16:56.971 appintentsnltrainingprocessor[32733:803117] No AppShortcuts found - Skipping.\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nRegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-RegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    /usr/bin/touch -c /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-38/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [25.347 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 13363733824000,
+      "end_ns": 13374037935791,
+      "duration_ns": 10304111791,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for simurgh-clone[lease-38:iPhone 17 Pro:27.0] (2D5BED4E-FD27-437B-BF98-EB96B4E4D23B).\n[2026-07-13 16:17:04 +0000] Status=2, isTerminal=NO, Elapsed=00:43.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)\n\t\tMigration Elapsed:00:37 seconds\n\n[2026-07-13 16:17:05 +0000] Status=2, isTerminal=NO, Elapsed=00:45.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.WebBookmarks.migrator (WebBookmarks.migrator)\n\t\tMigration Elapsed:00:38 seconds\n\n[2026-07-13 16:17:06 +0000] Status=2, isTerminal=NO, Elapsed=00:45.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)\n\t\tMigration Elapsed:00:39 seconds\n\n[2026-07-13 16:17:07 +0000] Status=2, isTerminal=NO, Elapsed=00:46.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)\n\t\tMigration Elapsed:00:40 seconds\n\n[2026-07-13 16:17:08 +0000] Status=2, isTerminal=NO, Elapsed=00:47.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)\n\t\tMigration Elapsed:00:41 seconds\n\n[2026-07-13 16:17:09 +0000] Status=2, isTerminal=NO, Elapsed=00:48.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.facetime.migrator (FaceTimeMigrator.migrator)\n\t\tMigration Elapsed:00:42 seconds\n\n[2026-07-13 16:17:10 +0000] Status=2, isTerminal=NO, Elapsed=00:49.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.facetime.migrator (FaceTimeMigrator.migrator)\n\t\tMigration Elapsed:00:43 seconds\n\n[2026-07-13 16:17:11 +0000] Status=2, isTerminal=NO, Elapsed=00:50.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.facetime.migrator (FaceTimeMigrator.migrator)\n\t\tMigration Elapsed:00:44 seconds\n\n[2026-07-13 16:17:12 +0000] Status=2, isTerminal=NO, Elapsed=00:51.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.PreferencesMigrator (PreferencesMigrator.migrator)\n\t\tMigration Elapsed:00:45 seconds\n\n[2026-07-13 16:17:13 +0000] Status=4294967295, isTerminal=YES, Elapsed=00:52.\n\tFinished"
+    },
+    {
+      "step": "install",
+      "start_ns": 13374296515750,
+      "end_ns": 13410071171250,
+      "duration_ns": 35774655500,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 13411150464750,
+      "end_ns": 13416720981833,
+      "duration_ns": 5570517083,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "AGENT_BADGE=B\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 13416817915541,
+      "end_ns": 13428838592750,
+      "duration_ns": 12020677209,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 7CE780D9-0F7C-49FA-95B9-EE552BE81F97 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T154936Z/run-B1-simurgh-rep7-B.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 13430170028791,
+      "end_ns": 13431424038000,
+      "duration_ns": 1254009209,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "B",
+    "actual": "B",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "62be1b6cf50552faf2f436b187588c8ec137a8e8c50fe39f83c0666ee8d5e863",
+    "hash_before_terminate": "62be1b6cf50552faf2f436b187588c8ec137a8e8c50fe39f83c0666ee8d5e863",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 100121973209,
+  "success": true
+}

@@ -1,0 +1,77 @@
+{
+  "scenario": "B2",
+  "arm": "simurgh",
+  "agent": "D",
+  "rep": 2,
+  "udid": "E5872901-567F-4523-A3FE-C1465E3B30CD",
+  "timestamp": "2026-07-13T17:38:25Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 18159858217666,
+      "end_ns": 18192046310541,
+      "duration_ns": 32188092875,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "pp --product-path /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app --extracted-metadata-path /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Metadata.appintents --metadata-file-list /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyMetadataFileList --source-file /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist --archive-ssu-assets\n2026-07-13 13:37:31.574 appintentsnltrainingprocessor[62242:1271891] Parsing options for appintentsnltrainingprocessor\n2026-07-13 13:37:31.576 appintentsnltrainingprocessor[62242:1271891] Starting AppIntents SSU YAML Generation\n2026-07-13 13:37:31.576 appintentsnltrainingprocessor[62242:1271891] No AppShortcuts found - Skipping.\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nRegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-RegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    /usr/bin/touch -c /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-61/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [27.483 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 18210980462583,
+      "end_ns": 18212340087000,
+      "duration_ns": 1359624417,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for simurgh-clone[lease-61:iPhone 17 Pro:27.0] (E5872901-567F-4523-A3FE-C1465E3B30CD).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 18212776603000,
+      "end_ns": 18225476668458,
+      "duration_ns": 12700065458,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 18226559689125,
+      "end_ns": 18232390125041,
+      "duration_ns": 5830435916,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "AGENT_BADGE=D\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 18232481640750,
+      "end_ns": 18244267570625,
+      "duration_ns": 11785929875,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 03910F67-480B-451C-A290-21B9EC2924B4 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T171721Z/run-B2-simurgh-rep2-D.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 18244985143791,
+      "end_ns": 18245509017000,
+      "duration_ns": 523873209,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "D",
+    "actual": "D",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "0644b6b2a8de15447e8e98454301889be51c1c9feb046b88e9058dde9b146613",
+    "hash_before_terminate": "0644b6b2a8de15447e8e98454301889be51c1c9feb046b88e9058dde9b146613",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 64388021750,
+  "success": true
+}

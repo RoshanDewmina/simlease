@@ -1,0 +1,64 @@
+{
+  "scenario": "B6",
+  "arm": "diy",
+  "agent": "B",
+  "rep": 1,
+  "udid": "EE74BCDB-BFF0-4FA6-AAB0-F1723C82A73F",
+  "worktree": "/Users/OWNER/Documents/simurgh/bench/results/20260713T212218Z/wt-diy-rep1-B",
+  "timestamp": "2026-07-13T21:32:06Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 31740060437916,
+      "end_ns": 32223191160416,
+      "duration_ns": 483130722500,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "app/Metadata.appintents/nlu/4fc087f950d17d8e596ebf03720bec5f.version\n\n\nCodeSign /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/Lancer.debug.dylib (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T212218Z/wt-diy-rep1-B\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/Lancer.debug.dylib\n\nCodeSign /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/__preview.dylib (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T212218Z/wt-diy-rep1-B\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/__preview.dylib\n\nCodeSign /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T212218Z/wt-diy-rep1-B\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --entitlements /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Intermediates.noindex/Lancer.build/Debug-iphonesimulator/Lancer.build/Lancer.app.xcent --timestamp\\=none --generate-entitlement-der /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app\n\nRegisterExecutionPolicyException /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T212218Z/wt-diy-rep1-B\n    builtin-RegisterExecutionPolicyException /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app\n\nValidate /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T212218Z/wt-diy-rep1-B\n    builtin-validationUtility /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T212218Z/wt-diy-rep1-B\n    /usr/bin/touch -c /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Documents/simurgh/bench/results/.scratch/b6-diy/B-B6-20260713T212218Z/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [242.594 sec]"
+    },
+    {
+      "step": "install",
+      "start_ns": 32238741733208,
+      "end_ns": 32253459739500,
+      "duration_ns": 14718006292,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 32255411355041,
+      "end_ns": 32261824251958,
+      "duration_ns": 6412896917,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 32261968111875,
+      "end_ns": 32264040746500,
+      "duration_ns": 2072634625,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 820317F1-D5C7-47CF-8DE1-5B47A3DE46D5 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T212218Z/run-B6-diy-rep1-B.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 32265011955208,
+      "end_ns": 32265768484541,
+      "duration_ns": 756529333,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "install_clobber": {
+    "hash_after_install": "0180d178183e6c9e9cd15984a900452ece2b5677edf3c6720d4992c7ca42f6af",
+    "hash_before_terminate": "0180d178183e6c9e9cd15984a900452ece2b5677edf3c6720d4992c7ca42f6af",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 507090789667,
+  "success": true
+}

@@ -1,0 +1,83 @@
+{
+  "scenario": "B6",
+  "arm": "naive",
+  "agent": "A",
+  "rep": 3,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "worktree": "/Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep3-A",
+  "timestamp": "2026-07-13T20:37:19Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 28642934777750,
+      "end_ns": 28957850641000,
+      "duration_ns": 314915863250,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "lu\n/Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app/Metadata.appintents/nlu/5141adf3425981ce566e4808e69bc9a1.version\n\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app/Lancer.debug.dylib (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep3-A\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app/Lancer.debug.dylib\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app/__preview.dylib (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep3-A\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app/__preview.dylib\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep3-A\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --entitlements /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Intermediates.noindex/Lancer.build/Debug-iphonesimulator/Lancer.build/Lancer.app.xcent --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app\n\nRegisterExecutionPolicyException /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep3-A\n    builtin-RegisterExecutionPolicyException /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app\n\nValidate /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep3-A\n    builtin-validationUtility /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep3-A\n    /usr/bin/touch -c /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Products/Debug-iphonesimulator/Lancer.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-fqhobyeusxlhadcgubjilmevgtjo/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [242.319 sec]"
+    },
+    {
+      "step": "install",
+      "start_ns": 28969585709625,
+      "end_ns": 28971689784875,
+      "duration_ns": 2104075250,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 28972280769750,
+      "end_ns": 28978217075250,
+      "duration_ns": 5936305500,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "app not resident in launchctl list 5s after launch"
+        }
+      ],
+      "log": ""
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [],
+      "log": "skipped: app not healthy"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 28978803997500,
+      "end_ns": 28979095745333,
+      "duration_ns": 291747833,
+      "exit_code": 3,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "Simulator device failed to terminate dev.lancer.mobile."
+        }
+      ],
+      "log": "An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):\nSimulator device failed to terminate dev.lancer.mobile.\nfound nothing to terminate\nUnderlying error (domain=NSPOSIXErrorDomain, code=3):\n\tThe request to terminate \"dev.lancer.mobile\" failed. found nothing to terminate\n\tfound nothing to terminate"
+    }
+  ],
+  "install_clobber": {
+    "hash_after_install": "091187c8b130544f6a2330eba5d203ce1bfd79e822c6f33622fd076caf0cde75",
+    "hash_before_terminate": "091187c8b130544f6a2330eba5d203ce1bfd79e822c6f33622fd076caf0cde75",
+    "clobbered": false
+  },
+  "incidents": [
+    {
+      "type": "launch_destination_failure",
+      "evidence": "app not resident in launchctl list 5s after launch"
+    },
+    {
+      "type": "launch_destination_failure",
+      "evidence": "Simulator device failed to terminate dev.lancer.mobile."
+    }
+  ],
+  "total_duration_ns": 323247991833,
+  "success": false
+}

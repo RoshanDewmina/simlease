@@ -1,0 +1,77 @@
+{
+  "scenario": "B1",
+  "arm": "diy",
+  "agent": "B",
+  "rep": 1,
+  "udid": "33FEE1E5-EF81-4F3E-AE3E-9B0BA770DCA4",
+  "timestamp": "2026-07-13T15:53:06Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 11854265843625,
+      "end_ns": 11891326837083,
+      "duration_ns": 37060993458,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "leApp.app/Info.plist --archive-ssu-assets\n2026-07-13 11:52:30.460 appintentsnltrainingprocessor[91238:630055] Parsing options for appintentsnltrainingprocessor\n2026-07-13 11:52:30.461 appintentsnltrainingprocessor[91238:630055] Starting AppIntents SSU YAML Generation\n2026-07-13 11:52:30.464 appintentsnltrainingprocessor[91238:630055] No AppShortcuts found - Skipping.\n\nCodeSign /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib\n\nCodeSign /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nRegisterExecutionPolicyException /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-RegisterExecutionPolicyException /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/test/fixtures/SampleApp\n    /usr/bin/touch -c /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Documents/simurgh/bench/results/.scratch/diy/B-B1-20260713T154936Z/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [26.149 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 11900992483666,
+      "end_ns": 11901576351625,
+      "duration_ns": 583867959,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for bench-diy-B-B1-20260713T154936Z (33FEE1E5-EF81-4F3E-AE3E-9B0BA770DCA4).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 11901948437000,
+      "end_ns": 11913694601375,
+      "duration_ns": 11746164375,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 11914407441541,
+      "end_ns": 11919984887041,
+      "duration_ns": 5577445500,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "AGENT_BADGE=B\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 11920069263500,
+      "end_ns": 11925382342083,
+      "duration_ns": 5313078583,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 4AE07C76-488D-4D12-8C76-8AD7FE4AA649 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T154936Z/run-B1-diy-rep1-B.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 11925969861333,
+      "end_ns": 11926384783666,
+      "duration_ns": 414922333,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "B",
+    "actual": "B",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "07378ba759046fa1d8f63b1c19f45796590c0c253d2bbe8eb81101af828baa03",
+    "hash_before_terminate": "07378ba759046fa1d8f63b1c19f45796590c0c253d2bbe8eb81101af828baa03",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 60696472208,
+  "success": true
+}

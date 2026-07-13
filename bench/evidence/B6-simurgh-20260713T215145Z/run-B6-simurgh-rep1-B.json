@@ -1,0 +1,74 @@
+{
+  "scenario": "B6",
+  "arm": "simurgh",
+  "agent": "B",
+  "rep": 1,
+  "udid": "F9CF837B-D1B7-4BEE-9D15-1FB685D3EA54",
+  "worktree": "/Users/OWNER/Documents/simurgh/bench/results/20260713T215145Z/wt-simurgh-rep1-B",
+  "timestamp": "2026-07-13T22:07:23Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 33449369112333,
+      "end_ns": 34205495894541,
+      "duration_ns": 756126782208,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "�🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢] 100% archived en\r[🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢🁢] 100% archived 1 locales/Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/Metadata.appintents/nlu\n/Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/Metadata.appintents/nlu/dab7b494e34b4ecacea2e65de08b1e33.version\n\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/Lancer.debug.dylib (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T215145Z/wt-simurgh-rep1-B\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/Lancer.debug.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/__preview.dylib (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T215145Z/wt-simurgh-rep1-B\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app/__preview.dylib\n\nCodeSign /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T215145Z/wt-simurgh-rep1-B\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --entitlements /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Intermediates.noindex/Lancer.build/Debug-iphonesimulator/Lancer.build/Lancer.app.xcent --timestamp\\=none --generate-entitlement-der /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app\n\nRegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T215145Z/wt-simurgh-rep1-B\n    builtin-RegisterExecutionPolicyException /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app\n\nValidate /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T215145Z/wt-simurgh-rep1-B\n    builtin-validationUtility /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T215145Z/wt-simurgh-rep1-B\n    /usr/bin/touch -c /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Products/Debug-iphonesimulator/Lancer.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-120/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [512.802 sec]"
+    },
+    {
+      "step": "install",
+      "start_ns": 34347703373500,
+      "end_ns": 34374504240750,
+      "duration_ns": 26800867250,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 34375794869458,
+      "end_ns": 34382358977166,
+      "duration_ns": 6564107708,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "app not resident in launchctl list 5s after launch"
+        }
+      ],
+      "log": ""
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [],
+      "log": "skipped: app not healthy"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 34382920388458,
+      "end_ns": 34383496135500,
+      "duration_ns": 575747042,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "install_clobber": {
+    "hash_after_install": "f2a523f1034b509421b1f5c552c4292f837c7152adc1ed8f06e219b0e45ad5a6",
+    "hash_before_terminate": "f2a523f1034b509421b1f5c552c4292f837c7152adc1ed8f06e219b0e45ad5a6",
+    "clobbered": false
+  },
+  "incidents": [
+    {
+      "type": "launch_destination_failure",
+      "evidence": "app not resident in launchctl list 5s after launch"
+    }
+  ],
+  "total_duration_ns": 790067504208,
+  "success": false
+}

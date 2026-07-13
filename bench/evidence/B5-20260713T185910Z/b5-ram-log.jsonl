@@ -1,0 +1,6 @@
+{"arm":"naive","rep":1,"min_observed_free_inactive_gb":4.55}
+{"arm":"naive","rep":2,"min_observed_free_inactive_gb":4.27}
+{"arm":"naive","rep":3,"min_observed_free_inactive_gb":4.16}
+{"arm":"simurgh","rep":1,"min_observed_free_inactive_gb":3.73}
+{"arm":"simurgh","rep":2,"min_observed_free_inactive_gb":3.67}
+{"arm":"simurgh","rep":3,"min_observed_free_inactive_gb":3.5}

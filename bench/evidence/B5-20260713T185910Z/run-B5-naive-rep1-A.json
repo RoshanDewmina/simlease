@@ -1,0 +1,118 @@
+{
+  "scenario": "B5",
+  "arm": "naive",
+  "agent": "A",
+  "rep": 1,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "timestamp": "2026-07-13T18:59:14Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 23092483804375,
+      "end_ns": 23094400069083,
+      "duration_ns": 1916264708,
+      "exit_code": 65,
+      "incidents": [
+        {
+          "type": "unclassified_failure",
+          "evidence": "nonzero exit, no known pattern matched"
+        }
+      ],
+      "log": "Command line invocation:\n    /Applications/Xcode-beta.app/Contents/Developer/usr/bin/xcodebuild build -project /Users/OWNER/Documents/simurgh/bench/../test/fixtures/SampleApp/SampleApp.xcodeproj -scheme SampleApp -configuration Debug -destination \"platform=iOS Simulator,name=iPhone 17 Pro\" OTHER_SWIFT_FLAGS=-DAGENT_A\n\nBuild settings from command line:\n    OTHER_SWIFT_FLAGS = -DAGENT_A\n\nBuild Preparation\nBuild task concurrency set to 6 via user default IDEBuildOperationMaxNumberOfConcurrentCompileTasks\n\nComputePackagePrebuildTargetDependencyGraph\n\nPrepare packages\n\nCreateBuildRequest\n\nSendProjectDescription\n\nCreateBuildOperation\n\nComputeTargetDependencyGraph\nnote: Building targets in dependency order\nnote: Target dependency graph (1 target)\n    Target 'SampleApp' in project 'SampleApp' (no dependencies)\n\nGatherProvisioningInputs\n\nCreateBuildDescription\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -x c -c /dev/null\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details\n\nBuild description signature: 255aa49c0c6ff391cfe4d7ff26fb3745\nBuild description path: /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/XCBuildData/255aa49c0c6ff391cfe4d7ff26fb3745.xcbuilddata\nerror: unable to open '/Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/XCBuildData/255aa49c0c6ff391cfe4d7ff26fb3745.xcbuilddata/manifest.json'\nerror: unable to load build file\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-dgdxllvorlrdvxfdwwogqpeizcpf/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\n** BUILD FAILED **\n\n\nThe following build commands failed:\n\tBuilding project SampleApp with scheme SampleApp and configuration Debug\n(1 failure)"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 23094468259666,
+      "end_ns": 23094606292041,
+      "duration_ns": 138032375,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for iPhone 17 Pro (095F8B3A-FEA3-4031-A2A5-561755740730).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "build failed or app bundle not found, install skipped"
+        }
+      ],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 23094665057375,
+      "end_ns": 23094684449250,
+      "duration_ns": 19391875,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "install failed, launch skipped"
+        }
+      ],
+      "log": ""
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [],
+      "log": "skipped: app not healthy"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 23094722124208,
+      "end_ns": 23094864423250,
+      "duration_ns": 142299042,
+      "exit_code": 3,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "Simulator device failed to terminate dev.simurgh.fixtures.sampleapp."
+        }
+      ],
+      "log": "An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):\nSimulator device failed to terminate dev.simurgh.fixtures.sampleapp.\nfound nothing to terminate\nUnderlying error (domain=NSPOSIXErrorDomain, code=3):\n\tThe request to terminate \"dev.simurgh.fixtures.sampleapp\" failed. found nothing to terminate\n\tfound nothing to terminate"
+    }
+  ],
+  "badge": {
+    "expected": "A",
+    "actual": "none",
+    "match": false
+  },
+  "install_clobber": {
+    "hash_after_install": "",
+    "hash_before_terminate": "",
+    "clobbered": false
+  },
+  "incidents": [
+    {
+      "type": "unclassified_failure",
+      "evidence": "nonzero exit, no known pattern matched"
+    },
+    {
+      "type": "launch_destination_failure",
+      "evidence": "build failed or app bundle not found, install skipped"
+    },
+    {
+      "type": "launch_destination_failure",
+      "evidence": "install failed, launch skipped"
+    },
+    {
+      "type": "launch_destination_failure",
+      "evidence": "Simulator device failed to terminate dev.simurgh.fixtures.sampleapp."
+    },
+    {
+      "type": "wrong_variant",
+      "evidence": "expected agent-badge-A, observed none"
+    }
+  ],
+  "total_duration_ns": 2215988000,
+  "success": false
+}

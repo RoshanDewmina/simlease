@@ -1,0 +1,64 @@
+{
+  "scenario": "B6",
+  "arm": "naive",
+  "agent": "B",
+  "rep": 1,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "worktree": "/Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep1-B",
+  "timestamp": "2026-07-13T20:21:35Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 27421813217333,
+      "end_ns": 27958355905500,
+      "duration_ns": 536542688167,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "lu\n/Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app/Metadata.appintents/nlu/0a92b01714e24832bd1bd25a22e01917.version\n\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app/Lancer.debug.dylib (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep1-B\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app/Lancer.debug.dylib\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app/__preview.dylib (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep1-B\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app/__preview.dylib\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep1-B\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --entitlements /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Intermediates.noindex/Lancer.build/Debug-iphonesimulator/Lancer.build/Lancer.app.xcent --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app\n\nRegisterExecutionPolicyException /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep1-B\n    builtin-RegisterExecutionPolicyException /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app\n\nValidate /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep1-B\n    builtin-validationUtility /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app (in target 'Lancer' from project 'Lancer')\n    cd /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/wt-naive-rep1-B\n    /usr/bin/touch -c /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Products/Debug-iphonesimulator/Lancer.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/Lancer-cjnlthsnhhsoancwutcagcoxclks/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [413.738 sec]"
+    },
+    {
+      "step": "install",
+      "start_ns": 27983128548916,
+      "end_ns": 28012214482000,
+      "duration_ns": 29085933084,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 28015338473041,
+      "end_ns": 28022217029041,
+      "duration_ns": 6878556000,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "dev.lancer.mobile: 39343"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 28022379014708,
+      "end_ns": 28033977015625,
+      "duration_ns": 11598000917,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: CCB3D382-DE5E-4588-B3BA-14912473C7C0 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/bench/results/20260713T200959Z/run-B6-naive-rep1-B.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 28034794503291,
+      "end_ns": 28035349415208,
+      "duration_ns": 554911917,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "install_clobber": {
+    "hash_after_install": "ff440eab816e533e70984f4bf53786596565a75b32c2d0449bb98a39ab1c527c",
+    "hash_before_terminate": "ff440eab816e533e70984f4bf53786596565a75b32c2d0449bb98a39ab1c527c",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 584660090085,
+  "success": true
+}

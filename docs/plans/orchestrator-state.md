@@ -1,0 +1,70 @@
+# Simurgh orchestrator state
+
+**Updated:** 2026-07-12 22:00 America/Toronto  
+**Owner:** Roshan  
+**Orchestrator:** Codex engineering-manager session  
+**Repository:** `/Users/roshansilva/Documents/simurgh`  
+**Current phase:** M0 — Skeleton
+
+## Operating decisions
+
+- `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and `docs/COMPETITOR_NOTES.md` are the living source of truth, in that order.
+- Phase order M0 → M1 → M2 → M3 → M4 is binding. No post-v0 work may enter v0.
+- Git module owner is inferred from the authenticated GitHub account: `github.com/RoshanDewmina/simurgh`.
+- The repository is local-only and has no remote. Do not push publicly. Until Roshan supplies a private remote, reviewed branches merge locally and GitHub PR / `claude-code-action` stages are recorded as unavailable rather than fabricated.
+- Routine implementation uses Cursor CLI `cursor-agent`; the shell command `agent` is a different, unauthenticated Grok CLI and must not be used for Cursor work.
+- Low-risk scaffolding/mechanical work routes to `composer-2.5`; routine implementation routes to `grok-4.5-high`; sensitive fallback/review routes to `claude-sonnet-5-high`.
+- Destructive and socket/LaunchAgent paths remain owner-visible `sensitive` work and require full-diff Sonnet-or-orchestrator review.
+
+## Toolchain inventory
+
+| Tool | Exact result | Status |
+|---|---|---|
+| Cursor Agent | `cursor-agent 2026.07.09-a3815c0` | ready |
+| Cursor default implementer | `grok-4.5-high` | ready |
+| Cursor mechanical model | `composer-2.5` | ready |
+| Cursor sensitive fallback/reviewer | `claude-sonnet-5-high` | ready |
+| Conflicting `agent` binary | Grok Build TUI `0.2.93`; unauthenticated; only `grok-4.5` | do not use |
+| GitHub CLI | authenticated as `RoshanDewmina`; no repo remote configured | local-only |
+| Go | `go1.26.5 darwin/arm64` | ready; exceeds 1.23 minimum |
+| Staticcheck | `2026.1 (v0.7.0)` | ready |
+| Xcode | `27.0` build `27A5194q` | ready |
+| CoreSimulator | iOS 27.0 installed; iPhone 17 Pro available | ready |
+
+## Active work packages
+
+| Package | Branch | Worktree | Model | Risk | Status | Gate |
+|---|---|---|---|---|---|---|
+| M0.1 repo scaffold | `feat/m0-repo-scaffold` | `.worktrees/m0-repo-scaffold` | `composer-2.5` | low | spec'd | pending |
+| M0.2 IPC + daemon | pending | pending | `grok-4.5-high` | sensitive | blocked on M0.1 + owner-visible approval | pending |
+| M0.3 store | pending | pending | `grok-4.5-high` | low | blocked on M0.1 | pending |
+| M0.4 doctor | pending | pending | `grok-4.5-high` | low | blocked on M0.2 | pending |
+
+## Milestone gates
+
+| Milestone | Mechanical gates | macOS/integration gate | Status |
+|---|---|---|---|
+| M0 | build, vet, race tests, staticcheck | daemon run + doctor green | pending |
+| M1 | broker/safety race + concurrency proofs | tagged real-sim lifecycle/reconciliation | not started |
+| M2 | full Go gates | isolated concurrent sample builds + warm latency | not started |
+| M3 | MCP tests | two-agent dogfood + screenshots/status evidence | not started |
+| M4 | full suite + error audit | clean dogfood rerun + fresh-account quickstart | not started |
+
+## Blockers
+
+- No private Git remote has been supplied. This does not block local milestone implementation, but it blocks real PRs and the hosted third-review action.
+- M0.2 touches socket creation and permissions, a security-sensitive path. Dispatch requires owner-visible approval after the M0.1 scaffold is integrated.
+
+## Evidence log
+
+### 2026-07-12 — initializer
+
+- Created an empty `master` repository at `/Users/roshansilva/Documents/simurgh`; `git remote -v` returned no remotes.
+- Copied the four approved SSOT documents from `/Users/roshansilva/Documents/command-center/simurgh/docs`; `diff -qr` returned no differences.
+- Verified Cursor model slugs from live `cursor-agent models`; no model names were guessed.
+- Installed Staticcheck using its official Go installation command; version is `2026.1 (v0.7.0)`.
+- `xcrun simctl list devices` showed iOS 27.0 and an available iPhone 17 Pro simulator.
+
+## Next action
+
+Dispatch M0.1 from `docs/plans/work-packages/m0.1-repo-scaffold.md`, run the complete Go/staticcheck gate independently, then obtain the sensitive-path approval for M0.2 while M0.3 proceeds on a disjoint worktree.

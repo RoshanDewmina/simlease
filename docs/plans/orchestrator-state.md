@@ -56,6 +56,10 @@ independently reviewed, and merged — see evidence log below.
 | M3.1 MCP server | merged locally as `a83a947` | cleaned | `grok-4.5-high` | low | merged | green |
 | M3.2 simurgh init | merged locally as `ed124b2` | cleaned | `grok-4.5-high` | low | merged | green |
 | M3.3 dogfood | committed `a01b792` (docs) + fix `66ae3f6` (watcher bug) | cleaned | orchestrator-driven (2 parallel Agent-tool subagents) | found+fixed a real reclaim bug | done | green (run 2, after fix) |
+| M4.1 pressure monitoring | merged locally as `700eb93` | cleaned | `grok-4.5-high` | low | merged | green |
+| M4.2 log rotation + daemon status --logs | pending | pending | `grok-4.5-high` | low | next | pending |
+| M4.3 error-message audit | pending | pending | `grok-4.5-high` | low | pending | pending |
+| M4.4 docs (README/agent guide/troubleshooting) | pending | pending | `grok-4.5-high` | low | pending | pending |
 
 ## Milestone gates
 
@@ -717,18 +721,51 @@ independently reviewed, and merged — see evidence log below.
   dogfood — the actual v0 exit demo the owner asked to see — succeeded with real, independently-
   verified evidence, plus caught and fixed a genuine product bug along the way.
 
+### 2026-07-13 — M4.1 pressure monitoring merged
+
+- Spec: `docs/plans/work-packages/m4.1-pressure.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m4.1-pressure`: new `internal/pressure` package gives `internal/broker`'s existing
+  `PressureOK` seam (from M1.1, previously always-OK) a real implementation — RAM (`vm_stat`
+  free+inactive vs 4GiB floor), thermal (`pmset -g therm`), disk (`syscall.Statfs` vs 5GiB floor).
+  **Fail-open by design**: any signal that can't be read/parsed is treated as OK and logged, so a
+  detection bug (e.g. a renamed sysctl on a future macOS version) can never silently block real
+  usage — verified this is actually true by reading the parse functions, not just trusting the
+  tests. `internal/broker` itself untouched, only a real function supplied to its existing seam.
+  `pool_status` (daemon wire response and MCP tool both) now surfaces the pressure report, closing
+  a gap `docs/ARCHITECTURE.md` §8 already documented but nothing had populated.
+- Orchestrator independently reran all gates (green, `internal/broker` confirmed untouched),
+  personally read the parsing/fail-open logic. **Notable honest live finding, not smoothed over:**
+  this Mac genuinely has real memory pressure right now (~2.9GB free+inactive out of 16GB,
+  correctly below the 4GB floor, plausibly explained by the many processes this long orchestration
+  session itself has running) — the pressure gate correctly fired for real during the live check,
+  and `acquire` correctly returned `CAPACITY_QUEUED` with `reason: "ram"` rather than crashing or
+  misbehaving. This is good evidence the implementation is faithful rather than lenient, but it
+  also means **future live `[mac]` checks in this session may see real RAM-pressure queuing** —
+  that's expected behavior now, not a regression, and `wait: true`/`--wait` remains the correct way
+  to acquire under real pressure (it blocks until pressure clears rather than failing).
+- Committed as `2b0a4d8 feat(pressure): real RAM/thermal/disk pressure gate before grant (M4.1)`
+  on `feat/m4.1-pressure`; local-merged to `master` as `700eb93 merge: M4.1 real pressure
+  monitoring (RAM/thermal/disk)`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit
+  0.
+
 ## Next action
 
-**M4 — Hardening + polish (v0 exit)** is the last milestone, per `docs/ROADMAP.md`: pressure
-monitoring before grant (RAM/thermal/disk, with a queue-reason — `internal/broker`'s `PressureOK`
-seam already exists from M1.1 but always returns true today; this is where it gets a real
-implementation), `wait` long-poll UX polish + `simurgh status --queue`, log rotation +
-`simurgh daemon status --logs`, an error-message audit (every error path has a real code+message+
-fix — a grep-able test asserting this across the codebase would be a good mechanical check), and
-documentation: a README quickstart at Limrun-quality bar, an agent guide, a troubleshooting doc.
-GATE: full `[mac]` suite green, a clean dogfood rerun, and the README quickstart actually followed
-verbatim (ideally by a fresh check, not just written and assumed correct). Then tag `v0.0.1`
-(private, per the brief's non-negotiables — no public remote) per
-`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar: all M0–M4 gates green with pasted evidence in
-this file (now true through M3), the M3 dogfood log committed (done), a README quickstart a fresh
-Mac user could follow verbatim (not yet written — this is real remaining work, not a formality).
+M4.2 is next: **log rotation + `simurgh daemon status --logs`.** The daemon currently uses bare
+`log.Printf` (stderr) for its reclaim-loop/persist-failure logging — nothing rotates, and
+`DefaultLogPath()` (`~/.simurgh/logs/simurghd.log`, from M0.2b) exists but the running daemon never
+actually writes to it. Also, `simurgh daemon status|stop|install` were never built at all — only
+`daemon run` exists (M0.2b/M1.5a explicitly deferred the rest). M4.2 should: (a) make the daemon's
+own logging actually go to a real, size-or-time-rotating file at `DefaultLogPath()`; (b) build at
+least `simurgh daemon status [--logs]` (report whether the daemon is reachable — reuse the
+existing non-auto-starting ping-style probe pattern `internal/cli/doctor.go` already has — and
+with `--logs`, tail recent log lines). `daemon install`/`daemon stop` are lower priority (`daemon
+run &` remains an acceptable dev-path per the M0 GATE's own "or install" wording) — build `status`
+first, add `stop`/`install` only if time allows, note explicitly if deferred rather than silently
+skipping. After M4.2: M4.3 error-message audit (a grep-able test asserting every error-triple
+constructor across the codebase actually supplies non-empty code/message/fix — this is mostly a
+verification task over already-built code, not new functionality, should be fast), M4.4
+documentation (README quickstart, agent guide, troubleshooting — real remaining work, not yet
+started). Then the M4 GATE (full `[mac]` suite green, a clean dogfood rerun — expect real
+RAM-pressure queuing per the note above, use `--wait` — and the README quickstart actually
+followed verbatim), then tag `v0.0.1` (private, no public remote) per
+`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar.

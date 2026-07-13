@@ -19,6 +19,21 @@ func main() {
 			}
 			fmt.Fprintf(os.Stderr, "usage: simurgh daemon run\n")
 			os.Exit(2)
+		case "doctor":
+			jsonOut := false
+			for _, a := range os.Args[2:] {
+				switch a {
+				case "--json":
+					jsonOut = true
+				case "-h", "--help", "help":
+					printHelp()
+					return
+				default:
+					fmt.Fprintf(os.Stderr, "usage: simurgh doctor [--json]\n")
+					os.Exit(3)
+				}
+			}
+			os.Exit(runDoctor(jsonOut))
 		}
 	}
 
@@ -30,8 +45,10 @@ func printHelp() {
 
 Usage:
   simurgh daemon run
+  simurgh doctor [--json]
   simurgh [help]
 
 Daemon serves the Unix socket IPC endpoint (daemon.ping).
+Doctor checks Xcode, simctl, iOS runtimes, socket perms, and daemon liveness.
 See docs/ROADMAP.md for the build plan.`)
 }

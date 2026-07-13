@@ -81,6 +81,14 @@ add_worktree() {
   local path="$1"
   git -C "$LANCER_REPO" worktree add --detach "$path" "$MASTER_COMMIT" >/dev/null 2>&1
   WORKTREES_THIS_REP+=("$path")
+  # Lancer.xcodeproj is gitignored (*.xcodeproj/ — command-center's own
+  # .gitignore) and generated on demand via xcodegen, same pattern as
+  # our own SampleApp fixture. A fresh worktree only has committed
+  # files, so it never has an .xcodeproj until this runs.
+  if ! (cd "$path" && xcodegen generate >/dev/null 2>"$path/.xcodegen-error.log"); then
+    echo "run_b6.sh: xcodegen generate failed in $path" >&2
+    cat "$path/.xcodegen-error.log" >&2
+  fi
 }
 remove_rep_worktrees() {
   local wt

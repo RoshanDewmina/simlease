@@ -58,8 +58,8 @@ independently reviewed, and merged — see evidence log below.
 | M3.3 dogfood | committed `a01b792` (docs) + fix `66ae3f6` (watcher bug) | cleaned | orchestrator-driven (2 parallel Agent-tool subagents) | found+fixed a real reclaim bug | done | green (run 2, after fix) |
 | M4.1 pressure monitoring | merged locally as `700eb93` | cleaned | `grok-4.5-high` | low | merged | green |
 | M4.2 log rotation + daemon status --logs | merged locally as `02ceab1` | cleaned | `grok-4.5-high` | low | merged | green |
-| M4.3 error-message audit | pending | pending | `grok-4.5-high` | low | pending | pending |
-| M4.4 docs (README/agent guide/troubleshooting) | pending | pending | `grok-4.5-high` | low | pending | pending |
+| M4.3 error-message audit | merged locally as `7894cd9` | cleaned | `grok-4.5-high` | low | merged | green |
+| M4.4 docs (README/agent guide/troubleshooting) | pending | pending | `grok-4.5-high` | low | next | pending |
 
 ## Milestone gates
 
@@ -779,20 +779,33 @@ independently reviewed, and merged — see evidence log below.
   `feat/m4.2-logs`; local-merged to `master` as `02ceab1 merge: M4.2 log rotation + simurgh daemon
   status`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
 
+### 2026-07-13 — M4.3 error-message audit merged
+
+- Spec: `docs/plans/work-packages/m4.3-error-audit.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m4.3-audit` (fast package, ~1.5 min dispatch): new `internal/errortriple` — a real
+  `go/ast`-based static check (not regex) walking every non-test `.go` file for `NewError(...)`
+  calls (bare or package-qualified) and flagging any literal-empty code/message/fix argument.
+  Proven to actually work via a synthetic-fixture test that plants a deliberately broken call and
+  confirms it's caught. Run against the real repo: **25 call sites examined, 0 findings** — every
+  prior package's error-triple discipline this session held up under an independent, mechanical
+  check. This test now runs as part of the normal suite, so a future regression fails
+  automatically.
+- Orchestrator independently reran all gates (green) and personally read the AST-walk logic,
+  confirming it correctly matches both call shapes, correctly resolves quoted string literals via
+  `strconv.Unquote`, and correctly excludes the `SampleApp` fixture and `.git`/vendor dirs.
+- Committed as `dc67183 test(errortriple): static audit -- no empty error-triple literals (M4.3)`
+  on `feat/m4.3-audit`; local-merged to `master` as `7894cd9 merge: M4.3 static error-triple
+  audit`. Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0.
+
 ## Next action
 
-M4.3 is next: **error-message audit.** A grep-able test asserting every error-triple constructor
-across the codebase (`internal/broker/errors.go`, `internal/provisioner/errors.go`,
-`internal/safety/errors.go`, `internal/ipc`'s `NewError`, and any others found by a repo-wide
-search for the `NewError(code, message, fix)`-shaped pattern) genuinely supplies non-empty
-code/message/fix at every call site — this is mostly verification over already-built code (every
-package already validates the triple at construction time, per `REVIEW_STANDARDS.md`'s original
-rule), so this should be a fast, mechanical package: write the audit test, run it, fix anything it
-actually finds (should be nothing new, but verify rather than assume). After M4.3: M4.4
-documentation — README quickstart, agent guide, troubleshooting doc — this is real remaining work,
-not yet started, and matters for the done-bar's "a fresh Mac user could follow it verbatim"
-requirement (ideally verified by actually following it, not just written and assumed correct).
-Then the M4 GATE (full `[mac]` suite green, a clean dogfood rerun — expect possible real
-RAM-pressure queuing on this Mac per the note above, use `--wait`), then tag `v0.0.1` (private, no
-public remote) per `~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar — this is the last milestone
-before the engagement's natural end point.
+M4.4 is next and is the last piece of real remaining work: **documentation** — a README quickstart
+at Limrun-quality bar, an agent guide, and a troubleshooting doc. This matters concretely for the
+`v0.0.1` done-bar's "a fresh Mac user could follow it verbatim" requirement — write it, then
+actually attempt to follow it fresh (ideally from a clean `SIMURGH_HOME`, simulating a first-time
+user) rather than just writing it and assuming it's correct, the same standard applied to every
+live check this session. After M4.4: the M4 GATE (full `[mac]` suite green — already true; a clean
+dogfood rerun — expect possible real RAM-pressure queuing on this Mac, use `--wait`; the README
+quickstart followed verbatim), then tag `v0.0.1` (private, no public remote) per
+`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar — the last milestone before this engagement's
+natural end point.

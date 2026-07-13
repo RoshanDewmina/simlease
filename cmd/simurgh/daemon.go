@@ -59,6 +59,15 @@ func DefaultLeasesRoot() (string, error) {
 	return filepath.Join(home, "leases"), nil
 }
 
+// DefaultLastLeasePath returns ~/.simurgh/last-lease (honors $SIMURGH_HOME).
+func DefaultLastLeasePath() (string, error) {
+	home, err := simurghHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "last-lease"), nil
+}
+
 func runDaemon() int {
 	socketPath, err := DefaultSocketPath()
 	if err != nil {

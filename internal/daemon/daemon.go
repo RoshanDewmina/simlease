@@ -24,7 +24,8 @@ type Deps struct {
 }
 
 // RegisterLeaseHandlers registers lease.acquire|renew|release|get|list|wait
-// on server. Call before Serve (or concurrently — RegisterHandler is mutex-guarded).
+// and pool.status on server. Call before Serve (or concurrently —
+// RegisterHandler is mutex-guarded).
 func RegisterLeaseHandlers(server *ipc.Server, deps Deps) {
 	h := newHandlers(deps)
 	server.RegisterHandler("lease.acquire", h.acquire)
@@ -33,6 +34,7 @@ func RegisterLeaseHandlers(server *ipc.Server, deps Deps) {
 	server.RegisterHandler("lease.get", h.get)
 	server.RegisterHandler("lease.list", h.list)
 	server.RegisterHandler("lease.wait", h.wait)
+	server.RegisterHandler("pool.status", h.poolStatus)
 }
 
 type handlers struct {
@@ -203,6 +205,47 @@ func (h *handlers) wait(ctx context.Context, req ipc.Request) (json.RawMessage, 
 		return nil, brokerErrorToIPC(err)
 	}
 	return marshalLeaseResult(lease)
+}
+
+// poolStatus returns capacity plus lease counts grouped by State.
+func (h *handlers) poolStatus(_ context.Context, _ ipc.Request) (json.RawMessage, *ipc.Error) {
+	leases := h.deps.Broker.List(broker.ListFilter{})
+	counts := map[string]int{
+		"queued":       0,
+		"provisioning": 0,
+		"active":       0,
+		"released":     0,
+		"cancelled":    0,
+		"failed":       0,
+		"reclaimed":    0,
+	}
+	for _, l := range leases {
+		switch l.State {
+		case broker.LeaseQueued:
+			counts["queued"]++
+		case broker.LeaseProvisioning:
+			counts["provisioning"]++
+		case broker.LeaseActive, broker.LeaseExpiring:
+			// LeaseExpiring is reserved/future; fold into active for overview.
+			counts["active"]++
+		case broker.LeaseReleased:
+			counts["released"]++
+		case broker.LeaseCancelled:
+			counts["cancelled"]++
+		case broker.LeaseFailed:
+			counts["failed"]++
+		case broker.LeaseReclaimed:
+			counts["reclaimed"]++
+		}
+	}
+	raw, err := json.Marshal(map[string]any{
+		"capacity": h.deps.Broker.Capacity(),
+		"leases":   counts,
+	})
+	if err != nil {
+		return nil, internalErr(err)
+	}
+	return raw, nil
 }
 
 func marshalLeaseResult(lease broker.Lease) (json.RawMessage, *ipc.Error) {

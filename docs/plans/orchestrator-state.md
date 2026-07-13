@@ -891,3 +891,64 @@ final summary rather than continuing to look for more work. Any future work (war
 investigation, `daemon stop`/`daemon install`, a PATH shim for bare `xcodebuild`, a real dogfood
 rerun once this Mac's unrelated background load clears) is a fresh, owner-directed engagement, not
 a continuation of this one.
+
+### 2026-07-13 — P0 benchmark-blocker session: harness instrumentation + retry-to-green landed (WP1/WP2 infra)
+
+- Engagement: close `bench/REVIEW_AND_NEXT_STEPS.md` P0-1…P0-5 (P1-6…8 if budget allows) before any
+  launch numbers go public. Working in worktree `claude/benchmark-blockers-2026-07-13-37773c`.
+- Machine-state verification (don't assume): the owner-reported restart had NOT happened — boot time
+  Mon Jul 13 08:34 (before the original bench window), free+inactive 2.9–4.9 GB all evening, and an
+  active `cursor-agent-worker` on `~/Documents/command-center` from 7:41 PM plus live keyboard input.
+  Preflight therefore fails on its own terms; timed reps are gated behind a quiet-machine watcher
+  (`bench/p0_rerun_driver.sh`, nohup'd) that re-runs preflight before each scenario and only starts
+  when it passes unforced AND input idle ≥10 min. `BENCH_RAM_FLOOR_GB=0` per the owner's standing
+  2026-07-13 decision, real numbers recorded in every preflight JSON.
+- `a713555` feat(bench): P0-1/P0-2 instrumentation — badge first-seen latency (time_to_badge_ns,
+  0.25s polling inside the unchanged fixed window), DIY simctl create/boot/bootstatus timing
+  sidecars, `--retries K` retry-to-green with per-rep time-to-N-green in green-log.jsonl,
+  `--simurgh-mode reuse` (one lease per agent held across reps), results/.scratch startup sweep
+  (P2-9, both run.sh and run_b6.sh), anchored B4 naive pgrep (P2-10). report.py regenerates the
+  original 20260713T154936Z summary byte-compatibly (verified before extending it).
+- **Product findings logged while wiring the reuse mode (bugs to file, deliberately NOT fixed in
+  this pre-launch window):**
+  1. `--reuse-if-exists` is a silent no-op — parsed by CLI, carried across the wire into
+     `broker.AcquireRequest`, never read by `broker.Acquire`. The P0-1 "reuse" economics therefore
+     come from the harness holding one lease per agent across reps (which is how real agents
+     iterate anyway); the flag is passed for honesty of intent.
+  2. A `--wait` acquire whose daemon dies returns bare `INTERNAL/context canceled` (ipc serves
+     requests off the daemon root ctx) and leaves the lease QUEUED in persisted state — the
+     restarted daemon happily reloads an orphan queued lease with no living owner (observed live:
+     lease-127). No owner-liveness check exists for QUEUED leases.
+  3. Client auto-start (`ipc.Dial`) parents the daemon to the calling shell — an auto-started
+     daemon from an interactive one-off command dies with that shell's session, cancelling every
+     in-flight `--wait`. Bench runs now always start an explicit detached daemon first.
+- `2438c80` feat(defaults): session-bound leases out of the box (P0-4). MCP `lease_acquire` now
+  defaults `releaseOnPIDExit=true` (MCP server process ≙ agent session; crash and reclaim become
+  the same event), with `detach=true` opt-out and a new `inactivity_timeout` param. CLI `--rm` now
+  binds to the acquire process's PARENT — binding to the one-shot acquire's own PID meant every
+  `--rm` lease was reclaimable within one watcher tick, i.e. the flag was useless as shipped. init
+  snippet + AGENT_GUIDE updated to document session-bound defaults. Full gates green (build / vet /
+  test -race all 15 packages / staticcheck). Flagged for strongest-model review per repo custom:
+  touches MCP acquire defaults + owner-PID registration (broker untouched).
+- `6cec09b` docs(bench): P0-5 receipts committed — bench/evidence/ with per-cell scrubbed JSONs
+  (320 files, `/Users/<name>` → `/Users/OWNER`, verified zero token-like strings; B4's naive
+  residue log had embedded full `ps` env dumps, now scrubbed), the two wrong-badge PNGs, README
+  verification map, provenance block. report.py reproduces each committed summary from the
+  committed JSONs.
+- `b1026ed` feat(bench): P1-6 option (b) implemented as arm code L (`arm_simurgh_late.sh`): build
+  outside the lease with agent-managed scratch isolation, `acquire --wait --rm` only at install
+  time, plus a health-window sensitivity table so one 30s-window B5 run reports the 5s and 30s
+  SLAs side by side.
+- Root-cause groundwork from existing JSONs (no new runs needed): B1's three ARM-S failures =
+  rep6 A+B failing TOGETHER with 47s builds (~1.8× typical — machine-wide load episode) plus
+  rep8-B failing with fully normal step timings; all three show a completely empty
+  `simctl launch --console-pty` log at the 5s deadline. B6's two ARM-S failures are the same
+  shape: one rep, BOTH agents, 756s builds (vs 462s clean-rep), Lancer not resident in launchctl
+  within 5s. Consistent story: correlated machine-wide load spikes blowing a fixed 5s launch SLA —
+  not per-agent isolation failures. The rerun's time_to_badge_ns instrumentation will quantify the
+  margin distribution; "CoreSimulator contention" remains unproven until it does.
+- B3 decomposition (P1-8, computed from committed evidence): simurgh 48.67s vs naive 7.33s median;
+  Δ41.3s = acquire 1.32s + cold-DD build tax ~14s (15.21s vs 1.23s warm) + harness's own defensive
+  bootstatus wait 9.4s + cold install ~10.5s + screenshot ~2s; the 5s launch window is identical
+  in both arms. DIY's B1 median 38.64s confirms most of this is the cost of isolation-in-general,
+  not Simurgh's mechanism.

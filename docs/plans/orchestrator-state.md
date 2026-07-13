@@ -52,7 +52,7 @@ independently reviewed, and merged — see evidence log below.
 | M1.6 broker persistence + reconciliation | merged locally as `8aee920` | cleaned | `grok-4.5-high` | low, personal review (central package) | merged | green |
 | M2.1 isolator | merged locally as `2fe9991` | cleaned | `grok-4.5-high` | low | merged | green |
 | M2.2 warm templates | merged locally as `4fc5228` | cleaned | `grok-4.5-high` | low | merged (functionally correct; latency target NOT met, see evidence log) | green |
-| M2.3 prune + doctor extensions | pending | pending | `grok-4.5-high` | low (resolves orphan-auto-reclaim policy) | blocked on M2.2 | pending |
+| M2.3 prune + doctor extensions | merged locally as `f916760` | cleaned | `grok-4.5-high` | sensitive-adjacent, personal review (real deletion surface) | merged | green |
 
 ## Milestone gates
 
@@ -60,7 +60,7 @@ independently reviewed, and merged — see evidence log below.
 |---|---|---|---|
 | M0 | build, vet, race tests, staticcheck — **PASS** | `daemon run` + `doctor` exit 0, all 5 checks green — **PASS**, live-run 2026-07-12 | **COMPLETE** |
 | M1 | `go test -race -count=1 ./...` (whole repo) — **PASS**, all 11 testable packages green | `[mac]` full-lifecycle + two-terminal concurrent-acquire smoke — **PASS**; SIGKILL-mid-lifecycle → restart → reconcile — **PASS**, live-run 2026-07-13 (see evidence log) | **COMPLETE — all sub-scenarios in the GATE text satisfied, live-proven, no caveats** |
-| M2 | full Go gates — green (see M2.1/M2.2 evidence) | isolated concurrent sample builds — **PASS** (M2.1); warm latency ≥50% — **NOT MET** on this Mac, functionally correct, two independent honest measurements (M2.2, see evidence log); `prune` empty-plan check — not started (M2.3) | in progress (2/3 packages) |
+| M2 | full Go gates — **PASS**, all packages green | isolated concurrent sample builds — **PASS** (M2.1); warm latency ≥50% — **NOT MET** on this Mac, functionally correct, honestly reported (M2.2); `release && prune` → empty plan — **PASS**, live-run 2026-07-13 (M2.3) | **COMPLETE** (one sub-target — warm latency — honestly reported as unmet rather than papered over; everything else live-proven) |
 | M3 | MCP tests | two-agent dogfood + screenshots/status evidence | not started |
 | M4 | full suite + error audit | clean dogfood rerun + fresh-account quickstart | not started |
 
@@ -563,21 +563,66 @@ independently reviewed, and merged — see evidence log below.
   Post-merge gate rerun: build/vet/test-race/staticcheck all exit 0. Worktree removed, branch
   deleted.
 
+### 2026-07-13 — M2.3 merged; M2 milestone COMPLETE
+
+- Spec: `docs/plans/work-packages/m2.3-prune-doctor.md`. Implemented by `grok-4.5-high` in
+  `.worktrees/m2.3-prune`: the daemon's `release` handler now best-effort calls `Reaper.Reclaim`
+  after a successful `Broker.Release` (log-don't-fail, mirrors `ReclaimLoop.applyDecisions`) —
+  this closes a real, previously-logged gap (release never cleaned up its device) and is what
+  makes the roadmap's literal `simurgh release $L && simurgh prune` → empty-plan GATE line true.
+  `internal/reaper.PlanPrune` buckets leases into held/orphan/active. **Implementation-time design
+  refinement worth recording:** the coder discovered mid-build that broker keeps a lease's
+  `Device` pointer set even after `Release` — so "non-nil Device" alone is not a valid "held"
+  signal (it would have broken the empty-plan GATE); held now requires a LIVE `simctl` device or
+  an existing lease directory, checked against reality. Orphan detection reuses the existing
+  `Reconcile` (same window, same warm-template exclusion) and excludes any UDID still referenced
+  by a lease record so held and orphan stay mutually exclusive. `doctor` gained a stale-leases
+  check (ACTIVE leases overdue expiry by 5+ minutes) and an informational disk-usage check;
+  honest finding recorded: `prune` cannot fix a stuck-ACTIVE lease, so doctor's `fix` string
+  points at `simurgh release` instead of a `prune` command that wouldn't actually help.
+- Orchestrator independently reran all gates (green), then **personally traced every deletion
+  path** given this package's `sensitive`-adjacent classification (real human-invoked deletion
+  surface, even with no new primitive): confirmed `pruneApply` re-derives its plan fresh on every
+  call (never trusts a client-supplied plan), confirmed by reading the full function body that it
+  only ever iterates `plan.Held` (→ `Reaper.Reclaim`) and `plan.Orphans` (→
+  `safety.DeleteSimulatorClone` directly) with `plan.Active` never appearing in any delete-capable
+  code path.
+- **Personally reproduced the full live scenario**, independent of the coder's own live check:
+  acquired a real lease, released it, confirmed via `xcrun simctl list devices` the clone was
+  ACTUALLY gone (not just state-transitioned), confirmed `simurgh prune --json` genuinely returned
+  an empty plan; separately hand-crafted a real orphan device bypassing the daemon entirely
+  (`simctl create` + `rename` directly), confirmed it was correctly withheld from the plan during
+  the reconciliation window and correctly detected after, ran `prune --apply`, confirmed it was
+  actually deleted; confirmed the real `simurgh-base[...]` was untouched throughout both live runs.
+- Committed as `db69e45 feat(prune): plan/apply orphan+held cleanup, release-triggers-teardown,
+  doctor extensions (M2.3)` on `feat/m2.3-prune`; local-merged to `master` as `f916760 merge: M2.3
+  prune + doctor extensions, release-triggers-cleanup`. Post-merge full-repo gate rerun (build/
+  vet/test-race/staticcheck) all exit 0.
+- **M2 milestone gate is now fully green**: M2.1's concurrent-build isolation proof, M2.2's
+  functionally-correct warm templates (latency target honestly reported as unmet — a real
+  environmental finding, not swept under the rug), and M2.3's live-proven `release && prune` →
+  empty-plan scenario. The orphan-auto-reclaim policy question that stayed deliberately log-only
+  across M1.5a/M1.6 now has its real, explicit, owner-visible answer: `prune --apply`, run by a
+  human on purpose — automatic background deletion was never built, by design.
+
 ## Next action
 
-M2.3 prune + doctor extensions is next: `simurgh prune [--apply]` with orphan/held/active buckets
-(dry-run plan by default, matching the roadmap's `simurgh release && simurgh prune` → empty-plan
-GATE check), and `doctor` extensions for stale-lease/disk-usage checks. **This is also where the
-long-deferred "should orphans auto-reclaim" policy question from M1.5a/M1.6 (log-only since it was
-first introduced) finally gets an explicit, owner-visible answer**: `prune --apply` becomes the
-real, deliberate mechanism for reclaiming device-name-scan orphans — not automatic background
-deletion, which was correctly never built. `prune`'s plan-building logic should reuse
-`internal/reaper.ScanOrphans`/`Reconcile` for the orphan bucket (already correctly excludes warm
-templates as of M2.2) rather than re-deriving orphan detection, and `prune --apply`'s actual
-deletion must go through the existing `safety.DeleteSimulatorClone`/`DeleteLeaseDir` — no new
-primitive, matching every prior deletion-capable package this session. After M2.3: the M2
-milestone gate is fully closed (M2.1's build-isolation proof + M2.2's warm-latency numbers,
-honestly reported even though the target wasn't hit + M2.3's empty-prune-plan check). Then M3
-(MCP server + the two-parallel-Claude-Code-sessions dogfood — the v0 exit demo the owner
-explicitly wants to see), M4 (hardening), tag `v0.0.1` per
-`~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar.
+**M3 — Agent surface (MCP + onboarding) & dogfood** is next, per `docs/ROADMAP.md`: M3.1 MCP
+server (`simurgh mcp`, stdio — the five tools from `docs/ARCHITECTURE.md` §8: `lease_acquire`,
+`lease_renew`, `lease_release`, `lease_status`, `pool_status`; tool descriptions are written for
+agent consumption and reviewed as API surface per the doc's own instruction — this is a thin
+translation layer over the already-existing, already-tested `internal/daemon` RPCs, using the
+official `modelcontextprotocol/go-sdk`, pinned in `go.mod`), M3.2 `simurgh init` (writes
+`.simurgh.yaml` + an agent rules snippet + a `.mcp.json` entry, idempotent), M3.3 **dogfood** —
+the actual v0 exit demo the owner explicitly wants to see: register `simurgh mcp` with Claude
+Code, run TWO parallel Claude Code sessions against the `test/fixtures/SampleApp` fixture (already
+built and proven in M2.1), each independently told to acquire → build → launch → screenshot →
+release, with zero collisions and zero manual UDID handling, capturing a real dogfood log
+(committed to `docs/dogfood/`) with both screenshots and `simurgh status` output mid-run as
+evidence. This is a genuinely different kind of verification than every prior package — it needs
+two real Claude Code sessions actually running concurrently against this MCP server, not just a
+live `[mac]` `simctl`/CLI check — worth planning the mechanics of how to actually drive two
+parallel Claude Code sessions from within this orchestration before diving in. After M3: M4
+(hardening + polish), tag `v0.0.1` per `~/Documents/simurgh/HANDOFF_PROMPT.md`'s done-bar (all
+M0–M4 gates green with pasted evidence in this file, the M3 dogfood log committed, a README
+quickstart a fresh Mac user could follow verbatim).

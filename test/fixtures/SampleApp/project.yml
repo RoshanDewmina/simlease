@@ -1,0 +1,32 @@
+name: SampleApp
+options:
+  bundleIdPrefix: dev.simurgh.fixtures
+  deploymentTarget:
+    iOS: "27.0"
+  createIntermediateGroups: true
+settings:
+  TARGETED_DEVICE_FAMILY: "1"
+targets:
+  SampleApp:
+    type: application
+    platform: iOS
+    deploymentTarget: "27.0"
+    sources:
+      - Sources
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: dev.simurgh.fixtures.sampleapp
+      GENERATE_INFOPLIST_FILE: YES
+      CURRENT_PROJECT_VERSION: 1
+      MARKETING_VERSION: "1.0"
+    info:
+      path: Info.plist
+      properties:
+        UILaunchScreen: {}
+        CFBundleDisplayName: SampleApp
+schemes:
+  SampleApp:
+    build:
+      targets:
+        SampleApp: all
+    run:
+      config: Debug

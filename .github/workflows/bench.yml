@@ -38,6 +38,17 @@ jobs:
           xcodebuild -version
           xcrun simctl list runtimes
           xcrun simctl list devicetypes | grep -i iphone
+          echo "--- memory ---"
+          vm_stat
+          sysctl hw.memsize
+
+      - name: Pre-flight
+        # Runs before any build/brew/install activity — that work is
+        # itself what consumes the RAM headroom preflight is checking
+        # for, so checking after Go gates + xcodegen (as this workflow
+        # first tried) measures the CI job's own footprint, not the
+        # runner's actual starting condition.
+        run: bash bench/preflight.sh
 
       - name: Go gates
         run: |
@@ -67,9 +78,6 @@ jobs:
           runtime="$(xcrun simctl list runtimes -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(r["identifier"] for r in d["runtimes"] if r.get("isAvailable") and r["name"].startswith("iOS")))')"
           echo "devtype=$devtype runtime=$runtime"
           xcrun simctl create "iPhone 17 Pro" "$devtype" "$runtime"
-
-      - name: Pre-flight
-        run: bash bench/preflight.sh
 
       - name: Run bench
         run: |

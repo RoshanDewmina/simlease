@@ -40,6 +40,12 @@ of RESULTS.md v2.
    Source: RESULTS.md "Bug 1", `internal/broker` `RetryQueues` +
    `TestRetryQueuesPromotesAfterTransientPressureDip`.
 
+7. **Warm-DD on a real Lancer checkout does not speed up builds (−0.2%).**
+   Cold 318.2s vs warm-seeded 319.0s; clonefile seeding works, but the toy
+   ~30% win does not transfer. Do not publish the toy figure as the real-app
+   payoff.
+   Source: `bench/evidence/warmdd-lancer-20260714T033925Z.json`.
+
 **Do not publish yet:** any B1 "zero collisions at 2 agents" claim (17/20
 until the rerun lands), any B5 throughput claim, any "we build our own app
 with it" B6 claim, any time-to-green comparison. See RESULTS.md v2 for what

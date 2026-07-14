@@ -306,10 +306,11 @@ applies across B6's git worktrees, since each has a distinct path — zero cross
 contamination risk, but also zero measured benefit there yet. Implemented in
 `cmd/simurgh/env.go`'s `runExec` (client-side, where `-project`/`-scheme` were already
 being parsed for flag injection) plus `cmd/simurgh/warmdd.go`; 5 new unit tests, full
-suite green. **Not yet measured on a real dependency-heavy app** (Lancer) — the toy
-fixture's win is modest because most of its build time is fixed Xcode overhead, not
-compilation; the real payoff (skipping re-link of an already-built SPM dependency graph)
-should be much larger on Lancer, but that measurement was not run this session.
+suite green. **Measured on Lancer (P1-7, 2026-07-14):** cold build 318.2s vs warm
+seeded build 319.0s (`warm_speedup_percent: -0.2`) on the primary
+`~/Documents/command-center` checkout — clonefile seeding works mechanically, but
+Lancer's incremental graph dominates and the toy ~30% win does **not** reproduce.
+Source: `bench/evidence/warmdd-lancer-20260714T033925Z.json` (committed).
 
 ### Fix: test suite was not CPU-bound, it was walking 26,000 files it shouldn't
 
@@ -384,8 +385,8 @@ the repo-walking test, not from any change to their own code.
   foreground-one-rep-at-a-time workaround as the recommended execution mode for any
   future B6 run.
 - Fix the B4 naive-arm stray-process detector's false-positive match on `xcodebuildmcp`.
-- Measure the warm-DD seeding feature against a real, dependency-heavy app (Lancer) to
-  quantify its actual payoff — the toy-fixture number (~30%) is known to understate it.
+- ~~Measure warm-DD on Lancer~~ — done; **-0.2%** (no speedup). Do not cite the toy ~30%
+  as the real-app payoff.
 - Run B6's simurgh arm to its full planned n=6, and the XcodeBuildMCP composition check.
 
 ---
@@ -505,9 +506,12 @@ longer substring-matches `xcodebuildmcp` (P2-10).
 ## What remains blocked, and why (recorded, not smoothed)
 
 Every timed cell (B1 fresh/reuse, B2, B4 shipped-defaults rep, B5 dual-window,
-B6 third ARM-S rep, XcodeBuildMCP composition check, warm-DD on Lancer) is
+B6 third ARM-S rep, XcodeBuildMCP composition check) is
 queued behind a quiet-machine driver (`bench/p0_rerun_driver.sh`) because the
-machine never met the plan's ground rule 4 during this session:
+machine never met the plan's ground rule 4 during the evening session that
+queued them. **P1-7 warm-DD on Lancer is no longer in that queue** — measured
+2026-07-14 (see Feature section above; `-0.2%`). Remaining blockers as of the
+original queue:
 
 - **No restart happened** (booted 08:34, before the original bench window) —
   verified via `kern.boottime`, not assumed.

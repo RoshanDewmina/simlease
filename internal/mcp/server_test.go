@@ -476,6 +476,8 @@ func TestPoolStatusMapsResult(t *testing.T) {
 			}
 			return json.RawMessage(`{
 				"capacity": 4,
+				"perSpecCapacity": 2,
+				"maxProvisioningOperations": 1,
 				"leases": {"active": 1, "queued": 0, "released": 2},
 				"pressure": {
 					"ok": true,
@@ -501,11 +503,62 @@ func TestPoolStatusMapsResult(t *testing.T) {
 	if out.Capacity != 4 {
 		t.Fatalf("capacity = %v", out.Capacity)
 	}
+	if out.PerSpecCapacity != 2 {
+		t.Fatalf("perSpecCapacity = %v want 2", out.PerSpecCapacity)
+	}
+	if out.MaxProvisioningOperations != 1 {
+		t.Fatalf("maxProvisioningOperations = %v want 1", out.MaxProvisioningOperations)
+	}
 	if out.Leases["active"] != 1 || out.Leases["queued"] != 0 {
 		t.Fatalf("leases = %#v", out.Leases)
 	}
 	if !out.Pressure.OK || len(out.Pressure.Signals) != 3 {
 		t.Fatalf("pressure = %#v", out.Pressure)
+	}
+}
+
+func TestLeaseAcquireCapacityQueuedHasStructuredResourceReason(t *testing.T) {
+	position := 3
+	srv := newServer(serverConfig{
+		Call: func(context.Context, string, any) (json.RawMessage, error) {
+			return nil, &rpcError{e: &ipc.Error{
+				Code:          "CAPACITY_QUEUED",
+				Message:       "3 leases ahead [provisioning_slot]",
+				Fix:           "simurgh status --queue",
+				QueuePosition: &position,
+				Reason:        "provisioning_slot",
+				ResourceClass: "provisioning_slot",
+			}}
+		},
+	})
+	cs := connectTestClient(t, srv)
+	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name:      "lease_acquire",
+		Arguments: map[string]any{"model": "iPhone 17 Pro"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool protocol error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected IsError=true")
+	}
+	out := decodeStructured[leaseGrantResult](t, res)
+	if out.Code != "CAPACITY_QUEUED" {
+		t.Fatalf("code = %q", out.Code)
+	}
+	if out.QueuePosition == nil || *out.QueuePosition != position {
+		t.Fatalf("queuePosition = %v want %d", out.QueuePosition, position)
+	}
+	if out.Reason != "provisioning_slot" {
+		t.Fatalf("reason = %q", out.Reason)
+	}
+	if out.ResourceClass != "provisioning_slot" {
+		t.Fatalf("resourceClass = %q", out.ResourceClass)
+	}
+	text := toolErrorText(t, res)
+	if !strings.Contains(text, "CAPACITY_QUEUED") ||
+		!strings.Contains(text, "simurgh status --queue") {
+		t.Fatalf("error text = %q", text)
 	}
 }
 

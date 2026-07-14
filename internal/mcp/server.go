@@ -261,6 +261,14 @@ type leaseGrantResult struct {
 	ExpiresAt       time.Time         `json:"expiresAt" jsonschema:"lease expiry timestamp"`
 	Env             map[string]string `json:"env,omitempty" jsonschema:"isolation env vars for builds and launches"`
 	XcodebuildFlags []string          `json:"xcodebuildFlags,omitempty" jsonschema:"xcodebuild flags for isolated derived data and destination"`
+	// CAPACITY_QUEUED uses this same typed result additively so existing success
+	// callers keep their schema while MCP clients receive structured queue data.
+	Code          string `json:"code,omitempty" jsonschema:"stable error code; CAPACITY_QUEUED when acquire is queued"`
+	Message       string `json:"message,omitempty" jsonschema:"human-readable queue detail"`
+	Fix           string `json:"fix,omitempty" jsonschema:"actionable next command"`
+	QueuePosition *int   `json:"queuePosition,omitempty" jsonschema:"1-based position in the host-global queue"`
+	Reason        string `json:"reason,omitempty" jsonschema:"stable queue reason: simulator_slot, provisioning_slot, per_spec_slot, or pressure"`
+	ResourceClass string `json:"resourceClass,omitempty" jsonschema:"stable contended resource class"`
 }
 
 type leaseRenewResult struct {
@@ -276,9 +284,11 @@ type leaseReleaseResult struct {
 }
 
 type poolStatusResult struct {
-	Capacity int                    `json:"capacity" jsonschema:"configured pool capacity"`
-	Leases   map[string]int         `json:"leases" jsonschema:"lease counts by state (active, queued, ...)"`
-	Pressure poolStatusPressureView `json:"pressure" jsonschema:"host RAM/thermal/disk pressure before grant"`
+	Capacity                  int                    `json:"capacity" jsonschema:"host-global active plus provisioning simulator capacity"`
+	PerSpecCapacity           int                    `json:"perSpecCapacity" jsonschema:"optional per-device-spec capacity; zero means unlimited"`
+	MaxProvisioningOperations int                    `json:"maxProvisioningOperations" jsonschema:"optional host-global provisioning-operation limit; zero means unlimited"`
+	Leases                    map[string]int         `json:"leases" jsonschema:"lease counts by state (active, queued, ...)"`
+	Pressure                  poolStatusPressureView `json:"pressure" jsonschema:"host RAM/thermal/disk pressure before grant"`
 }
 
 type poolStatusPressureView struct {
@@ -388,6 +398,21 @@ func (s *server) handleLeaseAcquire(ctx context.Context, _ *mcpsdk.CallToolReque
 	}
 	raw, err := s.cfg.Call(ctx, "lease.acquire", params)
 	if err != nil {
+		var re *rpcError
+		if errors.As(err, &re) && re.e != nil && re.e.Code == "CAPACITY_QUEUED" {
+			queue := leaseGrantResult{
+				Code:          re.e.Code,
+				Message:       re.e.Message,
+				Fix:           re.e.Fix,
+				QueuePosition: re.e.QueuePosition,
+				Reason:        re.e.Reason,
+				ResourceClass: re.e.ResourceClass,
+			}
+			return &mcpsdk.CallToolResult{
+				IsError: true,
+				Content: []mcpsdk.Content{&mcpsdk.TextContent{Text: formatIPCError(re.e)}},
+			}, queue, nil
+		}
 		return nil, zero, mapCallError(err)
 	}
 	var wrap wireLeaseWrap

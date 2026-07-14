@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -328,5 +329,97 @@ func TestWarmSeedPublishFailureCleansStagingAndUnlocks(t *testing.T) {
 	defer cancel()
 	if err := PublishWarmSeedContext(ctx, home, key, source); err != nil {
 		t.Fatalf("lock not released after failure: %v", err)
+	}
+}
+
+func TestWarmSeedCrossProcessPublishSeedStress(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	key := sampleWarmSeedKey()
+	sourceA := filepath.Join(root, "source-a")
+	sourceB := filepath.Join(root, "source-b")
+	for path, value := range map[string]string{sourceA: "a", sourceB: "b"} {
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(path, "generation"), []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := PublishWarmSeed(home, key, sourceA); err != nil {
+		t.Fatal(err)
+	}
+
+	const iterations = 8
+	for i := 0; i < iterations; i++ {
+		source := sourceA
+		if i%2 == 1 {
+			source = sourceB
+		}
+		lease := filepath.Join(root, "process-leases", fmt.Sprintf("lease-%d", i))
+		publish := warmSeedHelperCommand("publish", home, source, "")
+		seed := warmSeedHelperCommand("seed", home, "", lease)
+		if err := publish.Start(); err != nil {
+			t.Fatal(err)
+		}
+		if err := seed.Start(); err != nil {
+			t.Fatal(err)
+		}
+		if err := publish.Wait(); err != nil {
+			t.Fatalf("publisher %d: %v", i, err)
+		}
+		if err := seed.Wait(); err != nil {
+			t.Fatalf("seeder %d: %v", i, err)
+		}
+		raw, err := os.ReadFile(filepath.Join(lease, "generation"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(raw) != "a" && string(raw) != "b" {
+			t.Fatalf("iteration %d observed partial generation %q", i, raw)
+		}
+	}
+}
+
+func warmSeedHelperCommand(operation, home, source, lease string) *exec.Cmd {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestWarmSeedLockProcessHelper$")
+	cmd.Env = append(os.Environ(),
+		"SIMURGH_WARM_SEED_HELPER=1",
+		"SIMURGH_WARM_SEED_OPERATION="+operation,
+		"SIMURGH_WARM_SEED_HOME="+home,
+		"SIMURGH_WARM_SEED_SOURCE="+source,
+		"SIMURGH_WARM_SEED_LEASE="+lease,
+	)
+	return cmd
+}
+
+func TestWarmSeedLockProcessHelper(t *testing.T) {
+	if os.Getenv("SIMURGH_WARM_SEED_HELPER") != "1" {
+		t.Skip("subprocess helper")
+	}
+	key := sampleWarmSeedKey()
+	switch os.Getenv("SIMURGH_WARM_SEED_OPERATION") {
+	case "publish":
+		if err := PublishWarmSeed(os.Getenv("SIMURGH_WARM_SEED_HOME"), key, os.Getenv("SIMURGH_WARM_SEED_SOURCE")); err != nil {
+			t.Fatal(err)
+		}
+	case "seed":
+		lease := os.Getenv("SIMURGH_WARM_SEED_LEASE")
+		if err := os.MkdirAll(lease, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		result, err := SeedWarmDerivedData(SeedWarmOptions{
+			Home:    os.Getenv("SIMURGH_WARM_SEED_HOME"),
+			Key:     key,
+			LeaseDD: lease,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Outcome != SeedOutcomeHit {
+			t.Fatalf("outcome=%s", result.Outcome)
+		}
+	default:
+		t.Fatalf("unknown helper operation %q", os.Getenv("SIMURGH_WARM_SEED_OPERATION"))
 	}
 }

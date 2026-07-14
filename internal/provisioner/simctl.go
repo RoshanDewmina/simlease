@@ -122,29 +122,31 @@ func (c *execSimctlClient) Shutdown(ctx context.Context, udid string) error {
 }
 
 // WaitBooted polls `simctl list devices -j` until the device reports Booted
-// or ctx is done. Polling is preferred over `bootstatus -b` because the latter
-// can outlive a reasonable provision timeout on cold boots while the device
-// state already shows Booted via list.
+// or ctx is done. Uses PollReadiness so the wait is always bounded by ctx
+// (and classifies timeout distinctly from other failures). Preferred over
+// `bootstatus -b` because the latter can outlive a reasonable provision
+// timeout on cold boots while list already shows Booted.
 func (c *execSimctlClient) WaitBooted(ctx context.Context, udid string) error {
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		devices, err := c.ListDevices(ctx)
-		if err == nil {
+	return PollReadiness(ctx, ReadinessPollOptions{
+		Timeout:  0, // honor parent ctx deadline; PollReadiness still applies a default if none
+		Interval: 500 * time.Millisecond,
+		Subject:  udid,
+		Probe: func(ctx context.Context) (bool, error) {
+			devices, err := c.ListDevices(ctx)
+			if err != nil {
+				if ctx.Err() != nil {
+					return false, ctx.Err()
+				}
+				return false, nil // transient list failure — keep polling until timeout
+			}
 			for _, d := range devices {
 				if d.UDID == udid && d.State == "Booted" {
-					return nil
+					return true, nil
 				}
 			}
-		} else if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
+			return false, nil
+		},
+	})
 }
 
 func (c *execSimctlClient) run(ctx context.Context, args ...string) ([]byte, error) {

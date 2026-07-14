@@ -3,6 +3,7 @@ package provisioner
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 // Error is the stable user-facing error triple (code/message/fix).
@@ -21,11 +22,13 @@ const (
 	CodeRuntimeNotFound    = "RUNTIME_NOT_FOUND"
 	CodeCloneFailed        = "CLONE_FAILED"
 	CodeBootTimeout        = "BOOT_TIMEOUT"
+	CodeReadinessTimeout   = "READINESS_TIMEOUT"
 
 	FixDeviceTypeNotFound = "xcrun simctl list devicetypes"
 	FixRuntimeNotFound    = "xcodebuild -downloadPlatform iOS"
 	FixCloneFailed        = "simurgh acquire   # retry after checking simctl list devices"
 	FixBootTimeout        = "check `xcrun simctl list devices` for a stuck boot"
+	FixReadinessTimeout   = "retry acquire; check Simulator.app / simctl bootstatus for the UDID"
 )
 
 var (
@@ -33,6 +36,7 @@ var (
 	errRuntimeNotFound    = errors.New("provisioner: runtime not found")
 	errCloneFailed        = errors.New("provisioner: clone failed")
 	errBootTimeout        = errors.New("provisioner: boot timeout")
+	errReadinessTimeout   = errors.New("provisioner: readiness timeout")
 	errInvalidError       = errors.New("provisioner: error requires code, message, and fix")
 )
 
@@ -110,6 +114,23 @@ func (e *BootTimeoutError) Error() string {
 
 func (e *BootTimeoutError) Unwrap() error { return errBootTimeout }
 
+// ReadinessTimeoutError is returned when a bounded readiness poll expires
+// without the primary probe becoming ready (and without a successful fallback).
+type ReadinessTimeoutError struct {
+	Subject       string
+	Timeout       time.Duration
+	ErrorEnvelope *Error
+}
+
+func (e *ReadinessTimeoutError) Error() string {
+	if e == nil || e.ErrorEnvelope == nil {
+		return errReadinessTimeout.Error()
+	}
+	return fmt.Sprintf("provisioner: %s: %s", e.ErrorEnvelope.Code, e.ErrorEnvelope.Message)
+}
+
+func (e *ReadinessTimeoutError) Unwrap() error { return errReadinessTimeout }
+
 func deviceTypeNotFound(model string) error {
 	msg := fmt.Sprintf("device type %q not found", model)
 	env, err := NewError(CodeDeviceTypeNotFound, msg, FixDeviceTypeNotFound)
@@ -150,4 +171,17 @@ func bootTimeout(udid string) error {
 		return errBootTimeout
 	}
 	return &BootTimeoutError{UDID: udid, ErrorEnvelope: env}
+}
+
+func readinessTimeout(subject string, timeout time.Duration) error {
+	label := subject
+	if label == "" {
+		label = "subject"
+	}
+	msg := fmt.Sprintf("%s did not become ready within %s", label, timeout)
+	env, err := NewError(CodeReadinessTimeout, msg, FixReadinessTimeout)
+	if err != nil {
+		return errReadinessTimeout
+	}
+	return &ReadinessTimeoutError{Subject: subject, Timeout: timeout, ErrorEnvelope: env}
 }

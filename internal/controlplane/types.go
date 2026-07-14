@@ -89,24 +89,25 @@ type Job struct {
 	Timings       JobTimings
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
+	generation    uint64
 }
 
 // Worker describes a build/device host (local-only for R-WP3).
 type Worker struct {
-	ID               string
-	DisplayName      string
-	BuildSlots       int
-	SimulatorSlots   int
-	PhysicalSlots    int
-	LastHeartbeatAt  time.Time
+	ID              string
+	DisplayName     string
+	BuildSlots      int
+	SimulatorSlots  int
+	PhysicalSlots   int
+	LastHeartbeatAt time.Time
 }
 
 // Workspace is the source tree a Session operates on.
 type Workspace struct {
-	ID         string
-	Path       string
-	Repository string
-	Branch     string
+	ID          string
+	Path        string
+	Repository  string
+	Branch      string
 	Fingerprint string
 }
 
@@ -154,9 +155,9 @@ type BuildGrant struct {
 
 // BuildStatus is the additive pool.status build-slot snapshot.
 type BuildStatus struct {
-	BuildSlots    int `json:"buildSlots"`
-	ActiveBuilds  int `json:"activeBuilds"`
-	QueuedBuilds  int `json:"queuedBuilds"`
+	BuildSlots   int `json:"buildSlots"`
+	ActiveBuilds int `json:"activeBuilds"`
+	QueuedBuilds int `json:"queuedBuilds"`
 }
 
 // CreateSessionRequest configures a new in-memory Session.

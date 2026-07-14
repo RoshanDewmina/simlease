@@ -47,10 +47,10 @@ func (e *BuildQueuedError) Error() string {
 func (e *BuildQueuedError) Unwrap() error { return errBuildQueued }
 
 var (
-	errBuildQueued   = errors.New("controlplane: build queued")
-	errInvalidState  = errors.New("controlplane: invalid job state")
-	errNotFound      = errors.New("controlplane: not found")
-	errInvalidError  = errors.New("controlplane: error requires code, message, and fix")
+	errBuildQueued  = errors.New("controlplane: build queued")
+	errInvalidState = errors.New("controlplane: invalid job state")
+	errNotFound     = errors.New("controlplane: not found")
+	errInvalidError = errors.New("controlplane: error requires code, message, and fix")
 )
 
 func newError(code, message, fix string, queuePosition *int) (*Error, error) {

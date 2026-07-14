@@ -37,6 +37,7 @@ var progressIndex = func() map[JobState]int {
 
 var terminalStates = map[JobState]bool{
 	JobSucceeded: true,
+	JobFailed:    true,
 	JobCancelled: true,
 	JobOrphaned:  true,
 }
@@ -46,21 +47,25 @@ func CanTransition(from, to JobState) bool {
 	if from == to {
 		return false
 	}
+	// Failed is the only entry to the retry path, and retrying may only queue.
+	if from == JobFailed {
+		return to == JobRetrying
+	}
+	if from == JobRetrying {
+		return to == JobQueued
+	}
 	if terminalStates[from] {
 		return false
 	}
-	// Side exits from any non-terminal (including failed → retrying).
+
+	// Side exits are allowed from ordinary in-flight states only.
 	switch to {
 	case JobFailed, JobCancelled, JobOrphaned:
-		return from != JobFailed // failed may only go to retrying
+		_, active := progressIndex[from]
+		return active && from != JobSucceeded
 	case JobRetrying:
-		return from == JobFailed || (!terminalStates[from] && from != JobRetrying)
+		return false
 	case JobQueued:
-		// Re-queue after retrying.
-		return from == JobRetrying
-	}
-
-	if from == JobFailed || from == JobRetrying {
 		return false
 	}
 

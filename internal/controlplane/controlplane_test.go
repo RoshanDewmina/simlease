@@ -3,6 +3,8 @@ package controlplane
 import (
 	"context"
 	"errors"
+	"os"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -29,6 +31,22 @@ func (f *fakeProvisioner) Provision(_ context.Context, req broker.ProvisionReque
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.n++
+	return broker.Device{
+		UDID:    "UDID-" + req.LeaseID,
+		Name:    "simurgh-clone[test]",
+		Runtime: req.Spec.Runtime,
+		Booted:  true,
+	}, nil
+}
+
+type blockingProvisioner struct {
+	started chan broker.ProvisionRequest
+	resume  chan struct{}
+}
+
+func (f *blockingProvisioner) Provision(_ context.Context, req broker.ProvisionRequest) (broker.Device, error) {
+	f.started <- req
+	<-f.resume
 	return broker.Device{
 		UDID:    "UDID-" + req.LeaseID,
 		Name:    "simurgh-clone[test]",
@@ -311,6 +329,44 @@ func TestJobStateTransitionsRejectInvalid(t *testing.T) {
 	}
 }
 
+func TestJobStateTransitionMatrixExhaustive(t *testing.T) {
+	states := []JobState{
+		JobQueued, JobSyncing, JobPreparing, JobBuilding,
+		JobWaitingForDevice, JobInstalling, JobLaunching, JobTesting,
+		JobCollecting, JobSucceeded, JobFailed, JobCancelled,
+		JobOrphaned, JobRetrying,
+	}
+	allowed := map[[2]JobState]bool{
+		{JobQueued, JobSyncing}:              true,
+		{JobSyncing, JobPreparing}:           true,
+		{JobPreparing, JobBuilding}:          true,
+		{JobBuilding, JobWaitingForDevice}:   true,
+		{JobWaitingForDevice, JobInstalling}: true,
+		{JobInstalling, JobLaunching}:        true,
+		{JobLaunching, JobTesting}:           true,
+		{JobTesting, JobCollecting}:          true,
+		{JobCollecting, JobSucceeded}:        true,
+		{JobFailed, JobRetrying}:             true,
+		{JobRetrying, JobQueued}:             true,
+	}
+	for _, from := range states {
+		if from == JobFailed || from == JobRetrying || from == JobSucceeded || from == JobCancelled || from == JobOrphaned {
+			continue
+		}
+		allowed[[2]JobState{from, JobFailed}] = true
+		allowed[[2]JobState{from, JobCancelled}] = true
+		allowed[[2]JobState{from, JobOrphaned}] = true
+	}
+	for _, from := range states {
+		for _, to := range states {
+			want := allowed[[2]JobState{from, to}]
+			if got := CanTransition(from, to); got != want {
+				t.Errorf("CanTransition(%s→%s)=%v want %v", from, to, got, want)
+			}
+		}
+	}
+}
+
 func TestBuildSlotQueueMetadata(t *testing.T) {
 	cp := newTestPlane(t, 1, 2)
 	ctx := context.Background()
@@ -344,8 +400,262 @@ func TestBuildSlotQueueMetadata(t *testing.T) {
 		t.Fatalf("envelope=%+v", bq.ErrorEnvelope)
 	}
 	st := cp.BuildStatus()
-	if st.BuildSlots != 1 || st.ActiveBuilds != 1 || st.QueuedBuilds != 1 {
+	if st.BuildSlots != 1 || st.ActiveBuilds != 1 || st.QueuedBuilds != 0 {
 		t.Fatalf("status=%+v", st)
+	}
+}
+
+func TestWaitFalseBuildQueueDoesNotConsumeFutureSlot(t *testing.T) {
+	cp := newTestPlane(t, 1, 1)
+	ctx := context.Background()
+	s, _ := cp.CreateSession(CreateSessionRequest{Project: "p", Agent: "a"})
+	holder, _ := cp.StartJob(s.ID, JobKindBuild)
+	abandoned, _ := cp.StartJob(s.ID, JobKindBuild)
+	waiter, _ := cp.StartJob(s.ID, JobKindBuild)
+
+	if _, err := cp.AcquireBuildSlot(ctx, BuildSlotRequest{JobID: holder.ID, Wait: false}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cp.AcquireBuildSlot(ctx, BuildSlotRequest{JobID: abandoned.ID, Wait: false}); err == nil {
+		t.Fatal("expected BUILD_QUEUED")
+	}
+	if got := cp.BuildStatus().QueuedBuilds; got != 0 {
+		t.Fatalf("queuedBuilds=%d want 0 after Wait=false", got)
+	}
+
+	granted := make(chan BuildGrant, 1)
+	errs := make(chan error, 1)
+	go func() {
+		g, err := cp.AcquireBuildSlot(ctx, BuildSlotRequest{JobID: waiter.ID, Wait: true})
+		if err != nil {
+			errs <- err
+			return
+		}
+		granted <- g
+	}()
+	for deadline := time.Now().Add(time.Second); cp.BuildStatus().QueuedBuilds != 1; {
+		if time.Now().After(deadline) {
+			t.Fatal("Wait=true job did not enter build queue")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	if err := cp.ReleaseBuildSlot(holder.ID); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-errs:
+		t.Fatal(err)
+	case g := <-granted:
+		if g.JobID != waiter.ID {
+			t.Fatalf("grant went to %s want waiter %s", g.JobID, waiter.ID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("real waiter was not promoted")
+	}
+	abandonedJob, _ := cp.GetJob(abandoned.ID)
+	if abandonedJob.BuildGrantID != "" {
+		t.Fatalf("Wait=false job consumed future slot: %s", abandonedJob.BuildGrantID)
+	}
+}
+
+func TestBuildSlotsFromEnv(t *testing.T) {
+	old, had := os.LookupEnv("SIMURGH_BUILD_SLOTS")
+	t.Cleanup(func() {
+		if had {
+			_ = os.Setenv("SIMURGH_BUILD_SLOTS", old)
+		} else {
+			_ = os.Unsetenv("SIMURGH_BUILD_SLOTS")
+		}
+	})
+	tests := []struct {
+		name    string
+		value   *string
+		want    int
+		wantErr bool
+	}{
+		{name: "empty", value: nil, want: DefaultBuildSlots},
+		{name: "invalid", value: ptr("nope"), wantErr: true},
+		{name: "zero", value: ptr("0"), wantErr: true},
+		{name: "positive", value: ptr("4"), want: 4},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.value == nil {
+				_ = os.Unsetenv("SIMURGH_BUILD_SLOTS")
+			} else {
+				_ = os.Setenv("SIMURGH_BUILD_SLOTS", *tc.value)
+			}
+			got, err := BuildSlotsFromEnv()
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("err=%v wantErr=%v", err, tc.wantErr)
+			}
+			if !tc.wantErr && got != tc.want {
+				t.Fatalf("got=%d want=%d", got, tc.want)
+			}
+		})
+	}
+}
+
+func ptr(s string) *string { return &s }
+
+func TestTransitionCancelDuringDeviceAcquireCleansLease(t *testing.T) {
+	prov := &blockingProvisioner{
+		started: make(chan broker.ProvisionRequest, 1),
+		resume:  make(chan struct{}),
+	}
+	b := broker.New(broker.BrokerOptions{
+		Capacity: 1, Provisioner: prov, Clock: time.Now,
+		PressureOK: func() (bool, string) { return true, "" },
+	})
+	cp, err := New(Options{BuildSlots: 1, Broker: b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := cp.CreateSession(CreateSessionRequest{Project: "p", Agent: "a"})
+	j, _ := cp.StartJob(s.ID, JobKindTest)
+	for _, state := range []JobState{JobSyncing, JobPreparing, JobBuilding} {
+		if _, err := cp.TransitionJob(context.Background(), j.ID, state); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	transitionErr := make(chan error, 1)
+	go func() {
+		_, err := cp.TransitionJob(context.Background(), j.ID, JobWaitingForDevice)
+		transitionErr <- err
+	}()
+	req := <-prov.started
+	cancelled, err := cp.CancelJob(context.Background(), j.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	timingsAfterCancel := cancelled.Timings
+	close(prov.resume)
+	if err := <-transitionErr; err == nil {
+		t.Fatal("raced transition unexpectedly committed")
+	}
+
+	got, _ := cp.GetJob(j.ID)
+	if got.State != JobCancelled || got.DeviceLeaseID != "" {
+		t.Fatalf("job after race=%+v", got)
+	}
+	if !reflect.DeepEqual(got.Timings, timingsAfterCancel) {
+		t.Fatalf("failed transition mutated winner timings:\n got=%+v\nwant=%+v", got.Timings, timingsAfterCancel)
+	}
+	lease, ok := b.Get(req.LeaseID)
+	if !ok {
+		t.Fatalf("acquired lease %s missing", req.LeaseID)
+	}
+	if lease.State != broker.LeaseReleased {
+		t.Fatalf("leaked raced lease state=%s want RELEASED", lease.State)
+	}
+	fresh, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: cp.deviceSpec, Wait: false, Owner: broker.Owner{PID: 42},
+	})
+	if err != nil || fresh.State != broker.LeaseActive {
+		t.Fatalf("capacity not restored: lease=%+v err=%v", fresh, err)
+	}
+}
+
+func TestFailCancelAndSucceedRacesPreserveTerminalWinner(t *testing.T) {
+	t.Run("fail-vs-cancel", func(t *testing.T) {
+		cp := newTestPlane(t, 1, 1)
+		s, _ := cp.CreateSession(CreateSessionRequest{Project: "p", Agent: "a"})
+		j, _ := cp.StartJob(s.ID, JobKindBuild)
+		if _, err := cp.TransitionJob(context.Background(), j.ID, JobSyncing); err != nil {
+			t.Fatal(err)
+		}
+		start := make(chan struct{})
+		results := make(chan Job, 2)
+		errs := make(chan error, 2)
+		go func() {
+			<-start
+			got, err := cp.FailJob(context.Background(), j.ID, FailureSource, "compile")
+			results <- got
+			errs <- err
+		}()
+		go func() {
+			<-start
+			got, err := cp.CancelJob(context.Background(), j.ID)
+			results <- got
+			errs <- err
+		}()
+		close(start)
+		<-results
+		<-results
+		<-errs
+		<-errs
+		got, _ := cp.GetJob(j.ID)
+		if got.State != JobFailed && got.State != JobCancelled {
+			t.Fatalf("non-terminal winner: %s", got.State)
+		}
+		if got.State == JobFailed {
+			if _, err := cp.CancelJob(context.Background(), j.ID); err == nil {
+				t.Fatal("Failed→Cancelled must be rejected")
+			}
+			again, _ := cp.GetJob(j.ID)
+			if again.State != JobFailed {
+				t.Fatalf("cancel clobbered failed winner: %s", again.State)
+			}
+		} else {
+			again, err := cp.FailJob(context.Background(), j.ID, FailureSource, "late")
+			if err != nil || again.State != JobCancelled {
+				t.Fatalf("late fail should idempotently preserve cancelled: state=%s err=%v", again.State, err)
+			}
+		}
+	})
+
+	t.Run("fail-vs-succeed", func(t *testing.T) {
+		cp := newTestPlane(t, 1, 1)
+		s, _ := cp.CreateSession(CreateSessionRequest{Project: "p", Agent: "a"})
+		j, _ := cp.StartJob(s.ID, JobKindBuild)
+		for _, state := range []JobState{
+			JobSyncing, JobPreparing, JobBuilding, JobWaitingForDevice,
+			JobInstalling, JobLaunching, JobTesting, JobCollecting,
+		} {
+			if _, err := cp.TransitionJob(context.Background(), j.ID, state); err != nil {
+				t.Fatal(err)
+			}
+		}
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, _ = cp.FailJob(context.Background(), j.ID, FailureSource, "late")
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			_, _ = cp.TransitionJob(context.Background(), j.ID, JobSucceeded)
+		}()
+		close(start)
+		wg.Wait()
+		got, _ := cp.GetJob(j.ID)
+		if got.State != JobFailed && got.State != JobSucceeded {
+			t.Fatalf("terminal winner clobbered: %s", got.State)
+		}
+	})
+}
+
+func TestCancelFailedJobIsRejectedWithoutMutation(t *testing.T) {
+	cp := newTestPlane(t, 1, 1)
+	s, _ := cp.CreateSession(CreateSessionRequest{Project: "p", Agent: "a"})
+	j, _ := cp.StartJob(s.ID, JobKindBuild)
+	if _, err := cp.TransitionJob(context.Background(), j.ID, JobSyncing); err != nil {
+		t.Fatal(err)
+	}
+	failed, err := cp.FailJob(context.Background(), j.ID, FailureSource, "compile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cp.CancelJob(context.Background(), j.ID); err == nil {
+		t.Fatal("Failed→Cancelled must be rejected")
+	}
+	got, _ := cp.GetJob(j.ID)
+	if !reflect.DeepEqual(got, failed) {
+		t.Fatalf("cancel mutated failed job:\n got=%+v\nwant=%+v", got, failed)
 	}
 }
 

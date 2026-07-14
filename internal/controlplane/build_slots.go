@@ -23,8 +23,7 @@ type buildScheduler struct {
 type buildWaiter struct {
 	jobID    string
 	enqueued time.Time
-	ch       chan struct{}
-	canceled bool
+	ch       chan BuildGrant
 }
 
 func newBuildScheduler(slots int, clock func() time.Time) *buildScheduler {
@@ -39,16 +38,10 @@ func newBuildScheduler(slots int, clock func() time.Time) *buildScheduler {
 func (s *buildScheduler) status() BuildStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	queued := 0
-	for _, w := range s.queue {
-		if !w.canceled {
-			queued++
-		}
-	}
 	return BuildStatus{
 		BuildSlots:   s.slots,
 		ActiveBuilds: len(s.active),
-		QueuedBuilds: queued,
+		QueuedBuilds: len(s.queue),
 	}
 }
 
@@ -63,93 +56,50 @@ func (s *buildScheduler) lookup(grantID string) (*BuildGrant, bool) {
 	return &cp, true
 }
 
-// acquire grants a build slot or enqueues the job. When wait is false and the
-// pool is full the job is still enqueued (for queuedBuilds metadata) and a
-// BuildQueuedError is returned — analogous to broker CAPACITY_QUEUED leases.
+// acquire grants a build slot or, only when wait is true, enqueues the job.
+// Wait=false returns retry metadata without leaving a durable waiter.
 func (s *buildScheduler) acquire(ctx context.Context, jobID string, wait bool) (grant BuildGrant, queuedAt, dequeuedAt time.Time, queueWait time.Duration, err error) {
-	var waitedFrom time.Time
-	for {
-		s.mu.Lock()
-		if existing, ok := s.byJob[jobID]; ok {
-			g := *s.active[existing]
-			s.mu.Unlock()
-			if !waitedFrom.IsZero() {
-				dequeuedAt = s.clock()
-				return g, waitedFrom, dequeuedAt, dequeuedAt.Sub(waitedFrom), nil
-			}
-			return g, time.Time{}, time.Time{}, 0, nil
-		}
-		pos := s.queuePositionLocked(jobID)
-		canTake := len(s.active) < s.slots && (pos == 1 || (pos == 0 && !s.hasLiveWaitersAheadLocked(jobID)))
-		if canTake {
-			g := s.grantLocked(jobID)
-			s.mu.Unlock()
-			if !waitedFrom.IsZero() {
-				dequeuedAt = g.GrantedAt
-				return g, waitedFrom, dequeuedAt, dequeuedAt.Sub(waitedFrom), nil
-			}
-			return g, time.Time{}, time.Time{}, 0, nil
-		}
-
-		// Ensure queued for metadata / waiter.
-		var ch chan struct{}
-		if pos == 0 {
-			w := buildWaiter{
-				jobID:    jobID,
-				enqueued: s.clock(),
-				ch:       make(chan struct{}, 1),
-			}
-			if waitedFrom.IsZero() {
-				waitedFrom = w.enqueued
-			}
-			s.queue = append(s.queue, w)
-			ch = w.ch
-			pos = s.queuePositionLocked(jobID)
-		} else {
-			for i := range s.queue {
-				if s.queue[i].jobID == jobID && !s.queue[i].canceled {
-					ch = s.queue[i].ch
-					if waitedFrom.IsZero() {
-						waitedFrom = s.queue[i].enqueued
-					}
-					break
-				}
-			}
-		}
-
-		if !wait {
-			active := len(s.active)
-			slots := s.slots
-			s.mu.Unlock()
-			return BuildGrant{}, waitedFrom, time.Time{}, 0, buildQueued(pos, slots, active)
-		}
-
+	s.mu.Lock()
+	if existing, ok := s.byJob[jobID]; ok {
+		g := *s.active[existing]
 		s.mu.Unlock()
-		if ch == nil {
-			continue
-		}
-		select {
-		case <-ctx.Done():
-			s.cancelWaiter(jobID)
-			return BuildGrant{}, waitedFrom, time.Time{}, 0, ctx.Err()
-		case <-ch:
-			// Retry grant after promotion signal.
-			continue
-		}
+		return g, time.Time{}, time.Time{}, 0, nil
 	}
-}
-
-func (s *buildScheduler) hasLiveWaitersAheadLocked(jobID string) bool {
+	if len(s.active) < s.slots && len(s.queue) == 0 {
+		g := s.grantLocked(jobID)
+		s.mu.Unlock()
+		return g, time.Time{}, time.Time{}, 0, nil
+	}
+	position := len(s.queue) + 1
+	if !wait {
+		active, slots := len(s.active), s.slots
+		s.mu.Unlock()
+		return BuildGrant{}, time.Time{}, time.Time{}, 0, buildQueued(position, slots, active)
+	}
 	for _, w := range s.queue {
-		if w.canceled {
-			continue
-		}
 		if w.jobID == jobID {
-			return false
+			s.mu.Unlock()
+			return BuildGrant{}, time.Time{}, time.Time{}, 0, fmt.Errorf("controlplane: job %q already waiting for build slot", jobID)
 		}
-		return true
 	}
-	return false
+	waiter := buildWaiter{
+		jobID:    jobID,
+		enqueued: s.clock(),
+		ch:       make(chan BuildGrant, 1),
+	}
+	s.queue = append(s.queue, waiter)
+	s.mu.Unlock()
+
+	select {
+	case <-ctx.Done():
+		s.cancelWaiter(jobID)
+		return BuildGrant{}, waiter.enqueued, time.Time{}, 0, ctx.Err()
+	case g := <-waiter.ch:
+		if g.ID == "" {
+			return BuildGrant{}, waiter.enqueued, time.Time{}, 0, context.Canceled
+		}
+		return g, waiter.enqueued, g.GrantedAt, g.GrantedAt.Sub(waiter.enqueued), nil
+	}
 }
 
 func (s *buildScheduler) grantLocked(jobID string) BuildGrant {
@@ -157,73 +107,61 @@ func (s *buildScheduler) grantLocked(jobID string) BuildGrant {
 	g := &BuildGrant{ID: id, JobID: jobID, GrantedAt: s.clock()}
 	s.active[id] = g
 	s.byJob[jobID] = id
-	s.removeWaiterLocked(jobID)
 	return *g
 }
 
 func (s *buildScheduler) release(jobID string) error {
+	return s.releaseOwned(jobID, "")
+}
+
+// releaseOwned releases only the named grant. Empty grantID keeps the
+// compatibility behavior for explicit ReleaseBuildSlot calls.
+func (s *buildScheduler) releaseOwned(jobID, grantID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	grantID, ok := s.byJob[jobID]
+	current, ok := s.byJob[jobID]
 	if ok {
-		delete(s.active, grantID)
+		if grantID != "" && current != grantID {
+			return nil
+		}
+		delete(s.active, current)
 		delete(s.byJob, jobID)
 	}
-	s.removeWaiterLocked(jobID)
+	if grantID == "" {
+		s.removeWaiterLocked(jobID, true)
+	}
 	s.promoteLocked()
 	return nil
 }
 
 func (s *buildScheduler) promoteLocked() {
 	for len(s.active) < s.slots {
-		idx := -1
-		for i, w := range s.queue {
-			if !w.canceled {
-				idx = i
-				break
-			}
-		}
-		if idx < 0 {
+		if len(s.queue) == 0 {
 			return
 		}
-		w := s.queue[idx]
-		// Auto-grant the head of the queue (including Wait=false metadata
-		// entries) so a freed slot is not skipped while FIFO waiters remain.
-		s.grantLocked(w.jobID)
-		select {
-		case w.ch <- struct{}{}:
-		default:
-		}
+		w := s.queue[0]
+		s.queue = s.queue[1:]
+		g := s.grantLocked(w.jobID)
+		w.ch <- g
 	}
 }
 
 func (s *buildScheduler) cancelWaiter(jobID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.removeWaiterLocked(jobID)
+	s.removeWaiterLocked(jobID, true)
 }
 
-func (s *buildScheduler) removeWaiterLocked(jobID string) {
+func (s *buildScheduler) removeWaiterLocked(jobID string, notify bool) {
 	out := s.queue[:0]
 	for _, w := range s.queue {
 		if w.jobID == jobID {
+			if notify {
+				w.ch <- BuildGrant{}
+			}
 			continue
 		}
 		out = append(out, w)
 	}
 	s.queue = out
-}
-
-func (s *buildScheduler) queuePositionLocked(jobID string) int {
-	pos := 0
-	for _, w := range s.queue {
-		if w.canceled {
-			continue
-		}
-		pos++
-		if w.jobID == jobID {
-			return pos
-		}
-	}
-	return 0
 }

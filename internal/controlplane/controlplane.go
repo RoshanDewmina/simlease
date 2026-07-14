@@ -163,14 +163,15 @@ func (cp *ControlPlane) StartJob(sessionID string, kind JobKind) (Job, error) {
 	id := fmt.Sprintf("job-%d", cp.idSeq.Add(1))
 	now := cp.clock()
 	j := &Job{
-		ID:        id,
-		SessionID: sessionID,
-		Kind:      kind,
-		State:     JobQueued,
-		WorkerID:  s.WorkerID,
-		Timings:   JobTimings{Phases: make(map[string]PhaseTiming)},
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:         id,
+		SessionID:  sessionID,
+		Kind:       kind,
+		State:      JobQueued,
+		WorkerID:   s.WorkerID,
+		Timings:    JobTimings{Phases: make(map[string]PhaseTiming)},
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		generation: 1,
 	}
 	j.Timings.Phases[string(JobQueued)] = PhaseTiming{StartedAt: now}
 	cp.jobs[id] = j
@@ -203,6 +204,7 @@ func (cp *ControlPlane) AcquireBuildSlot(ctx context.Context, req BuildSlotReque
 		cp.mu.Unlock()
 		return BuildGrant{}, &NotFoundError{Kind: "job", ID: req.JobID}
 	}
+	generation := j.generation
 	cp.mu.Unlock()
 
 	grant, queuedAt, dequeuedAt, queueWait, err := cp.builds.acquire(ctx, req.JobID, req.Wait)
@@ -223,11 +225,18 @@ func (cp *ControlPlane) AcquireBuildSlot(ctx context.Context, req BuildSlotReque
 	defer cp.mu.Unlock()
 	j, ok = cp.jobs[req.JobID]
 	if !ok {
-		_ = cp.builds.release(req.JobID)
+		_ = cp.builds.releaseOwned(req.JobID, grant.ID)
 		return BuildGrant{}, &NotFoundError{Kind: "job", ID: req.JobID}
+	}
+	if j.generation != generation || terminalStates[j.State] {
+		_ = cp.builds.releaseOwned(req.JobID, grant.ID)
+		return BuildGrant{}, &InvalidJobStateError{
+			JobID: req.JobID, From: j.State, To: j.State, Op: "commit build grant (raced)",
+		}
 	}
 	j.BuildGrantID = grant.ID
 	j.UpdatedAt = cp.clock()
+	j.generation++
 	if !queuedAt.IsZero() {
 		j.Timings.QueuedAt = queuedAt
 		j.Timings.DequeuedAt = dequeuedAt
@@ -246,6 +255,7 @@ func (cp *ControlPlane) ReleaseBuildSlot(jobID string) error {
 	if j, ok := cp.jobs[jobID]; ok {
 		j.BuildGrantID = ""
 		j.UpdatedAt = cp.clock()
+		j.generation++
 	}
 	return nil
 }
@@ -268,14 +278,15 @@ func (cp *ControlPlane) TransitionJob(ctx context.Context, jobID string, to JobS
 		cp.mu.Unlock()
 		return Job{}, &InvalidJobStateError{JobID: jobID, From: from, To: to, Op: "transition"}
 	}
-	now := cp.clock()
-	cp.endPhaseLocked(j, from, now)
+	generation := j.generation
 	needDevice := HoldsDevice(to) && !HoldsDevice(from)
 	dropDevice := HoldsDevice(from) && !HoldsDevice(to)
 	leaseID := j.DeviceLeaseID
+	buildGrantID := j.BuildGrantID
 	sessionID := j.SessionID
 	cp.mu.Unlock()
 
+	acquiredLeaseID := ""
 	if needDevice {
 		lease, err := cp.broker.Acquire(ctx, broker.AcquireRequest{
 			Spec:  cp.deviceSpec,
@@ -291,11 +302,7 @@ func (cp *ControlPlane) TransitionJob(ctx context.Context, jobID string, to JobS
 			return Job{}, err
 		}
 		leaseID = lease.ID
-		cp.mu.Lock()
-		if s, ok := cp.sessions[sessionID]; ok {
-			s.LeaseIDs = appendUnique(s.LeaseIDs, lease.ID)
-		}
-		cp.mu.Unlock()
+		acquiredLeaseID = lease.ID
 	}
 
 	if dropDevice && leaseID != "" {
@@ -307,23 +314,39 @@ func (cp *ControlPlane) TransitionJob(ctx context.Context, jobID string, to JobS
 
 	// Release build slot when leaving building toward device/collect phases.
 	if from == JobBuilding && to != JobBuilding {
-		_ = cp.builds.release(jobID)
+		_ = cp.builds.releaseOwned(jobID, buildGrantID)
 	}
 
 	cp.mu.Lock()
-	defer cp.mu.Unlock()
 	j, ok = cp.jobs[jobID]
 	if !ok {
+		cp.mu.Unlock()
+		if acquiredLeaseID != "" {
+			_, _ = cp.broker.Release(context.Background(), acquiredLeaseID)
+		}
 		return Job{}, &NotFoundError{Kind: "job", ID: jobID}
 	}
-	// Re-validate under lock in case of concurrent cancel.
-	if j.State != from {
-		return Job{}, &InvalidJobStateError{JobID: jobID, From: j.State, To: to, Op: "transition (raced)"}
+	// Commit only if no state/resource mutation won while external work ran.
+	if j.State != from || j.generation != generation {
+		racedFrom := j.State
+		cp.mu.Unlock()
+		if acquiredLeaseID != "" {
+			if _, cleanupErr := cp.broker.Release(context.Background(), acquiredLeaseID); cleanupErr != nil {
+				return Job{}, fmt.Errorf("controlplane: clean raced device lease %q: %w", acquiredLeaseID, cleanupErr)
+			}
+		}
+		return Job{}, &InvalidJobStateError{JobID: jobID, From: racedFrom, To: to, Op: "transition (raced)"}
 	}
+	now := cp.clock()
+	cp.endPhaseLocked(j, from, now)
 	j.State = to
 	j.UpdatedAt = now
+	j.generation++
 	if needDevice {
 		j.DeviceLeaseID = leaseID
+		if s, ok := cp.sessions[sessionID]; ok {
+			s.LeaseIDs = appendUnique(s.LeaseIDs, leaseID)
+		}
 	}
 	if dropDevice {
 		j.DeviceLeaseID = ""
@@ -336,7 +359,9 @@ func (cp *ControlPlane) TransitionJob(ctx context.Context, jobID string, to JobS
 		pt.StartedAt = now
 	}
 	j.Timings.Phases[string(to)] = pt
-	return cloneJob(j), nil
+	out := cloneJob(j)
+	cp.mu.Unlock()
+	return out, nil
 }
 
 // FailJob transitions to failed with retry classification.
@@ -348,15 +373,23 @@ func (cp *ControlPlane) FailJob(ctx context.Context, jobID string, class Failure
 		return Job{}, &NotFoundError{Kind: "job", ID: jobID}
 	}
 	from := j.State
+	if terminalStates[from] {
+		out := cloneJob(j)
+		cp.mu.Unlock()
+		return out, nil
+	}
 	if !CanTransition(from, JobFailed) {
 		cp.mu.Unlock()
 		return Job{}, &InvalidJobStateError{JobID: jobID, From: from, To: JobFailed, Op: "fail"}
 	}
 	retry := ClassifyRetry(class)
 	leaseID := j.DeviceLeaseID
+	buildGrantID := j.BuildGrantID
+	generation := j.generation
 	cp.mu.Unlock()
 
-	_ = cp.builds.release(jobID)
+	cp.builds.cancelWaiter(jobID)
+	_ = cp.builds.releaseOwned(jobID, buildGrantID)
 	if leaseID != "" {
 		_, _ = cp.broker.Release(ctx, leaseID)
 	}
@@ -367,8 +400,14 @@ func (cp *ControlPlane) FailJob(ctx context.Context, jobID string, class Failure
 	if !ok {
 		return Job{}, &NotFoundError{Kind: "job", ID: jobID}
 	}
+	if j.State != from || j.generation != generation {
+		if terminalStates[j.State] {
+			return cloneJob(j), nil
+		}
+		return Job{}, &InvalidJobStateError{JobID: jobID, From: j.State, To: JobFailed, Op: "fail (raced)"}
+	}
 	now := cp.clock()
-	cp.endPhaseLocked(j, j.State, now)
+	cp.endPhaseLocked(j, from, now)
 	j.State = JobFailed
 	j.FailureClass = class
 	j.RetryClass = retry
@@ -376,6 +415,7 @@ func (cp *ControlPlane) FailJob(ctx context.Context, jobID string, class Failure
 	j.DeviceLeaseID = ""
 	j.BuildGrantID = ""
 	j.UpdatedAt = now
+	j.generation++
 	pt := j.Timings.Phases[string(JobFailed)]
 	pt.StartedAt = now
 	pt.EndedAt = now
@@ -397,14 +437,18 @@ func (cp *ControlPlane) CancelJob(ctx context.Context, jobID string) (Job, error
 		cp.mu.Unlock()
 		return out, nil
 	}
-	if terminalStates[j.State] && j.State != JobFailed {
+	if !CanTransition(j.State, JobCancelled) {
 		cp.mu.Unlock()
 		return Job{}, &InvalidJobStateError{JobID: jobID, From: j.State, To: JobCancelled, Op: "cancel"}
 	}
+	from := j.State
+	generation := j.generation
 	leaseID := j.DeviceLeaseID
+	buildGrantID := j.BuildGrantID
 	cp.mu.Unlock()
 
-	_ = cp.builds.release(jobID)
+	cp.builds.cancelWaiter(jobID)
+	_ = cp.builds.releaseOwned(jobID, buildGrantID)
 	if leaseID != "" {
 		_, _ = cp.broker.Release(ctx, leaseID)
 	}
@@ -418,14 +462,18 @@ func (cp *ControlPlane) CancelJob(ctx context.Context, jobID string) (Job, error
 	if j.State == JobCancelled {
 		return cloneJob(j), nil
 	}
+	if j.State != from || j.generation != generation {
+		return Job{}, &InvalidJobStateError{JobID: jobID, From: j.State, To: JobCancelled, Op: "cancel (raced)"}
+	}
 	now := cp.clock()
-	cp.endPhaseLocked(j, j.State, now)
+	cp.endPhaseLocked(j, from, now)
 	j.State = JobCancelled
 	j.FailureClass = FailureCancelled
 	j.RetryClass = RetryUnsafe
 	j.DeviceLeaseID = ""
 	j.BuildGrantID = ""
 	j.UpdatedAt = now
+	j.generation++
 	return cloneJob(j), nil
 }
 

@@ -1,6 +1,6 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 15:25 UTC  
+**Updated:** 2026-07-14 15:44 UTC
 **Owner:** Roshan  
 **Orchestrator:** Cursor coder subagent for **R-WP2** (global capacity + daemon detach);
 Phase A remains **STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B
@@ -1247,3 +1247,43 @@ P1-7 warm-DD on Lancer: **MET** (above). P1-6 B5 dual-window / late-acquire meas
   per SpecKey.
 - Detach proven for Dial auto-start; LaunchAgent still optional/future.
 - Next: **R-WP3** only — no merge/push of R-WP2 from this entry alone.
+
+### 2026-07-14 15:44 UTC — single bounded R-WP2 review-fix loop complete
+
+- **MCP structured error:** additive fields on the existing typed
+  `lease_acquire` result (`code`, `message`, `fix`, `queuePosition`, `reason`,
+  `resourceClass`) when `CAPACITY_QUEUED`; `IsError` remains true. Success
+  fields/callers are unchanged.
+- **MCP pool status:** exposes daemon JSON tags `perSpecCapacity` and
+  `maxProvisioningOperations`; exact SDK structured-content tests added.
+- **Startup rehydrate:** `AdvanceRehydratedQueues` runs once after Broker,
+  Reaper, Provisioner, and handlers are ready, before the periodic loop or
+  client acceptance. Cross-spec test seeds PROVISIONING(A)+QUEUED(B), verifies
+  A→FAILED on rehydrate, zero provision calls before ready, then immediate B
+  promotion.
+- **Other findings:** corrected `Reclaim` godoc; strengthened
+  `brokerErrorToIPC` metadata fixture/assertions; replaced the misleading
+  stdin test with direct command construction assertions. The 30s OS test was
+  not weakened.
+- **Fix commits:** `c069e81` (MCP structured fields/status);
+  `8d374fa` (startup retry, wire assertions, detach test, godoc).
+
+#### Focused review-fix output
+
+`go test -race ./internal/mcp ./internal/daemon ./internal/ipc ./internal/broker ./cmd/simurgh -run '<review-fix tests>' -count=1 -v`
+passed: mcp 1.263s; daemon 1.260s; ipc 1.214s; broker 1.221s; cmd 1.237s.
+
+#### Literal gates after fixes
+
+| Command | Result |
+|---|---|
+| package race broker/ipc/daemon/mcp/cmd | **PASS** exit 0 (2.958s / 40.475s / 2.561s / 2.800s / 1.565s) |
+| named capacity regex | **PASS** 8 tests, broker 1.124s |
+| `TestDialDaemonSurvivesParentExit` | **PASS** PID **92313**, 32.52s (package 33.627s) |
+| `go build ./...` | **PASS** exit 0 |
+| `go vet ./...` | **PASS** exit 0 |
+| `go test -race ./...` | **PASS** exit 0 (16 packages) |
+| `TestReuseIfExistsLive` | **PASS** test 6.14s, package 7.365s |
+
+- This was the **only** bounded fix loop before one scoped re-review.
+- No R-WP3, merge, push, or review dispatch occurred.

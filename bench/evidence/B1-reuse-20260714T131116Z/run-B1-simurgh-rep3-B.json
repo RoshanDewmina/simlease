@@ -1,0 +1,79 @@
+{
+  "scenario": "B1",
+  "arm": "simurgh",
+  "agent": "B",
+  "rep": 3,
+  "udid": "933306DA-863F-42D5-B02D-8E9A32F3C081",
+  "timestamp": "2026-07-14T13:16:15Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 37240711412125,
+      "end_ns": 37252505028333,
+      "duration_ns": 11793616208,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "chains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk /Users/OWNER/.simurgh/leases/lease-161/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A5355p-802b3160ec225d8f0f354b513c6f7a323243818bda632a4370e1cc7a9fd181c5.sdkstatcache\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp/SampleApp.xcodeproj\n    /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang-stat-cache /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -o /Users/OWNER/.simurgh/leases/lease-161/DerivedData/SDKStatCaches.noindex/iphonesimulator27.0-24A5355p-802b3160ec225d8f0f354b513c6f7a323243818bda632a4370e1cc7a9fd181c5.sdkstatcache\n\nProcessInfoPlistFile /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp/Info.plist (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    builtin-infoPlistUtility /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp/Info.plist -producttype com.apple.product-type.application -genpkginfo /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/PkgInfo -expandbuildsettings -format binary -platform iphonesimulator -o /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist\n\nCopySwiftLibs /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib --scan-folder /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Frameworks --scan-folder /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/PlugIns --scan-folder /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SystemExtensions --scan-folder /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.1.5194.15.4iCH3S/Metal.xctoolchain --toolchain /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/.simurgh/leases/lease-161/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [3.355 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 37256946215333,
+      "end_ns": 37257371202625,
+      "duration_ns": 424987292,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for simurgh-clone[lease-161:iPhone 17 Pro:27.0] (933306DA-863F-42D5-B02D-8E9A32F3C081).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 37257723828875,
+      "end_ns": 37259982699125,
+      "duration_ns": 2258870250,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 37260820992000,
+      "end_ns": 37265931764875,
+      "duration_ns": 5110772875,
+      "exit_code": 0,
+      "incidents": [],
+      "time_to_badge_ns": 4723516500,
+      "health_window_s": 5,
+      "log": "AGENT_BADGE=B\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 37266021454291,
+      "end_ns": 37266769733791,
+      "duration_ns": 748279500,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 5D608A7F-48A6-4794-80B0-1A3D39BC89E7 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/20260714T131116Z/run-B1-simurgh-rep3-B.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 37267623837500,
+      "end_ns": 37268076557416,
+      "duration_ns": 452719916,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "B",
+    "actual": "B",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "71091cb40c31fb9b8890096555132e76ced85c4e88b8c30a32d6194a74f59308",
+    "hash_before_terminate": "71091cb40c31fb9b8890096555132e76ced85c4e88b8c30a32d6194a74f59308",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 20789246041,
+  "success": true
+}

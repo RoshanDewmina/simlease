@@ -25,3 +25,28 @@ These rules supplement the product and architecture source of truth. Reviewers m
   one process's memory and closed the instant that process exited — invisible to
   both the unit tests and the live test because both called `Start`/`Stop` in the
   same test process.)
+- When a fix changes a type's ownership from one-instance-per-call to one
+  long-lived-shared-instance (e.g. moving it into the daemon), audit every mutable
+  field on that type for concurrent access, not just the fields the bug fix itself
+  touched — a field with zero synchronization was safe by accident (single-threaded
+  by construction) and becomes a real data race the moment it's shared across
+  goroutines. Prove it with a `-race` test exercising concurrent calls, don't just
+  reason about it. (Found 2026-07-14, R-WP6: fixing B2 by sharing one `*Adapter`
+  across daemon connections exposed `stdinHolders` — never mutex-guarded because it
+  never needed to be before — to real concurrent map access.)
+- Env vars read directly in a shipped production code path (not gated behind a
+  build tag or an equivalent compile-time split) are an unconditional backdoor,
+  even when added only to make a test practical. Test-only overrides must be
+  eliminated from the real binary at compile time (e.g. the same build-tag pattern
+  already used for `darwin_sim`-gated live test files), never left as a runtime
+  env-var check with no secondary guard. (Found 2026-07-14, R-WP6: two env vars
+  added to support a new regression test were readable by the real `simurgh daemon
+  run` path with no gate — one could substitute an arbitrary binary for
+  XcodeBuildMCP, the other silently disabled the pressure gate.)
+- When replacing an IPC/RPC round-trip with an in-process shortcut for performance
+  or simplicity, the shortcut must reproduce the original path's full error
+  classification, not just its happy path — diff the old and new error handling
+  for every documented error code, not only the cases a manual test happens to hit.
+  (Found 2026-07-14, R-WP6: replacing a `dialAndCall("lease.get", ...)` round-trip
+  with a bare in-process closure silently changed lease-not-found from a structured
+  `LEASE_NOT_FOUND`/exit-3 error to a generic `INTERNAL`/exit-5 one.)

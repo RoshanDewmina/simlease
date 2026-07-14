@@ -538,7 +538,49 @@ cells if you disagree. Broken reps, if any, stay logged broken.
 | Crash cleanup: DIY orphans 5/5, Simurgh reclaims (B4) | ✅ defaults aligned in code; ⏳ one shipped-defaults rep pending machine |
 | Dogfooding found+fixed real queue-stuck bug (Bug 1) | ✅ |
 | Honest solo overhead ~41s with decomposition (B3) | ✅ table above |
-| Zero collisions at 2 agents (B1) | ⏳ rerun queued (root cause documented; number unchanged until then: 17/20) |
-| Time-to-green comparison (B1/B2) | ⏳ metric implemented, cells queued |
+| Warm-DD on real Lancer | ✅ measured −0.2% (`warmdd-lancer-20260714T033925Z`) — do not cite toy ~30% |
+| Zero collisions at 2 agents (B1) | ✅ **with retries / reuse**: all-green reps 10/10 (= DIY) in both fresh and reuse; first-attempt fresh 14/20, reuse 18/20. See Phase A addendum. |
+| Time-to-green comparison (B1) | ✅ metric live in `B1-fresh-20260714T111219Z` / `B1-reuse-20260714T131116Z` summaries |
 | Queueing beats thrash (B5) | ⏳ late-acquire pattern implemented, rerun queued |
 | Works on our real app (B6) | ⏳ n=4 stands; third rep + XcodeBuildMCP check queued |
+
+---
+
+# Phase A addendum — 2026-07-14 (partial; cells still running)
+
+Worktree tip advancing on `claude/benchmark-blockers-2026-07-13-37773c`. Security
+gate cleared for reachable history before resume. Driver relaunch
+`2026-07-14T11:08:02Z` / durable job from `11:11:16Z`.
+
+## B1-fresh (`bench/evidence/B1-fresh-20260714T111219Z/`)
+
+| Arm | First-attempt success | All-green reps (retries≤3) | Median to-N-green | First-try greens |
+|---|---|---|---|---|
+| naive | 9/20 | 4/10 | 36.7s | 9/20 |
+| diy | 20/20 | 10/10 | 143.0s | 20/20 |
+| simurgh (fresh) | 14/20 | **10/10** | 265.3s | 14/20 |
+
+**P0-1 / P0-2:** With the retry-to-green metric, ARM-S matches DIY at 10/10
+all-green reps. First-attempt remains 14/20 (6× `launch_destination_failure` /
+`wrong_variant` with `observed: none` — blown 5s health window under elevated
+loadavg, not cross-agent badge leakage). Machine load during DIY/simurgh arms
+routinely exceeded 400–900 (concurrent owner Lancer device build observed mid-
+cell); numbers stand as measured.
+
+## B1-reuse (`bench/evidence/B1-reuse-20260714T131116Z/`)
+
+| Arm | First-attempt | All-green reps | Median to-N-green | Median duration |
+|---|---|---|---|---|
+| simurgh (reuse) | **18/20** | **10/10** | 17.0s | 12.6s |
+
+Reuse (one lease/agent held across reps) collapses wall-clock ~15× vs fresh
+median-to-green and nearly matches DIY first-try rate. This is the recommended
+agent pattern; fresh-clone churn is real cost, not "shared CoreSimulator
+contention" as a unique Simurgh failure mode.
+
+## Still queued behind quiet-machine driver
+
+B2 (retries), B4 shipped-defaults rep, B5 dual-window (S+L), then separately:
+B6 third ARM-S rep (foreground one-rep), XcodeBuildMCP composition check.
+Driver currently waits on HID idle ≥600s between cells while the owner is
+active.

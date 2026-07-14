@@ -49,6 +49,8 @@ Same daemon RPCs as the MCP tools:
 
 ```bash
 simurgh acquire --model "iPhone 17 Pro" --wait --rm --json
+simurgh acquire --model "iPhone 17 Pro" --label project=myapp --label agent=claude-a \
+  --reuse-if-exists --wait --rm --json   # same Spec+labels+agent/session → renew same lease
 simurgh env <lease-id>                 # or: eval "$(simurgh env <lease-id>)"
 simurgh exec <lease-id> -- xcodebuild … build
 simurgh renew <lease-id> [--ttl DUR]
@@ -56,6 +58,16 @@ simurgh status --json                  # pool + pressure
 simurgh release <lease-id>
 ```
 
+### `--reuse-if-exists` matching (R-WP1)
+
+Compatible ACTIVE leases are renewed in place (same lease ID, UDID, isolation
+paths) when Spec, **exact** Labels, and `Owner.Agent`+`Owner.SessionID` match.
+PID is ignored so a restarted agent process can reclaim its warm lease.
+RELEASED / FAILED / RECLAIMED / CANCELLED leases are never reused. Concurrent
+identical reuse requests share one provision. Put project / Xcode / scheme
+identity in Labels — those dimensions are not first-class fields.
+
+MCP `lease_acquire` with `reuse_if_exists=true` uses the same match key.
 Client commands auto-start the daemon via `ipc.Dial` if the socket is down.
 `simurgh doctor` and `simurgh daemon status` do **not** auto-start.
 

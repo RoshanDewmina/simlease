@@ -149,6 +149,11 @@ Unix socket, newline-delimited JSON frames, request/response + server events.
             "fix":"simurgh status --queue   # or pass wait:true"}}
 ```
 
+`reuseIfExists=true` renews a compatible ACTIVE lease (same Spec, exact Labels,
+Owner.Agent+SessionID; PID ignored) without reprovisioning. Mismatch allocates
+a new resource. Cancelled `--wait` acquires return `ACQUIRE_CANCELLED` and
+CANCEL the still-QUEUED lease so capacity is not stranded.
+
 - Methods: `lease.acquire|renew|release|get|list|wait`, `pool.status`,
   `warm.create|list|remove`, `daemon.ping|shutdown`, `prune.plan|apply`.
 - Every error: `code` (stable, machine-readable) + `message` (human) +

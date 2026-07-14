@@ -1097,3 +1097,55 @@ P1-7 warm-DD on Lancer: **MET** (above). P1-6 B5 dual-window / late-acquire meas
   `CURSOR_SOL_ORCHESTRATOR_PASTE.md` corrections.
 - **Do not** merge/push R-WP0 or start R-WP1 from this entry alone.
 - **Do not** resume Phase A benchmarks unless owner re-authorizes.
+
+### 2026-07-14 14:50 UTC — R-WP1 complete (ReuseIfExists + QUEUED liveness)
+
+- **Baseline SHA:** `0757144fd80d69fd7cb45827fe087ca3f1dd57da` (R-WP0 tip).
+- **Worktree / branch:** `/Users/roshansilva/Documents/simurgh/.worktrees/r-wp1-reuse-liveness`
+  on `feat/r-wp1-reuse-liveness` (created at 0757144; no duplicate/reset/clean).
+- **Scope held:** real `ReuseIfExists`; orphaned QUEUED cancel/reap; docs. Non-goals
+  not touched (global capacity, sessions/build slots, PATH shims, XcodeBuildMCP,
+  dashboard). Daemon-dies-with-parent **deferred to R-WP2** with concrete obligation
+  (not merely filed as an issue).
+
+#### Matching key (conservative; Spec+Labels+Owner only)
+
+- Match: `DeviceSpec` + exact `Labels` + `Owner.Agent` + `Owner.SessionID`.
+- PID/PPID excluded. Project/Xcode/scheme absent as first-class fields — encode in Labels.
+- ACTIVE → renew same ID/UDID/paths; PROVISIONING → concurrent attach; terminal never reused.
+
+#### QUEUED liveness
+
+- `Acquire(Wait=true)` ctx cancel → `ACQUIRE_CANCELLED` + QUEUED→CANCELLED (persisted).
+- Watcher always checks QUEUED owner PID; ReclaimLoop `Release`s dead queued owners.
+- Wait RPC cancel does not cancel another client's QUEUED lease.
+
+#### Setsid / R-WP2 handoff
+
+- Evidence: `internal/ipc/client.go` `startDetachedDaemon` already has
+  `SysProcAttr{Setsid: true}` (~line 126). Bench still observed auto-started daemons
+  dying with the parent shell — Setsid alone is not proof.
+- **R-WP2 acceptance:** after Dial auto-start, parent exit/SIGHUP must leave daemon
+  answering `daemon.ping` ≥30s; regression test or live script with command+output
+  required before calling fixed.
+
+#### Exact gates
+
+| Command | Result |
+|---|---|
+| `go test -race ./internal/broker/... ./internal/watcher/... ./internal/daemon/... ./internal/mcp/... ./cmd/simurgh/...` | exit 0 |
+| `go build ./...` | exit 0 |
+| `go vet ./...` | exit 0 |
+| `go test -race ./...` | exit 0 (16 packages) |
+| `go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v` | **PASS** ~2.17s |
+
+#### Public symbols / dependents
+
+| Symbol / behavior | Dependents inspected |
+|---|---|
+| `broker.Acquire` ReuseIfExists | daemon `lease.acquire`, MCP `lease_acquire`, CLI `simurgh acquire` |
+| `broker.AcquireCancelledError` / `CodeAcquireCancelled` | daemon `brokerErrorToIPC`, CLI `exitCodeForIPCError` (exit 3) |
+| `watcher.Tick` QUEUED dead-owner decisions | daemon `ReclaimLoop.applyDecisions` → `Release` for QUEUED |
+| isolator paths (unchanged API; same lease ID) | daemon `withIsolationEnv` / live smoke |
+
+- **Do not** merge/push R-WP1 or start R-WP2 from this entry alone without orchestrator dispatch.

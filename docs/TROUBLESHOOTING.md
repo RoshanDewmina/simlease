@@ -23,6 +23,26 @@ Inspect the `pressure` block (OK flag + per-signal RAM/thermal/disk detail) and
 active/queued lease counts from `pool.status`. Free memory, cool thermal state,
 or release unused leases, then retry with `--wait`.
 
+## `--wait` acquire returns `ACQUIRE_CANCELLED`
+
+Client disconnect, Ctrl-C, or request-context cancel while still QUEUED cancels
+that lease (`QUEUED → CANCELLED`) so capacity is not stranded. The error triple
+is `ACQUIRE_CANCELLED` (not bare `INTERNAL` / `context canceled`). Dead owner
+PIDs on QUEUED leases are also cancelled by the watcher on the next tick after
+daemon restart.
+
+```bash
+simurgh list --json
+simurgh status --json
+```
+
+## `--reuse-if-exists` allocated a new lease
+
+Reuse only matches ACTIVE leases with the same DeviceSpec, **exact** Labels map,
+and Owner.Agent + Owner.SessionID (PID ignored). Different labels/agent/session,
+or a RELEASED/FAILED/RECLAIMED prior lease, allocate a new resource. Encode
+project/Xcode/scheme in Labels if those must bound reuse.
+
 ## Daemon not running
 
 ```bash

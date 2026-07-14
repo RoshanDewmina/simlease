@@ -1,8 +1,8 @@
 # Simurgh Master Build Status
 
-**Updated:** 2026-07-14 17:16 UTC (America/Toronto 13:16 EDT)
+**Updated:** 2026-07-14 (resume session, following the 17:16 UTC pause entry)
 **Roadmap naming:** Phase B packages use `R-WP*` (not Phase A `P0-*` / harness `WP*`).
-**Package state:** **R-WP6 PAUSED** at `bec8670` — **not complete, not reviewed**
+**Package state:** **R-WP6 gate-verified, live runtime validated — NOT REVIEWED, NOT MERGED**
 
 ## Baseline
 
@@ -17,28 +17,46 @@
 
 - ID: **R-WP6**
 - Goal: Bounded XcodeBuildMCP session adapter + validation; evidence-backed R-WP5 reassessment
-- State: **PAUSED** (owner stop). Committed adapter at `bec8670`; untracked unverified `internal/integrations/xcodebuildmcp/runtime_live_test.go` preserved. **Do not claim complete or reviewed.**
-- Files owned (committed): `internal/integrations/xcodebuildmcp/*` (except untracked live test), `cmd/simurgh/integration.go`, `cmd/simurgh/integration_xcodebuildmcp_test.go`, `cmd/simurgh/main.go`, plus this status / orchestrator-state / session report
+- State: **Resumed and gate-verified this session.** Committed adapter at `bec8670`; live runtime test formatted, one-line-fixed, compiled, and run green with real evidence (see below). **Still not independently reviewed; not merged; not pushed.**
+- Files owned (committed): `internal/integrations/xcodebuildmcp/*` (including the now-committed live test), `cmd/simurgh/integration.go`, `cmd/simurgh/integration_xcodebuildmcp_test.go`, `cmd/simurgh/main.go`, plus this status / orchestrator-state / session report / AGENT_GUIDE / ARCHITECTURE
 - Non-goals held: Phase A timed cells / `p0_rerun_driver` / `BENCH_START_AT` / bench evidence publishes; R-WP5 PATH shims (gated); merge/push
 
-### Untracked (not in `bec8670`)
+### Live test resolution (this session)
 
-| Path | Status |
+| Item | Detail |
 |---|---|
-| `internal/integrations/xcodebuildmcp/runtime_live_test.go` | untracked; SHA-256 `9582650a420aa69976fe03a15a81a799d136eadfb8f71796fca7ce0dda13f5f3`; **not** formatted/compiled/run |
+| `runtime_live_test.go` pre-fix SHA-256 | `9582650a420aa69976fe03a15a81a799d136eadfb8f71796fca7ce0dda13f5f3` |
+| `gofmt -w` | needed formatting; applied |
+| Compile check | **build failed**: `runtime_live_test.go:93:8: assignment mismatch: 1 variable but b.Release returns 2 values` — file had never been compiled before this session |
+| Fix applied (owner-authorized, scoped to this exact line only) | `_ = b.Release(...)` → `_, _ = b.Release(...)`, matching the discard-error style of the two adjacent cleanup lines in the same `t.Cleanup` block |
+| Post-fix `gofmt -l` | clean (no-op) |
+| Post-fix SHA-256 | `dd315aba5f82cda2eabb5ce726fd31071c632f4cd986aa125d61059fa14ce980` |
 
-### Last verified gates (against `bec8670`, before untracked live test)
+### `internal/pressure` exclusion (this session)
+
+`TestCheckCombinesSignals` in `internal/pressure` fails deterministically on
+this host: the test mocks RAM/thermal via `setRunner` but computes the disk
+signal from the real host filesystem, and this host has ~2.3GiB free against
+the test's hardcoded 5GiB minimum. Confirmed pre-existing and unrelated to
+R-WP6 (`internal/pressure` last touched by `2b0a4d8`, a shared ancestor of
+`bec8670`, not modified by this branch). Owner-authorized, scoped exclusion
+of this one package from the regression gate for this dispatch only —
+`internal/pressure` itself was **not modified**.
+
+### Gates run this session (resume, in order)
 
 | Gate | Result |
 |---|---|
-| Package focused gate | **PASS**, 7 tests, `6.722s` |
-| CLI focused gate | **PASS**, `31.208s` |
-| `go build ./...` | **PASS** |
-| `go vet ./...` | **PASS** |
-| `go test -race ./...` | **PASS**, 18 packages |
-| Capacity named tests | **PASS**, `1.814s` |
-| 30s detach | **PASS**, daemon PID `66767`, `35.990s` |
-| Live reuse (`darwin_sim`) | **PASS**, test `13.25s`, package `14.484s` |
+| Package focused gate (7 tests) | **PASS**, `1.493s` |
+| CLI focused gate (3 tests) | **PASS**, `3.936s` |
+| `go build ./...` | **PASS**, `0.436s` |
+| `go vet ./...` | **PASS**, `0.385s` |
+| `go test -race ./...` (unscoped) | **FAIL** — only `internal/pressure` (see exclusion above); all other packages passed |
+| `go test -race $(go list ./... \| grep -v internal/pressure)` | **PASS**, 17/17 packages |
+| Broker named tests (8) | **PASS**, `1.018s` |
+| IPC `TestDialDaemonSurvivesParentExit` | **PASS**, `32.28s` (daemon PID `38481` stable) |
+| Daemon `TestReuseIfExistsLive` (`darwin_sim`) | **PASS**, `2.54s` (package `3.554s`) |
+| **Live runtime validation** `TestXcodeBuildMCPRuntimeTwoSessionAttribution` (`darwin_sim`) | **PASS**, `63.50s` (package `64.518s`) — verdict `"composes"`, see evidence JSON in `docs/plans/orchestrator-state.md` |
 
 ### Explicitly deferred (unpublished claims)
 
@@ -49,8 +67,8 @@
 | B4-defaults-rep | **deferred** |
 | B5 dual-window | **deferred** |
 | B6 third ARM-S | **deferred** |
-| XcodeBuildMCP composition (bench) | **deferred** |
-| R-WP6 two-clone live runtime | **not run** (paused) |
+| XcodeBuildMCP composition (bench, timed/latency) | **deferred** — functional composition proved (see below), no latency claim |
+| R-WP6 two-clone live runtime | **PASS**, `63.50s`, verdict `"composes"` — functional/isolation proof only, not a benchmark |
 | Warm-DD latency / time-to-green numbers | **unpublished** |
 | New `bench/evidence/*` publishes | **not created** from R-WP4/R-WP6 |
 
@@ -80,24 +98,26 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 | **R-WP2** | tip `23c2dce` | complete |
 | **R-WP3** | tip `b811736` | complete |
 | **R-WP4** | tip `f395061` (code tip `4e500f1` + status) | **implementation-complete / benchmark-deferred** |
-| **R-WP6** | `bec8670` | **PAUSED** — not complete / not reviewed |
+| **R-WP6** | `bec8670` + this session's commit(s) | **gate-verified, live runtime validated — not independently reviewed, not merged** |
 
 ## Open failures/risks
 
 1. Benchmark cells remain unmet by owner STOPPED directive — not a code defect in R-WP4/R-WP6.
 2. Control-plane Session/Job state remains non-durable (R-WP3 carry-forward).
-3. R-WP5 PATH shim still deferred pending R-WP6 reassessment (correction #3); reassessment **not** evidence-backed yet.
-4. R-WP6 untracked live test unverified; package not reviewed.
+3. R-WP5 PATH shim still gated behind R-WP6 reassessment (correction #3); the live runtime evidence now exists — see this doc's R-WP5 recommendation section / orchestrator-state.md for the grounded (not decided) call.
+4. R-WP6 live test is now compiled, formatted, and passing with real evidence, but **has not had an independent code review pass** — that remains a separate follow-up stage.
 5. Security rewrite unreachable-object caveat remains; **no push** of rewritten history without owner review.
-6. Approved R-WP2 minor debt untouched: capacity migration surprise; LaunchAgent optional; global queue-position semantics.
-7. GitHub issues #1–#3 still OPEN.
+6. `internal/pressure` `TestCheckCombinesSignals` is disk-space-dependent on hosts with <5GiB free on `/` (not hermetic on disk); excluded from this session's regression gate by owner authorization; not fixed, not in scope for R-WP6.
+7. Approved R-WP2 minor debt untouched: capacity migration surprise; LaunchAgent optional; global queue-position semantics.
+8. GitHub issues #1–#3 still OPEN.
 
 ## Next package
 
-- Resume **R-WP6 only** (review untracked live test → runtime validation → docs → R-WP5 decision), or stop at this docs boundary.
-- **R-WP5** only after R-WP6 reassessment — do not start reflexively.
+- R-WP6 gates are green and the live runtime test passed with evidence this session. Independent review of `bec8670` + the live test fix is the next step before any merge.
+- **R-WP5**: owner decides defer/shrink/retain using the grounded recommendation in this session's orchestrator-state.md entry — this doc does not make that call.
 - Do **not** merge/push stacked branches from this status alone.
 - Do **not** restart Phase A timed drivers unless owner directs.
+- Do **not** start R-WP5 implementation from this status alone.
 
 ## Session report
 

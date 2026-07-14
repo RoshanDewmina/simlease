@@ -378,3 +378,30 @@ No SQLite · no gRPC/protobuf (JSON frames suffice at this scale) · no network
 transport · no plugin system · no config UI · no telemetry (decide at release;
 closed source for now) · no Android/desktop abstractions leaking into core
 types (DeviceSpec.Platform is a string enum, that's the extent of it).
+
+## 14. XcodeBuildMCP integration adapter (R-WP6)
+
+`simurgh integration xcodebuildmcp start|stop|status --session <id> [--json]`
+is a **bounded session adapter**: it starts/stops an XcodeBuildMCP child
+process scoped to one lease, binding it to that lease's isolated
+`Env`/`Bindings` (own UDID, own `DerivedData`/`SwiftPM`/module-cache paths)
+so a second concurrent session's adapter cannot see or mutate the first's
+resources. `Stop` rejects a foreign PID; ownership is tracked per lease, not
+globally. Implementation: `internal/integrations/xcodebuildmcp`.
+
+**Live runtime validation (`TestXcodeBuildMCPRuntimeTwoSessionAttribution`,
+`darwin_sim`-tagged, real `xcrun simctl` + real `npx xcodebuildmcp`):** two
+concurrent leases, two adapter instances, two real `xcodebuildmcp simulator
+build` invocations against a fixture project. Result: distinct UDIDs,
+distinct `DerivedData` roots, distinct adapter PIDs, zero growth in the
+shared `~/Library/Developer/Xcode/DerivedData` (no global pollution), and
+stopping session A's adapter left session B's adapter and DerivedData
+intact. Verdict recorded by the test as `"composes"` — XcodeBuildMCP
+sessions compose with Simurgh's per-lease isolation model under this
+one bounded two-session scenario.
+
+**Scope of the claim (do not over-read):** this is a functional/isolation
+proof only, run once, on one host, with one fixture project and two
+sessions. It is explicitly **not** a latency or performance claim, not a
+stress/concurrency-scale test, and not an independent-review pass — see
+`docs/plans/orchestrator-state.md` for the exact commands and dated entry.

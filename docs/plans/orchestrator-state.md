@@ -1563,3 +1563,104 @@ time-to-green numbers, new bench/evidence — **unpublished / not run**.
   HEAD` must exit 0; do not require exact `HEAD == bec8670` because docs
   commits follow the code tip.
 
+### 2026-07-14T20:18:22Z — RESUMED: R-WP6 owner-authorized resume, gate-verified, live runtime PASS
+
+- **Status:** resumed in-place in `.worktrees/r-wp6-xcodebuildmcp` on
+  `feat/r-wp6-xcodebuildmcp`. Preconditions verified before touching
+  anything: `pwd` correct, branch correct, `git merge-base --is-ancestor
+  bec8670 HEAD` exit 0, pre-fix SHA-256 of `runtime_live_test.go` matched
+  `9582650a420aa69976fe03a15a81a799d136eadfb8f71796fca7ce0dda13f5f3` exactly.
+- **`internal/pressure` exclusion (owner-authorized, scoped):**
+  `TestCheckCombinesSignals` fails deterministically because it computes the
+  disk-pressure signal from the real host filesystem (RAM/thermal are mocked
+  via `setRunner`; disk is not) and this host has ~2.3GiB free on `/` against
+  the test's hardcoded 5GiB minimum. Confirmed reproducible on a second
+  isolated run. Confirmed pre-existing and unrelated to R-WP6: last touched
+  by `2b0a4d8`, a shared ancestor of `bec8670`, untouched by this branch.
+  Owner authorized excluding this one package from the regression gate for
+  this dispatch only; `internal/pressure` itself was **not modified** and
+  is **not fixed** — it remains a known gap on low-disk hosts.
+- **Live test compile fix (owner-authorized, scoped to exactly one line):**
+  `runtime_live_test.go` had never been compiled before this session (per
+  the prior pause entry). First compile attempt failed:
+  `runtime_live_test.go:93:8: assignment mismatch: 1 variable but b.Release
+  returns 2 values`. Owner had independently read the full file earlier in
+  the session and confirmed the logic/cleanup/isolation design was sound —
+  this was a pure signature mismatch. Owner specified the exact fix: line 93
+  inside the `t.Cleanup` block, `_ = b.Release(context.Background(),
+  lease.ID)` → `_, _ = b.Release(context.Background(), lease.ID)`, matching
+  the unconditional-discard style of the two adjacent `exec.Command(...).Run()`
+  cleanup lines in the same block. No other line touched. Post-fix
+  `gofmt -l` was clean (no-op); post-fix SHA-256 is
+  `dd315aba5f82cda2eabb5ce726fd31071c632f4cd986aa125d61059fa14ce980`.
+- **Gates (in order, this session):** xcodebuildmcp package 7 tests PASS
+  `1.493s`; cmd/simurgh CLI 3 tests PASS `3.936s`; `go build ./...` PASS
+  `0.436s`; `go vet ./...` PASS `0.385s`; `go test -race ./...` unscoped
+  FAILED only on `internal/pressure` (see exclusion above), all other
+  packages passed; `go test -race $(go list ./... | grep -v
+  internal/pressure)` PASS 17/17 packages; broker 8 named tests PASS
+  `1.018s`; ipc `TestDialDaemonSurvivesParentExit` PASS `32.28s` (daemon PID
+  `38481` stable ≥30s); daemon `TestReuseIfExistsLive` (`darwin_sim`) PASS
+  `2.54s` (package `3.554s`).
+- **Live runtime validation:** `go test -race -tags darwin_sim
+  ./internal/integrations/xcodebuildmcp -run
+  TestXcodeBuildMCPRuntimeTwoSessionAttribution -count=1 -v` → **PASS**,
+  `63.50s` (package `64.518s`). Evidence JSON logged by the test:
+
+  ```json
+  {
+    "adapter_pid_a": 41894,
+    "adapter_pid_b": 41895,
+    "check": "r-wp6-xcodebuildmcp-runtime",
+    "dd_a": ".../TestXcodeBuildMCPRuntimeTwoSessionAttribution.../lease-1/DerivedData",
+    "dd_b": ".../TestXcodeBuildMCPRuntimeTwoSessionAttribution.../lease-2/DerivedData",
+    "global_sampleapp_after": 1,
+    "global_sampleapp_before": 1,
+    "lease_a": "lease-1",
+    "lease_b": "lease-2",
+    "no_global_pollution": true,
+    "stop_a_leaves_b_valid": true,
+    "udid_a": "69D6732E-0A1C-4230-B429-1D83A08D2045",
+    "udid_b": "3254B803-50F5-45DB-83F6-664A8BF38A7F",
+    "verdict": "composes",
+    "xcodebuildmcp_version": "2.6.2"
+  }
+  ```
+
+  Two real leases, two distinct UDIDs, two distinct DerivedData roots, two
+  distinct adapter PIDs, zero growth in the shared global
+  `~/Library/Developer/Xcode/DerivedData` (no pollution), and B's adapter +
+  DerivedData remained intact after A's adapter was stopped.
+- **Scope of the claim:** this is a functional/isolation composition proof
+  only — one host, one fixture project, two sessions, one run. It is
+  explicitly **not** a latency or performance claim, not a
+  stress/concurrency-scale test, and **not an independent code review** of
+  `bec8670` or the live test fix — that remains a separate, not-yet-started
+  follow-up stage.
+- **Docs updated this entry:** `docs/AGENT_GUIDE.md` (new XcodeBuildMCP
+  adapter section), `docs/ARCHITECTURE.md` (new §14), `MASTER_BUILD_STATUS.md`
+  (package state, gates, deferred table, open risks, next package),
+  `docs/plans/orchestrator-state.md` (this entry).
+- **Still binding:** Phase A STOPPED/BLOCKED (`593a051`); no benchmark
+  restart; no merge/push; master unchanged; R-WP7+ not started; no
+  `bench/evidence`/`bench/results` mutation; no performance claims; `bec8670`
+  and this session's work are **not reviewed**.
+
+#### R-WP5 recommendation (grounded, owner decides)
+
+**Recommendation: retain R-WP5 in the roadmap, scoped as originally planned
+(PATH shims for `xcodebuild`/`xcrun`), and unblock it now that R-WP6 has a
+real (if narrow) composition verdict.** Grounding: the live test proved
+XcodeBuildMCP sessions compose with Simurgh's per-lease isolation for the
+one scenario it exercised — two concurrent sessions stayed on separate
+UDIDs and separate DerivedData roots with no shared-tree pollution, and
+adapter lifecycle (start/stop/ownership) held under a real stop-one-keep-
+the-other sequence. That is exactly the kind of interaction R-WP5's PATH
+shims would need to preserve (any bare `xcodebuild`/`xcrun` call must still
+land inside the correct lease's isolated paths whether invoked directly or
+via an XcodeBuildMCP-launched child). Nothing in this run surfaced a reason
+to shrink or defer R-WP5's scope — the proof is narrow (one project, one
+run, no concurrency stress beyond two sessions, no independent review yet),
+so "retain as planned" rather than "expand" is the appropriately bounded
+read. This is a recommendation only; the owner decides.
+

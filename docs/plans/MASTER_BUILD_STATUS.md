@@ -1,141 +1,105 @@
 # Simurgh Master Build Status
 
-**Updated:** 2026-07-14 16:14 UTC (America/Toronto 12:14 EDT)
+**Updated:** 2026-07-14 16:35 UTC (America/Toronto 12:35 EDT)
 **Roadmap naming:** Phase B packages use `R-WP*` (not Phase A `P0-*` / harness `WP*`).
+**Package state:** **R-WP4 implementation-complete / benchmark-deferred**
 
 ## Baseline
 
-- Prior tip (R-WP2 gate-verified): `23c2dceeb3776c465f17b1d78a32200b8dac1576`
-- Branch/worktree: `feat/r-wp3-session-jobs` @ `/Users/roshansilva/Documents/simurgh/.worktrees/r-wp3-session-jobs`
+- Prior tip (R-WP3 gate-verified): `b811736a4543d658bd5aecbf5701b16bb5a7548a`
+- Branch/worktree: `feat/r-wp4-readiness-cache` @ `/Users/roshansilva/Documents/simurgh/.worktrees/r-wp4-readiness-cache`
 - Go: `go1.26.5 darwin/arm64`
 - macOS: `27.0` (Build `26A5378n`), `arm64`
 - Xcode: `27.0` (Build `27A5194q`); `xcrun simctl help` exit 0
 
 ## Current work package
 
-- ID: **R-WP3**
-- Goal: Session/Job/Worker/Workspace/Artifact/Event domain; independent build slots; job FSM; cancellation ownership; retry classification; lease compatibility adapter
-- State: **complete** (all literal gates green; no merge/push)
-- Files owned (product): `internal/controlplane/*`, `internal/daemon/{daemon,daemon_test}.go`, `internal/mcp/{server,server_test}.go`, `cmd/simurgh/daemon.go`, docs (`AGENT_GUIDE`, `ARCHITECTURE`, `TROUBLESHOOTING`, `README`), this status + orchestrator-state
-- Non-goals held: readiness/benchmark reruns (R-WP4), PATH shims (R-WP5), XcodeBuildMCP adapter (R-WP6), SQLite/dashboard/multi-Mac, priority/aging, UI-test-slot scheduler
+- ID: **R-WP4**
+- Goal: Bounded readiness polls; formal APFS warm-seed compatibility keys; private writable-cache isolation; acquire/build/install/launch/test/capture phase instrumentation
+- State: **implementation-complete / benchmark-deferred** (all literal implementation gates green; **no** timed matrix / no new `bench/evidence` / no latency claims)
+- Files owned: `cmd/simurgh/warm_seed.go`, `cmd/simurgh/env.go`, `cmd/simurgh/warmdd.go`, `internal/isolator/*`, `internal/provisioner/{readiness,errors,simctl,provisioner}.go`, `internal/controlplane/{types,controlplane}.go`, docs (`AGENT_GUIDE`, `ARCHITECTURE`, this status + orchestrator-state)
+- Non-goals held: timed B1/B2/B4/B5/B6 / `p0_rerun_driver` / `BENCH_START_AT` / XcodeBuildMCP composition (owner STOPPED); R-WP5 PATH shims; R-WP6 adapter; public session/job RPCs; broker identity/capacity rewrites
+
+### Explicitly deferred (unpublished claims)
+
+| Cell / claim | Status |
+|---|---|
+| B1-fresh / B1-reuse timed | **deferred** — do not restart |
+| B2 retries timed | **deferred** |
+| B4-defaults-rep | **deferred** |
+| B5 dual-window | **deferred** |
+| B6 third ARM-S | **deferred** |
+| XcodeBuildMCP composition check | **deferred** |
+| Warm-DD latency / time-to-green numbers | **unpublished** — implementation only |
+| New `bench/evidence/*` publishes | **not created** |
 
 ### Acceptance commands (exact)
 
 ```bash
-go test -race ./internal/controlplane/... -run 'TestBuildProceedsWhileSimulatorFull|TestDeviceHeldOnlyDuringDevicePhase|TestCancelReleasesOnlyOwnedResources|TestJobStateTransitionsRejectInvalid|TestBuildSlotQueueMetadata|TestJobRetryClassification|TestPhaseAndQueueTimings' -count=1 -v
-go test -race ./internal/controlplane/... -run 'TestTransitionCancelDuringDeviceAcquireCleansLease|TestFailCancelAndSucceedRacesPreserveTerminalWinner|TestCancelFailedJobIsRejectedWithoutMutation|TestJobStateTransitionMatrixExhaustive|TestWaitFalseBuildQueueDoesNotConsumeFutureSlot|TestBuildSlotsFromEnv' -count=1 -v
-go test -race ./internal/controlplane/... -run 'TestTerminalClaimBeatsInstallingToLaunching|TestIdempotentTerminalCallRetriesRetainedCleanup|TestPromotedBuildWaiterCancellationReleasesGrantAndPromotesNext|TestBuildWaiterPromotionCancelRaceDoesNotStrandSlot' -count=50
+go test -race ./cmd/simurgh -run 'TestWarmSeedCompatibilityHit|TestWarmSeedCompatibilityMiss|TestWarmSeedNeverOverwritesNonEmptyDestination|TestWarmSeedCloneFallback' -count=1 -v
+go test -race ./internal/isolator -run 'TestWritableCachesStayUnderLeaseRoot' -count=1 -v
+go test -race ./internal/provisioner -run 'TestReadinessPollSuccess|TestReadinessPollTimeoutClassified' -count=1 -v
+go test -race ./internal/controlplane -run 'TestPhaseInstrumentationCoverage|TestPhaseAndQueueTimings|TestBuildProceedsWhileSimulatorFull|TestDeviceHeldOnlyDuringDevicePhase' -count=1 -v
 go build ./...
 go vet ./...
 go test -race ./...
-go test -race ./internal/broker/... ./internal/ipc/... ./internal/daemon/... ./internal/mcp/... ./cmd/simurgh/...
 go test -race ./internal/broker -run 'TestGlobalCapacity|TestPerSpecCap|TestProvisioning|TestQueueReason|TestFairness|TestPressure' -count=1 -v
 go test -race ./internal/ipc -run 'TestDialDaemonSurvivesParentExit' -count=1 -v
 go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v
 ```
 
-### Gate results (R-WP3 worktree)
+### Gate results (R-WP4 worktree)
 
 | Gate | Result |
 |---|---|
-| controlplane named tests (7), final | **PASS** exit 0 — package 1.149s |
-| review race/FSM/Wait=false/env tests (6) | **PASS** exit 0 — package 1.160s |
-| escalated terminal/waiter tests (4) | **PASS** exit 0 — 1.123s; `-count=50` 1.412s |
+| warm-seed named 4 | **PASS** exit 0 — package 1.309s |
+| `TestWritableCachesStayUnderLeaseRoot` | **PASS** exit 0 — 1.153s |
+| readiness named 2 | **PASS** exit 0 — 1.212s |
+| controlplane named 4 | **PASS** exit 0 — 1.153s |
 | `go build ./...` | **PASS** exit 0 |
 | `go vet ./...` | **PASS** exit 0 |
-| `go test -race ./...` | **PASS** exit 0 (**17** packages) |
-| package race (broker/ipc/daemon/mcp/cmd) | **PASS** exit 0 |
-| capacity named tests | **PASS** exit 0 — all 8 matching tests |
-| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.53s**; daemon **PID 39686** stable ≥30s |
-| `TestReuseIfExistsLive` (`darwin_sim`) | **PASS** exit 0 — test 2.62s, package 3.753s |
+| `go test -race ./...` | **PASS** exit 0 (**17** packages; ipc 36.638s) |
+| capacity named tests | **PASS** exit 0 — 8 tests, 1.126s |
+| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.47s**; daemon **PID 70540** stable ≥30s |
+| `TestReuseIfExistsLive` (`darwin_sim`) | **PASS** exit 0 — test 2.52s, package 3.747s |
 
-### Behavioral proof (R-WP3)
+### Behavioral proof (R-WP4)
 
-1. **Build vs simulator independence:** `TestBuildProceedsWhileSimulatorFull` saturates simulator capacity (`CAPACITY_QUEUED` / `simulator_slot`) then grants a build slot.
-2. **Device hold window:** `TestDeviceHeldOnlyDuringDevicePhase` holds a lease only for `waiting_for_device`…`testing`; released before `collecting`.
-3. **Cancel ownership:** `TestCancelReleasesOnlyOwnedResources` cancels one job's build+device resources without touching a peer job's build grant.
-4. **FSM:** `TestJobStateTransitionsRejectInvalid` rejects skips/backwards/terminal escapes; `CanTransition` table covers illegal pairs.
-5. **Build queue metadata:** `TestBuildSlotQueueMetadata` returns `BUILD_QUEUED` with `resourceClass=build_slot`; Wait=false leaves `queuedBuilds=0`.
-6. **Retry class:** `TestJobRetryClassification` maps infrastructure→safe, source/cancel→unsafe.
-7. **Timings:** `TestPhaseAndQueueTimings` records queue wait and phase start/end/duration.
+1. **Warm seed hit:** matching formal key CoW-seeds lease DerivedData (`SeedOutcomeHit`).
+2. **Warm seed miss:** exact field mismatch (e.g. XcodeBuild) → `SeedOutcomeMiss`, empty dest.
+3. **Never overwrite:** non-empty destination → `SeedOutcomeSkippedNonEmpty`.
+4. **Clone fallback:** failing clone → `SeedOutcomeFallbackCold`, empty dir restored.
+5. **Writable caches:** DerivedData/ModuleCache/SwiftPM/Results/tmp under lease root; escapes + default Xcode paths rejected.
+6. **Readiness success:** probe becomes ready under bound.
+7. **Readiness timeout:** classified `READINESS_TIMEOUT`; optional fallback after primary deadline; no hang.
+8. **Phase coverage:** aliases `acquire/build/install/launch/test/capture` recorded from real JobState timings.
 
-### Commits (from `23c2dce`)
+### Commits (from `b811736`)
 
 | SHA | Summary |
 |---|---|
-| `bc86479` | feat(controlplane): session/job model and independent build slots |
-| `d1c789f` | feat(daemon): surface build slot status on pool.status |
-| `0f28d7a` | docs: record R-WP3 build slots and session/job handoff |
-| `4050a5e` | fix(controlplane): make job transitions race-safe |
-| `292cda9` | docs(plans): record bounded R-WP3 review-fix gates |
-| `f49a258` | fix(controlplane): atomically claim terminal resources |
-| *(status tip)* | docs(plans): record escalated R-WP3 integration resolution |
+| `f6237d6` | feat(warm-seed): formal APFS compatibility keys and CoW seed/fallback |
+| `49bc1b3` | feat(isolator): enforce writable caches stay under lease root |
+| `41aa107` | feat(provisioner): bounded readiness polls with classified timeouts |
+| `1d51667` | feat(controlplane): additive acquire/build/install/launch/test/capture timings |
+| *(status tip)* | docs(plans): record R-WP4 implementation-complete / benchmark-deferred |
 
-### Model notes (R-WP3)
+### Public symbols / dependents
 
-- Env: `SIMURGH_BUILD_SLOTS` (default **2**).
-- Resource class `build_slot` is independent; R-WP2 device deny order unchanged.
-- `pool.status` / MCP additively expose `buildSlots`, `activeBuilds`, `queuedBuilds`.
-- Session/job state is **in-memory / non-durable** (documented); no SQLite.
-- No new public session/job CLI/RPC; lease.* remains the compatibility adapter and never returns build queue errors.
-- Worker/Artifact remain intentional domain types only; no speculative lifecycle.
+| Symbol | Dependents |
+|---|---|
+| `WarmSeedKey` / `SeedWarmDerivedData` / `PublishWarmSeed` | `cmd/simurgh` `runExec` (`env.go`) |
+| `ValidateWritableCachesUnderLeaseRoot` | `EnsureLeaseDir`; isolator tests |
+| `PollReadiness` / `ReadinessTimeoutError` | `execSimctlClient.WaitBooted`; `Provisioner.Provision` |
+| `InstrumentedPhases` / aliases | `ControlPlane.TransitionJob` / `endPhaseLocked` |
 
-### Single bounded R-WP3 review-fix loop
+### Model notes (R-WP4)
 
-All blocking/major/minor findings were addressed with failing tests first:
-
-1. `TransitionJob` now captures state+generation, performs device work unlocked,
-   and commits state/timings only after exact revalidation. A lost race releases
-   only the lease acquired by that transition.
-2. `FailJob`/`CancelJob` revalidate exact prior generation and preserve a
-   concurrent terminal winner. Failed→Cancelled is rejected; repeated terminal
-   results are explicit.
-3. Retry edges are exactly Failed→Retrying→Queued; exhaustive matrix test covers
-   every state pair.
-4. Wait=false build contention returns `BUILD_QUEUED`/`build_slot` without a
-   durable waiter. Only Wait=true FIFO waiters count in `queuedBuilds` and may
-   be promoted.
-5. Dead `buildWaiter.canceled` state was removed.
-6. `BuildSlotsFromEnv` covers empty, invalid, zero, and positive values.
-
-Race proof:
-
-```text
-go test -race ./internal/controlplane -run \
-  'TestTransitionCancelDuringDeviceAcquireCleansLease|TestFailCancelAndSucceedRacesPreserveTerminalWinner|TestWaitFalseBuildQueueDoesNotConsumeFutureSlot|TestCancelFailedJobIsRejectedWithoutMutation' \
-  -count=50
-PASS — package 1.323s
-```
-
-### Final orchestrator-escalated integration resolution
-
-1. `CancelJob` / `FailJob` now claim terminal state, phase timings, and a new
-   generation while holding `cp.mu`, before any resource release.
-2. Exact `BuildGrantID` / `DeviceLeaseID` snapshots remain on the terminal Job
-   until each release succeeds. An idempotent same-terminal call retries retained
-   cleanup ownership; stale operations cannot release a winner's later resource.
-3. Deterministic installing→launching versus Cancel/Fail tests block terminal
-   cleanup and prove the transition cannot win after the atomic terminal claim.
-4. A promoted Wait=true waiter remains tracked outside the FIFO with its exact
-   grant ID. Context cancellation atomically removes a queued waiter or releases
-   its promoted grant and advances the next waiter.
-
-Final race proof:
-
-```text
-go test -race ./internal/controlplane/... -run \
-  'TestTerminalClaimBeatsInstallingToLaunching|TestIdempotentTerminalCallRetriesRetainedCleanup|TestPromotedBuildWaiterCancellationReleasesGrantAndPromotesNext|TestBuildWaiterPromotionCancelRaceDoesNotStrandSlot' \
-  -count=50
-PASS — package 1.412s
-```
-
-### Approved R-WP2 minor debt (logged, untouched)
-
-Paths not modified in R-WP3; residual items remain accepted:
-
-1. Capacity env migration still tightens multi-spec hosts that previously multiplied per SpecKey.
-2. Dial detach is Go-only (Setsid + `/dev/null` + SIGHUP ignore); LaunchAgent remains optional/future.
-3. Queue position remains global rank among QUEUED leases (not per-spec-only).
+- Warm seed policy version: `WarmSeedPolicyVersion = "1"`.
+- Shared seed layout: `~/.simurgh/warm-dd/<digest>/{DerivedData,meta.json}`.
+- No public session/job CLI/RPC added.
+- Broker capacity/reuse identity untouched.
+- **No performance claims** from this package.
 
 ## Completed packages
 
@@ -146,21 +110,17 @@ Paths not modified in R-WP3; residual items remain accepted:
 | **R-WP0** | `0757144` | complete |
 | **R-WP1** | tip `e948d26` | complete |
 | **R-WP2** | tip `23c2dce` | complete |
-| **R-WP3** | tip after status commit on `feat/r-wp3-session-jobs` | complete |
+| **R-WP3** | tip `b811736` | complete |
+| **R-WP4** | tip after status commit on `feat/r-wp4-readiness-cache` | **implementation-complete / benchmark-deferred** |
 
 ## Open failures/risks
 
-1. Control-plane Session/Job state is non-durable — daemon restart drops jobs/build queue; device leases remain on the broker journal.
-2. Worker and Artifact are type-only in this bounded package; lifecycle and persistence remain later roadmap work.
-3. No public session/job CLI yet — agents continue on lease tools until a later WP exposes session RPCs.
-
-### Phase A carry-forward
-
-Unmet cells (B2 retries, B4-defaults-rep, B5 dual-window, B6 third ARM-S, XcodeBuildMCP composition) remain unmet. Do not restart benchmarks unless owner directs.
+1. Benchmark cells remain unmet by owner STOPPED directive — not a code defect in R-WP4.
+2. Control-plane Session/Job state remains non-durable (R-WP3 carry-forward).
+3. PATH shim / XcodeBuildMCP adapter still deferred (R-WP5 gated behind R-WP6 reassessment).
 
 ## Next package
 
-- **R-WP4** — Readiness, warm-cache and benchmark improvements.
-- Do **not** merge/push R-WP3 from this package alone.
-- Gate R-WP5 behind R-WP6 reassessment (owner correction #3).
-- Handoff: start from R-WP3 tip on `feat/r-wp3-session-jobs`; build-slot vocabulary is stable; do not invent public session RPCs in R-WP4.
+- **R-WP5** only after R-WP6 reassessment (owner correction #3) — do not start reflexively.
+- Do **not** merge/push R-WP4 from this package alone.
+- Do **not** restart Phase A timed drivers unless owner directs.

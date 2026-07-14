@@ -229,6 +229,11 @@ CANCEL the still-QUEUED lease so capacity is not stranded.
 - Runtime resolution: omitted runtime → newest installed matching runtime;
   missing runtime/device type → error with `fix` (exact `xcodebuild
   -downloadPlatform iOS` / Xcode Settings hint).
+- **Readiness (R-WP4):** after `simctl boot`, wait via bounded
+  `PollReadiness` (never an infinite loop). Primary probe is device state
+  `Booted` from `simctl list`; timeout is classified as `READINESS_TIMEOUT`
+  (provision maps it to `BOOT_TIMEOUT`). An optional weaker fallback probe
+  may accept after the primary deadline — still bounded.
 
 ## 7. Isolation environment (per lease)
 
@@ -259,6 +264,32 @@ same emission machinery, extra intercept binary — designed for now, not built.
 Result-bundle discipline: `-resultBundlePath` requires a *new* path per run;
 `simurgh exec` allocates `Results/run-<timestamp>.xcresult` automatically when
 it detects an xcodebuild test invocation.
+
+**Writable-cache isolation (R-WP4):** DerivedData / ModuleCache / SwiftPM /
+Results / tmp are always under the lease root. `ValidateWritableCachesUnderLeaseRoot`
+rejects escapes and default `~/Library/Developer/Xcode/DerivedData` (and
+SwiftPM cache) paths. Default Xcode trees stay untouched.
+
+**Warm DerivedData seeds (R-WP4):** `simurgh exec` may CoW-clone
+(`cp -Rc`) an immutable shared seed into an empty lease DerivedData before
+build. Compatibility key (exact match required — any mismatch → cold/no-seed):
+
+```text
+project/workspace identity | scheme | configuration |
+Xcode version/build | SDK | runtime | Package.resolved hash | policy version
+```
+
+Shared seed is immutable; each lease gets a private writable clone. Non-empty
+destinations are never overwritten. Clone failure / unsupported volume →
+bounded cold fallback (empty lease DerivedData restored). After a successful
+build, the lease DerivedData is published back as a new immutable seed for
+that key. No latency claims are published from this package
+(**implementation-complete / benchmark-deferred**).
+
+**Phase instrumentation (R-WP4):** control-plane job timings record real
+clock samples for JobState phases and, additively, the aliases
+`acquire` / `build` / `install` / `launch` / `test` / `capture`. No fabricated
+measurements.
 
 ## 8. MCP server (`simurgh mcp`, stdio)
 

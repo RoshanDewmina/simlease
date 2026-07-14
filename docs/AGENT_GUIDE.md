@@ -132,6 +132,26 @@ surface only through the internal control-plane build scheduler.
 `queuedBuilds`. Session/job state is in-memory and non-durable in this
 package; keep using lease tools as the public compatibility surface.
 
+### Warm DerivedData seeds + readiness (R-WP4)
+
+`simurgh exec … -- xcodebuild` seeds an empty lease DerivedData from an
+immutable shared APFS seed when the formal compatibility key matches
+exactly (project/workspace, scheme, configuration, Xcode version/build,
+SDK/runtime, `Package.resolved` hash, policy version). Exact mismatch →
+cold/no-seed. Non-empty lease DerivedData is never overwritten. Clone
+failure falls back to cold. Writable caches stay under the lease root —
+never `~/Library/Developer/Xcode/DerivedData`.
+
+Boot wait uses bounded readiness polls (`READINESS_TIMEOUT` classified;
+optional weaker fallback after the primary deadline). Control-plane jobs
+record additive phase timings for `acquire` / `build` / `install` /
+`launch` / `test` / `capture` from real clock samples.
+
+**Benchmark-deferred:** timed B1/B2/B4/B5/B6 cells, `p0_rerun_driver`, and
+new `bench/evidence` publishes are explicitly out of this package. Do not
+treat any warm-seed or readiness change as a measured latency win until a
+later owner-directed benchmark pass.
+
 ## Release discipline
 
 Always `lease_release` / `simurgh release` when done.

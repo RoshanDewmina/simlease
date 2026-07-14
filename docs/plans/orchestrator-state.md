@@ -1,14 +1,16 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 16:14 UTC
+**Updated:** 2026-07-14 16:35 UTC
 **Owner:** Roshan  
-**Orchestrator:** Cursor coder subagent for **R-WP3** (session/job + build slots);
-Phase A remains **STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B
+**Orchestrator:** Cursor coder subagent for **R-WP4** (readiness + warm-cache;
+implementation-complete / benchmark-deferred). Phase A remains
+**STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B
 continues only by that override recorded at `593a051`.  
 **Repository:** `/Users/roshansilva/Documents/simurgh`  
-**Active worktree:** `.worktrees/r-wp3-session-jobs` on `feat/r-wp3-session-jobs`  
-**Current phase:** Phase A STOPPED/BLOCKED (owner override) → **R-WP0/R-WP1/R-WP2/R-WP3 complete**;
-next is **R-WP4** (not started).
+**Active worktree:** `.worktrees/r-wp4-readiness-cache` on `feat/r-wp4-readiness-cache`  
+**Current phase:** Phase A STOPPED/BLOCKED (owner override) →
+**R-WP0/R-WP1/R-WP2/R-WP3/R-WP4(impl) complete**; next is **R-WP5 only after
+R-WP6 reassessment** (owner correction #3). Timed benchmark cells remain deferred.
 
 ## Operating decisions
 
@@ -1418,4 +1420,56 @@ passed: mcp 1.263s; daemon 1.260s; ipc 1.214s; broker 1.221s; cmd 1.237s.
 | `buildScheduler.promoteLocked` / `takePromoted` | Wait=true FIFO handoff |
 
 - Per owner: no third review or dispatch. No R-WP4, merge, or push.
+
+### 2026-07-14 16:35 UTC — R-WP4 implementation-complete / benchmark-deferred
+
+- **Worktree:** `.worktrees/r-wp4-readiness-cache` on `feat/r-wp4-readiness-cache`
+  from gate-verified R-WP3 tip `b811736` (never reset/clean/stash).
+- **Owner constraint honored:** Phase A remains STOPPED/BLOCKED. Did **not**
+  restart `p0_rerun_driver`, `BENCH_START_AT`, B1/B2/B4/B5/B6 timed cells,
+  XcodeBuildMCP composition, or publish new `bench/evidence`. No latency
+  claims.
+- **Implementation:**
+  1. Formal APFS warm-seed compatibility key + CoW private writable clone
+     (`WarmSeedKey`, `SeedWarmDerivedData`, `PublishWarmSeed`) wired into
+     `simurgh exec`.
+  2. `ValidateWritableCachesUnderLeaseRoot` — DerivedData/ModuleCache/SwiftPM/
+     Results stay under lease root; default Xcode paths rejected.
+  3. `PollReadiness` with `READINESS_TIMEOUT` classification + optional
+     bounded fallback; `WaitBooted` uses it.
+  4. Additive phase aliases `acquire/build/install/launch/test/capture` on
+     real JobState timings.
+- **Commits:** `f6237d6` warm-seed; `49bc1b3` isolator; `41aa107` readiness;
+  `1d51667` phase instrumentation; status/orchestrator tip after gates.
+
+#### Exact R-WP4 gates
+
+| Command | Result |
+|---|---|
+| warm-seed named 4 | **PASS** 1.309s |
+| `TestWritableCachesStayUnderLeaseRoot` | **PASS** 1.153s |
+| readiness named 2 | **PASS** 1.212s |
+| controlplane named 4 | **PASS** 1.153s |
+| `go build ./...` / `go vet ./...` | **PASS** |
+| `go test -race ./...` | **PASS** 17 packages (ipc 36.638s) |
+| capacity named 8 | **PASS** 1.126s |
+| `TestDialDaemonSurvivesParentExit` | **PASS** 32.47s; PID **70540** |
+| `TestReuseIfExistsLive` | **PASS** test 2.52s, package 3.747s |
+
+#### Deferred (explicit)
+
+B1/B2/B4/B5/B6 timed cells, XcodeBuildMCP composition, warm-DD latency /
+time-to-green numbers, new bench/evidence — **unpublished / not run**.
+
+#### Public symbols / dependents
+
+| Symbol | Dependents |
+|---|---|
+| `SeedWarmDerivedData` / `PublishWarmSeed` | `cmd/simurgh` `runExec` |
+| `ValidateWritableCachesUnderLeaseRoot` | `EnsureLeaseDir` |
+| `PollReadiness` | `WaitBooted` → `Provision` |
+| `InstrumentedPhases` aliases | `TransitionJob` / `endPhaseLocked` |
+
+- Next: R-WP5 only after R-WP6 reassessment. No merge/push of R-WP4 from
+  this entry alone.
 

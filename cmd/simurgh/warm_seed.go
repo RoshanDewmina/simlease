@@ -1,15 +1,18 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // WarmSeedPolicyVersion bumps whenever seed layout or matching semantics change.
@@ -51,6 +54,7 @@ type SeedResult struct {
 
 // SeedWarmOptions configures a private writable DerivedData seed from an immutable shared seed.
 type SeedWarmOptions struct {
+	Context context.Context
 	Home    string
 	Key     WarmSeedKey
 	LeaseDD string
@@ -61,6 +65,16 @@ type SeedWarmOptions struct {
 type warmSeedMeta struct {
 	Key    WarmSeedKey `json:"key"`
 	Digest string      `json:"digest"`
+}
+
+// WarmSeedKeyIncompleteError means no seed may be read or published because a
+// correctness-sensitive key dimension is unavailable.
+type WarmSeedKeyIncompleteError struct {
+	Field string
+}
+
+func (e *WarmSeedKeyIncompleteError) Error() string {
+	return fmt.Sprintf("warm seed key incomplete: %s is required; cold/no-seed", e.Field)
 }
 
 // WarmSeedKeyEqual reports exact field equality (including empty vs non-empty).
@@ -108,6 +122,48 @@ func warmSeedMetaPath(home, digest string) string {
 	return filepath.Join(warmSeedRoot(home, digest), "meta.json")
 }
 
+func warmSeedLockPath(home, digest string) string {
+	return filepath.Join(home, warmSeedDirName, ".locks", digest+".lock")
+}
+
+func withWarmSeedLock(ctx context.Context, home, digest string, shared bool, fn func() error) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	lockPath := warmSeedLockPath(home, digest)
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o700); err != nil {
+		return fmt.Errorf("warm seed lock mkdir: %w", err)
+	}
+	lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return fmt.Errorf("warm seed lock open: %w", err)
+	}
+	defer lock.Close()
+
+	op := syscall.LOCK_EX | syscall.LOCK_NB
+	if shared {
+		op = syscall.LOCK_SH | syscall.LOCK_NB
+	}
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		err = syscall.Flock(int(lock.Fd()), op)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			return fmt.Errorf("warm seed lock acquire: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	return fn()
+}
+
 func defaultCloneDir(src, dst string) error {
 	cmd := exec.Command("cp", "-Rc", src, dst)
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -119,52 +175,85 @@ func defaultCloneDir(src, dst string) error {
 // PublishWarmSeed stores an immutable shared seed under home for key.
 // The seed tree is never mutated in place by later leases — each lease CoW-clones it.
 func PublishWarmSeed(home string, key WarmSeedKey, sourceDD string) error {
+	return PublishWarmSeedContext(context.Background(), home, key, sourceDD)
+}
+
+// PublishWarmSeedContext holds a per-digest exclusive filesystem lock from
+// staging through atomic live-tree replacement.
+func PublishWarmSeedContext(ctx context.Context, home string, key WarmSeedKey, sourceDD string) error {
 	if home == "" || sourceDD == "" {
 		return fmt.Errorf("warm seed: home and source DerivedData are required")
 	}
 	if key.PolicyVersion == "" {
 		key.PolicyVersion = WarmSeedPolicyVersion
 	}
-	if key.ProjectIdentity == "" || key.Scheme == "" {
-		return fmt.Errorf("warm seed: project identity and scheme are required")
+	if err := validateWarmSeedKey(key); err != nil {
+		return err
 	}
 	digest := WarmSeedDigest(key)
-	root := warmSeedRoot(home, digest)
-	tmpRoot := root + ".tmp-" + strconv.Itoa(os.Getpid())
-	_ = os.RemoveAll(tmpRoot)
-	if err := os.MkdirAll(tmpRoot, 0o700); err != nil {
-		return err
-	}
-	defer func() { _ = os.RemoveAll(tmpRoot) }()
-
-	dataDst := filepath.Join(tmpRoot, "DerivedData")
-	if err := defaultCloneDir(sourceDD, dataDst); err != nil {
-		// Fall back to plain recursive copy when CoW is unavailable at publish time.
-		if err2 := exec.Command("cp", "-R", sourceDD, dataDst).Run(); err2 != nil {
-			return fmt.Errorf("warm seed publish clone: %v / fallback: %w", err, err2)
+	return withWarmSeedLock(ctx, home, digest, false, func() error {
+		parent := filepath.Join(home, warmSeedDirName)
+		if err := os.MkdirAll(parent, 0o700); err != nil {
+			return err
 		}
-	}
-	meta := warmSeedMeta{Key: key, Digest: digest}
-	raw, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(tmpRoot, "meta.json"), raw, 0o600); err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(root), 0o700); err != nil {
-		return err
-	}
-	_ = os.RemoveAll(root)
-	if err := os.Rename(tmpRoot, root); err != nil {
-		return err
-	}
-	return nil
+		tmpRoot, err := os.MkdirTemp(parent, "."+digest+".staging-*")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(tmpRoot)
+
+		dataDst := filepath.Join(tmpRoot, "DerivedData")
+		if err := defaultCloneDir(sourceDD, dataDst); err != nil {
+			if err2 := exec.CommandContext(ctx, "cp", "-R", sourceDD, dataDst).Run(); err2 != nil {
+				return fmt.Errorf("warm seed publish clone: %v / fallback: %w", err, err2)
+			}
+		}
+		meta := warmSeedMeta{Key: key, Digest: digest}
+		raw, err := json.MarshalIndent(meta, "", "  ")
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(tmpRoot, "meta.json"), raw, 0o600); err != nil {
+			return err
+		}
+
+		root := warmSeedRoot(home, digest)
+		backup, err := os.MkdirTemp(parent, "."+digest+".backup-*")
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(backup); err != nil {
+			return err
+		}
+		hadRoot := false
+		if _, err := os.Stat(root); err == nil {
+			if err := os.Rename(root, backup); err != nil {
+				return err
+			}
+			hadRoot = true
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Rename(tmpRoot, root); err != nil {
+			if hadRoot {
+				_ = os.Rename(backup, root)
+			}
+			return err
+		}
+		if hadRoot {
+			_ = os.RemoveAll(backup)
+		}
+		return nil
+	})
 }
 
 // SeedWarmDerivedData CoW-clones a matching immutable seed into an empty lease DerivedData.
 // Non-empty destinations are never overwritten. Clone failure → bounded cold fallback.
 func SeedWarmDerivedData(opts SeedWarmOptions) (SeedResult, error) {
+	ctx := opts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	key := opts.Key
 	if key.PolicyVersion == "" {
 		key.PolicyVersion = WarmSeedPolicyVersion
@@ -176,9 +265,9 @@ func SeedWarmDerivedData(opts SeedWarmOptions) (SeedResult, error) {
 		result.Outcome = SeedOutcomeMiss
 		return result, nil
 	}
-	if key.ProjectIdentity == "" || key.Scheme == "" {
+	if err := validateWarmSeedKey(key); err != nil {
 		result.Outcome = SeedOutcomeMiss
-		return result, nil
+		return result, err
 	}
 
 	entries, err := os.ReadDir(opts.LeaseDD)
@@ -191,42 +280,50 @@ func SeedWarmDerivedData(opts SeedWarmOptions) (SeedResult, error) {
 		return result, nil
 	}
 
-	seedPath := warmSeedDataPath(opts.Home, digest)
-	metaPath := warmSeedMetaPath(opts.Home, digest)
-	if _, err := os.Stat(seedPath); err != nil {
-		result.Outcome = SeedOutcomeMiss
-		return result, nil
-	}
-	// Exact key re-check via stored meta (defense in depth against digest collisions / stale trees).
-	if raw, err := os.ReadFile(metaPath); err == nil {
-		var meta warmSeedMeta
-		if json.Unmarshal(raw, &meta) == nil && !WarmSeedKeyEqual(meta.Key, key) {
+	err = withWarmSeedLock(ctx, opts.Home, digest, true, func() error {
+		seedPath := warmSeedDataPath(opts.Home, digest)
+		metaPath := warmSeedMetaPath(opts.Home, digest)
+		if _, err := os.Stat(seedPath); err != nil {
 			result.Outcome = SeedOutcomeMiss
-			return result, nil
+			return nil
 		}
-	}
+		raw, err := os.ReadFile(metaPath)
+		if err != nil {
+			result.Outcome = SeedOutcomeMiss
+			return nil
+		}
+		var meta warmSeedMeta
+		if json.Unmarshal(raw, &meta) != nil || meta.Digest != digest || !WarmSeedKeyEqual(meta.Key, key) {
+			result.Outcome = SeedOutcomeMiss
+			return nil
+		}
 
-	clone := opts.Clone
-	if clone == nil {
-		clone = defaultCloneDir
+		clone := opts.Clone
+		if clone == nil {
+			clone = defaultCloneDir
+		}
+		if err := os.Remove(opts.LeaseDD); err != nil {
+			result.Outcome = SeedOutcomeFallbackCold
+			_ = os.MkdirAll(opts.LeaseDD, 0o700)
+			return nil
+		}
+		if err := clone(seedPath, opts.LeaseDD); err != nil {
+			_ = os.RemoveAll(opts.LeaseDD)
+			_ = os.MkdirAll(opts.LeaseDD, 0o700)
+			result.Outcome = SeedOutcomeFallbackCold
+			return nil
+		}
+		if _, err := os.Stat(opts.LeaseDD); err != nil {
+			_ = os.MkdirAll(opts.LeaseDD, 0o700)
+			result.Outcome = SeedOutcomeFallbackCold
+			return nil
+		}
+		result.Outcome = SeedOutcomeHit
+		return nil
+	})
+	if err != nil {
+		return result, err
 	}
-	if err := os.Remove(opts.LeaseDD); err != nil {
-		result.Outcome = SeedOutcomeFallbackCold
-		_ = os.MkdirAll(opts.LeaseDD, 0o700)
-		return result, nil
-	}
-	if err := clone(seedPath, opts.LeaseDD); err != nil {
-		_ = os.RemoveAll(opts.LeaseDD)
-		_ = os.MkdirAll(opts.LeaseDD, 0o700)
-		result.Outcome = SeedOutcomeFallbackCold
-		return result, nil
-	}
-	if _, err := os.Stat(opts.LeaseDD); err != nil {
-		_ = os.MkdirAll(opts.LeaseDD, 0o700)
-		result.Outcome = SeedOutcomeFallbackCold
-		return result, nil
-	}
-	result.Outcome = SeedOutcomeHit
 	return result, nil
 }
 
@@ -240,32 +337,66 @@ func HashPackageResolved(path string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// BuildWarmSeedKeyFromArgv constructs a key from xcodebuild argv plus toolchain identity.
-func BuildWarmSeedKeyFromArgv(argv []string, xcodeVersion, xcodeBuild, sdk, runtime, packageResolved string) (WarmSeedKey, bool) {
+// BuildWarmSeedKeyFromArgv constructs a complete key or returns a typed
+// cold/no-seed error. It never invents a configuration.
+func BuildWarmSeedKeyFromArgv(argv []string, xcodeVersion, xcodeBuild, sdk, runtime, packageResolved string) (WarmSeedKey, error) {
 	project, scheme := extractProjectScheme(argv)
-	if project == "" || scheme == "" {
-		return WarmSeedKey{}, false
+	if project == "" {
+		return WarmSeedKey{}, &WarmSeedKeyIncompleteError{Field: "project/workspace identity"}
 	}
-	return WarmSeedKey{
+	if scheme == "" {
+		return WarmSeedKey{}, &WarmSeedKeyIncompleteError{Field: "scheme"}
+	}
+	configuration, ok := extractConfiguration(argv)
+	if !ok {
+		return WarmSeedKey{}, &WarmSeedKeyIncompleteError{Field: "configuration"}
+	}
+	key := WarmSeedKey{
 		ProjectIdentity: project,
 		Scheme:          scheme,
-		Configuration:   extractConfiguration(argv),
+		Configuration:   configuration,
 		XcodeVersion:    xcodeVersion,
 		XcodeBuild:      xcodeBuild,
 		SDK:             sdk,
 		Runtime:         runtime,
 		PackageResolved: packageResolved,
 		PolicyVersion:   WarmSeedPolicyVersion,
-	}, true
+	}
+	if err := validateWarmSeedKey(key); err != nil {
+		return WarmSeedKey{}, err
+	}
+	return key, nil
 }
 
-func extractConfiguration(argv []string) string {
+func extractConfiguration(argv []string) (string, bool) {
 	for i := 0; i < len(argv); i++ {
 		if argv[i] == "-configuration" && i+1 < len(argv) {
-			return argv[i+1]
+			value := strings.TrimSpace(argv[i+1])
+			return value, value != ""
 		}
 	}
-	return "Debug"
+	return "", false
+}
+
+func validateWarmSeedKey(key WarmSeedKey) error {
+	required := []struct {
+		name, value string
+	}{
+		{"project/workspace identity", key.ProjectIdentity},
+		{"scheme", key.Scheme},
+		{"configuration", key.Configuration},
+		{"Xcode version", key.XcodeVersion},
+		{"Xcode build", key.XcodeBuild},
+		{"SDK", key.SDK},
+		{"runtime", key.Runtime},
+		{"policy version", key.PolicyVersion},
+	}
+	for _, field := range required {
+		if strings.TrimSpace(field.value) == "" {
+			return &WarmSeedKeyIncompleteError{Field: field.name}
+		}
+	}
+	return nil
 }
 
 // probeXcodeVersionBuild best-effort reads `xcodebuild -version`. Empty on failure.

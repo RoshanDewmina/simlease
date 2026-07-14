@@ -194,7 +194,7 @@ Exit code is the child's exit code (not the IPC 0/2/3/4/5 contract).`)
 				xcodeVersion, xcodeBuild := probeXcodeVersionBuild()
 				sdk, runtime := probeSDKRuntime()
 				pkgHash := resolvePackageResolvedHash(argv)
-				if key, ok := BuildWarmSeedKeyFromArgv(argv, xcodeVersion, xcodeBuild, sdk, runtime, pkgHash); ok {
+				if key, keyErr := BuildWarmSeedKeyFromArgv(argv, xcodeVersion, xcodeBuild, sdk, runtime, pkgHash); keyErr == nil {
 					warmHome = home
 					warmKey = key
 					haveWarmKey = true

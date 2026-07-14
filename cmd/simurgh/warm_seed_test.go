@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func sampleWarmSeedKey() WarmSeedKey {
@@ -201,5 +206,127 @@ func TestWarmSeedCloneFallback(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("fallback cold dest must be empty; got %d entries", len(entries))
+	}
+}
+
+func TestWarmSeedConfigurationMustBeExplicit(t *testing.T) {
+	base := []string{"xcodebuild", "-project", "App.xcodeproj", "-scheme", "App"}
+	_, err := BuildWarmSeedKeyFromArgv(base, "27.0", "27A", "iphonesimulator27.0", "27.0", "")
+	var incomplete *WarmSeedKeyIncompleteError
+	if !errors.As(err, &incomplete) || incomplete.Field != "configuration" {
+		t.Fatalf("omitted configuration err=%T %v; want typed configuration incomplete", err, err)
+	}
+	_, err = BuildWarmSeedKeyFromArgv(append(base, "-configuration", ""), "27.0", "27A", "iphonesimulator27.0", "27.0", "")
+	if !errors.As(err, &incomplete) {
+		t.Fatalf("empty configuration err=%T %v; want typed incomplete", err, err)
+	}
+	explicit, err := BuildWarmSeedKeyFromArgv(append(base, "-configuration", "Debug"), "27.0", "27A", "iphonesimulator27.0", "27.0", "")
+	if err != nil {
+		t.Fatalf("explicit Debug: %v", err)
+	}
+	if explicit.Configuration != "Debug" {
+		t.Fatalf("configuration=%q want Debug", explicit.Configuration)
+	}
+}
+
+func TestWarmSeedConcurrentPublishAndSeed(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	key := sampleWarmSeedKey()
+	const iterations = 20
+
+	makeSource := func(name string) string {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(path, "generation.txt"), []byte(name), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	sourceA := makeSource("generation-a")
+	sourceB := makeSource("generation-b")
+	if err := PublishWarmSeed(home, key, sourceA); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	errs := make(chan error, iterations*2)
+	for i := 0; i < iterations; i++ {
+		source := sourceA
+		if i%2 == 1 {
+			source = sourceB
+		}
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			if err := PublishWarmSeedContext(context.Background(), home, key, source); err != nil {
+				errs <- err
+			}
+		}()
+		go func(i int) {
+			defer wg.Done()
+			leaseDD := filepath.Join(root, "leases", fmt.Sprintf("lease-%d", i))
+			if err := os.MkdirAll(leaseDD, 0o700); err != nil {
+				errs <- err
+				return
+			}
+			result, err := SeedWarmDerivedData(SeedWarmOptions{Context: context.Background(), Home: home, Key: key, LeaseDD: leaseDD})
+			if err != nil {
+				errs <- err
+				return
+			}
+			if result.Outcome != SeedOutcomeHit {
+				errs <- fmt.Errorf("seed %d outcome=%s", i, result.Outcome)
+				return
+			}
+			raw, err := os.ReadFile(filepath.Join(leaseDD, "generation.txt"))
+			if err != nil {
+				errs <- err
+				return
+			}
+			if got := string(raw); got != "generation-a" && got != "generation-b" {
+				errs <- fmt.Errorf("seed %d observed partial generation %q", i, got)
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+}
+
+func TestWarmSeedPublishFailureCleansStagingAndUnlocks(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	key := sampleWarmSeedKey()
+	err := PublishWarmSeedContext(context.Background(), home, key, filepath.Join(root, "missing-source"))
+	if err == nil {
+		t.Fatal("expected publish failure")
+	}
+	parent := filepath.Join(home, warmSeedDirName)
+	entries, readErr := os.ReadDir(parent)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	for _, entry := range entries {
+		if strings.Contains(entry.Name(), ".staging-") || strings.Contains(entry.Name(), ".backup-") {
+			t.Fatalf("failed publish leaked %q", entry.Name())
+		}
+	}
+
+	source := filepath.Join(root, "source")
+	if err := os.MkdirAll(source, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "ok"), []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := PublishWarmSeedContext(ctx, home, key, source); err != nil {
+		t.Fatalf("lock not released after failure: %v", err)
 	}
 }

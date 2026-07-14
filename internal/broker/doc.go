@@ -14,6 +14,7 @@
 //     state-mutating ops journal the lease map through internal/store, and
 //     Rehydrate restores ownership across daemon restarts. Without a Store the
 //     broker stays in-memory-only (existing tests and callers unchanged).
-//   - ReuseIfExists matching key is Spec + exact Labels + Owner.Agent/SessionID;
-//     see reuse.go. Project/Xcode/scheme are not first-class — put them in Labels.
+//   - ReuseIfExists matching key is Spec + exact Labels containing non-empty
+//     project + non-empty Owner.Agent/SessionID; see reuse.go. This partitions
+//     reuse but is not authentication against same-user raw IPC clients.
 package broker

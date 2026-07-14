@@ -1,13 +1,16 @@
 package broker
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Reuse matching (R-WP1) — conservative lease-level reuse, not a session abstraction.
 //
 // Compatibility key (only fields that exist on Spec + Labels + Owner today):
 //
 //	DeviceSpec (platform | model | runtime)
-//	Labels     — exact map equality (every key/value on both sides)
+//	Labels     — exact map equality, including non-empty "project"
 //	Owner.Agent + Owner.SessionID
 //
 // Explicitly NOT part of the key:
@@ -33,6 +36,12 @@ func reuseCompatible(req AcquireRequest, lease *Lease) bool {
 		return false
 	}
 	if lease.Owner.Agent == "" || lease.Owner.SessionID == "" {
+		return false
+	}
+	if len(req.Labels) == 0 || strings.TrimSpace(req.Labels["project"]) == "" {
+		return false
+	}
+	if len(lease.Labels) == 0 || strings.TrimSpace(lease.Labels["project"]) == "" {
 		return false
 	}
 	if SpecKey(req.Spec) != SpecKey(lease.Spec) {

@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -83,16 +82,23 @@ func TestParseKV(t *testing.T) {
 
 func TestCLISessionIDExplicitAndStableFallback(t *testing.T) {
 	t.Setenv("SIMURGH_SESSION_ID", "explicit-cli-session")
-	if got := cliSessionID(); got != "explicit-cli-session" {
-		t.Fatalf("explicit session ID=%q", got)
+	if first, second := cliSessionID(), cliSessionID(); first != "explicit-cli-session" || second != first {
+		t.Fatalf("explicit session IDs=%q/%q", first, second)
 	}
 
 	t.Setenv("SIMURGH_SESSION_ID", "")
 	first := cliSessionID()
 	second := cliSessionID()
-	want := fmt.Sprintf("parent-pid:%d", os.Getppid())
-	if first != want || second != want {
-		t.Fatalf("fallback IDs=%q/%q want %q", first, second, want)
+	if first == "" || second != first || !strings.HasPrefix(first, "cli:") {
+		t.Fatalf("process fallback IDs=%q/%q", first, second)
+	}
+}
+
+func TestNewRandomSessionIDDiffersAcrossFreshGeneration(t *testing.T) {
+	first := newRandomSessionID("cli")
+	second := newRandomSessionID("cli")
+	if first == second {
+		t.Fatalf("fresh random session IDs collided: %q", first)
 	}
 }
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -114,7 +113,7 @@ func TestLeaseAcquireMapsParamsAndResult(t *testing.T) {
 		Arguments: map[string]any{
 			"model":           "iPhone 17 Pro",
 			"runtime":         "27.0",
-			"labels":          map[string]string{"run": "a"},
+			"labels":          map[string]string{"project": "test-project", "run": "a"},
 			"ttl":             "30m",
 			"reuse_if_exists": true,
 			"wait":            true,
@@ -140,7 +139,7 @@ func TestLeaseAcquireMapsParamsAndResult(t *testing.T) {
 		t.Fatalf("ttl = %#v", gotParams["ttl"])
 	}
 	labels, _ := gotParams["labels"].(map[string]any)
-	if labels["run"] != "a" {
+	if labels["project"] != "test-project" || labels["run"] != "a" {
 		t.Fatalf("labels = %#v", gotParams["labels"])
 	}
 	// Session-bound by default (P0-4): no detach param passed above, so the
@@ -170,16 +169,23 @@ func TestLeaseAcquireMapsParamsAndResult(t *testing.T) {
 
 func TestMCPSessionIDExplicitAndStableProcessFallback(t *testing.T) {
 	t.Setenv("SIMURGH_SESSION_ID", "explicit-mcp-session")
-	if got := mcpSessionID(); got != "explicit-mcp-session" {
-		t.Fatalf("explicit session ID=%q", got)
+	if first, second := mcpSessionID(), mcpSessionID(); first != "explicit-mcp-session" || second != first {
+		t.Fatalf("explicit session IDs=%q/%q", first, second)
 	}
 
 	t.Setenv("SIMURGH_SESSION_ID", "")
 	first := mcpSessionID()
 	second := mcpSessionID()
-	want := fmt.Sprintf("mcp-pid:%d", os.Getpid())
-	if first != want || second != want {
-		t.Fatalf("fallback IDs=%q/%q want %q", first, second, want)
+	if first == "" || second != first || !strings.HasPrefix(first, "mcp:") {
+		t.Fatalf("process fallback IDs=%q/%q", first, second)
+	}
+}
+
+func TestNewRandomSessionIDDiffersAcrossFreshGeneration(t *testing.T) {
+	first := newRandomSessionID("mcp")
+	second := newRandomSessionID("mcp")
+	if first == second {
+		t.Fatalf("fresh random session IDs collided: %q", first)
 	}
 }
 

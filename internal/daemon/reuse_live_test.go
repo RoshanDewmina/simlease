@@ -5,6 +5,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,7 @@ import (
 // the same lease ID, UDID, and isolation paths without reprovisioning.
 // Cleanup deletes only the clone UDID this test created.
 func TestReuseIfExistsLive(t *testing.T) {
+	t.Setenv("SIMURGH_SESSION_ID", "r-wp1-live-session")
 	client := provisioner.NewExecClient()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -63,7 +65,9 @@ func TestReuseIfExistsLive(t *testing.T) {
 	h := newHandlers(deps)
 
 	labels := map[string]string{"project": "r-wp1-live", "task": "reuse"}
-	owner := map[string]any{"pid": 1, "agent": "r-wp1-live", "sessionId": "iter"}
+	owner := map[string]any{
+		"pid": 1, "agent": "r-wp1-live", "sessionId": os.Getenv("SIMURGH_SESSION_ID"),
+	}
 
 	firstResp := callHandler(t, h.acquire, "live-1", map[string]any{
 		"spec":          map[string]string{"platform": "iOS", "model": "iPhone 17 Pro"},
@@ -103,7 +107,7 @@ func TestReuseIfExistsLive(t *testing.T) {
 		"wait":          true,
 		"reuseIfExists": true,
 		"owner": map[string]any{
-			"pid": 2, "agent": "r-wp1-live", "sessionId": "iter",
+			"pid": 2, "agent": "r-wp1-live", "sessionId": os.Getenv("SIMURGH_SESSION_ID"),
 		},
 	})
 	if !secondResp.OK {

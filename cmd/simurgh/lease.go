@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +20,8 @@ import (
 )
 
 const cliAgentName = "simurgh-cli"
+
+var cliProcessSessionID = newRandomSessionID("cli")
 
 // rpcError wraps an IPC error triple so dialAndCall failures are classifiable.
 type rpcError struct {
@@ -378,9 +382,17 @@ func cliSessionID() string {
 	if explicit := strings.TrimSpace(os.Getenv("SIMURGH_SESSION_ID")); explicit != "" {
 		return explicit
 	}
-	// One-shot CLI PIDs change every invocation; the calling shell/agent
-	// parent PID is stable for repeated commands in the same session.
-	return fmt.Sprintf("parent-pid:%d", os.Getppid())
+	// Random and stable only for this CLI process. Cross-invocation reuse
+	// requires an explicit SIMURGH_SESSION_ID.
+	return cliProcessSessionID
+}
+
+func newRandomSessionID(prefix string) string {
+	var entropy [16]byte
+	if _, err := rand.Read(entropy[:]); err != nil {
+		panic(fmt.Sprintf("simurgh: generate session identity: %v", err))
+	}
+	return prefix + ":" + hex.EncodeToString(entropy[:])
 }
 
 func runAcquire(args []string) int {
@@ -389,7 +401,8 @@ func runAcquire(args []string) int {
 		if err.Error() == "help" {
 			fmt.Println(`usage: simurgh acquire --model NAME [--runtime VER] [--label k=v]...
         [--ttl DUR] [--reuse-if-exists] [--wait] [--rm]
-        [--inactivity-timeout DUR] [--hard-timeout DUR] [--json]`)
+        [--inactivity-timeout DUR] [--hard-timeout DUR] [--json]
+reuse requires --label project=NAME; set SIMURGH_SESSION_ID for reuse across CLI invocations`)
 			return 0
 		}
 		printErrorTriple("INVALID_INPUT", err.Error(), "simurgh acquire --model NAME ...", f.JSON)

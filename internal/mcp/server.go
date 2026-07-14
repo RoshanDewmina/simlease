@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +20,8 @@ const (
 	mcpAgentName = "simurgh-mcp"
 	mcpVersion   = "0.0.0-dev"
 )
+
+var mcpProcessSessionID = newRandomSessionID("mcp")
 
 // CallFunc dials the daemon and invokes one RPC method. Tests inject a fake;
 // production uses defaultDialAndCall.
@@ -230,9 +234,9 @@ func mapCallError(err error) error {
 type leaseAcquireParams struct {
 	Model         string            `json:"model" jsonschema:"iOS device model name, e.g. iPhone 17 Pro"`
 	Runtime       string            `json:"runtime,omitempty" jsonschema:"optional iOS runtime version, e.g. 27.0"`
-	Labels        map[string]string `json:"labels,omitempty" jsonschema:"optional key/value labels attached to the lease"`
+	Labels        map[string]string `json:"labels,omitempty" jsonschema:"optional key/value labels; reuse requires an exact map containing non-empty project"`
 	TTL           string            `json:"ttl,omitempty" jsonschema:"optional lease TTL duration string, e.g. 30m"`
-	ReuseIfExists bool              `json:"reuse_if_exists,omitempty" jsonschema:"if true, renew a compatible ACTIVE lease or attach to compatible PROVISIONING; requires the same DeviceSpec, exact labels, and non-empty Owner.Agent+SessionID (PID ignored). Mismatch/missing identity allocates new. Put project/Xcode/scheme identity in labels"`
+	ReuseIfExists bool              `json:"reuse_if_exists,omitempty" jsonschema:"if true, renew compatible ACTIVE or attach to PROVISIONING; requires same DeviceSpec, exact labels with non-empty project, and non-empty Owner.Agent+SessionID. Missing partition allocates new. SIMURGH_SESSION_ID is explicit; random fallback lasts this MCP process only. Metadata partitions reuse, not authentication"`
 	Wait          bool              `json:"wait,omitempty" jsonschema:"if true, wait when the pool is at capacity instead of failing immediately"`
 	Detach        bool              `json:"detach,omitempty" jsonschema:"if true, the lease survives this agent session ending; default false means the lease is reclaimed when this session's MCP server process exits"`
 	Inactivity    string            `json:"inactivity_timeout,omitempty" jsonschema:"optional inactivity timeout duration string, e.g. 10m; the lease is reclaimed after this long without activity"`
@@ -340,8 +344,16 @@ func mcpSessionID() string {
 	if explicit := strings.TrimSpace(os.Getenv("SIMURGH_SESSION_ID")); explicit != "" {
 		return explicit
 	}
-	// The MCP server process spans all calls for one MCP session.
-	return fmt.Sprintf("mcp-pid:%d", os.Getpid())
+	// Random and stable for this MCP server process only.
+	return mcpProcessSessionID
+}
+
+func newRandomSessionID(prefix string) string {
+	var entropy [16]byte
+	if _, err := rand.Read(entropy[:]); err != nil {
+		panic(fmt.Sprintf("simurgh mcp: generate session identity: %v", err))
+	}
+	return prefix + ":" + hex.EncodeToString(entropy[:])
 }
 
 // --- handlers ---

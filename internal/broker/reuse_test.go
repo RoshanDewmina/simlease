@@ -167,7 +167,64 @@ func TestReuseIfExists_MissingIdentityNeverReuses(t *testing.T) {
 	}
 }
 
-func TestReuseIfExists_SameExplicitSessionReuses(t *testing.T) {
+func TestReuseIfExists_MissingProjectPartitionNeverReuses(t *testing.T) {
+	cases := []struct {
+		name   string
+		labels map[string]string
+	}{
+		{name: "empty labels", labels: nil},
+		{name: "labels without project", labels: map[string]string{"task": "inbox"}},
+		{name: "empty project", labels: map[string]string{"project": "", "task": "inbox"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &fakeProvisioner{}
+			b := newTestBroker(t, 2, p)
+			req := AcquireRequest{
+				Spec: testSpec(), Labels: tc.labels, TTL: time.Minute,
+				ReuseIfExists: true, Owner: reuseOwner(1),
+			}
+			first, err := b.Acquire(context.Background(), req)
+			if err != nil {
+				t.Fatalf("first Acquire: %v", err)
+			}
+			req.Owner.PID = 2
+			second, err := b.Acquire(context.Background(), req)
+			if err != nil {
+				t.Fatalf("second Acquire: %v", err)
+			}
+			if second.ID == first.ID || second.Reused {
+				t.Fatalf("missing project partition reused: first=%s second=%s reused=%v",
+					first.ID, second.ID, second.Reused)
+			}
+		})
+	}
+}
+
+func TestReuseIfExists_DifferentProjectLabelsNeverReuse(t *testing.T) {
+	p := &fakeProvisioner{}
+	b := newTestBroker(t, 2, p)
+	req := AcquireRequest{
+		Spec: testSpec(), Labels: map[string]string{"project": "project-a", "task": "inbox"},
+		TTL: time.Minute, ReuseIfExists: true, Owner: reuseOwner(1),
+	}
+	first, err := b.Acquire(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first Acquire: %v", err)
+	}
+	req.Labels = map[string]string{"project": "project-b", "task": "inbox"}
+	req.Owner.PID = 2
+	second, err := b.Acquire(context.Background(), req)
+	if err != nil {
+		t.Fatalf("second Acquire: %v", err)
+	}
+	if second.ID == first.ID || second.Reused {
+		t.Fatalf("different projects reused: first=%s second=%s reused=%v",
+			first.ID, second.ID, second.Reused)
+	}
+}
+
+func TestReuseIfExists_SameProjectAndExplicitSessionReuses(t *testing.T) {
 	p := &fakeProvisioner{}
 	b := newTestBroker(t, 2, p)
 	req := AcquireRequest{

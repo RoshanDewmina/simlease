@@ -37,7 +37,7 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 |---|---|
 | package race (broker/ipc/daemon/mcp/cmd) | **PASS** exit 0 — broker 1.638s, ipc 37.336s, daemon 1.495s, mcp 1.289s, cmd 1.169s |
 | capacity named tests | **PASS** exit 0 — all 8 matching tests including `TestGlobalCapacityAcrossDifferentSpecs`, `TestPerSpecCapEnforced`, `TestProvisioningOpLimit`, `TestQueueReasonExplicit`, `TestFairness*`, `TestPressure*` |
-| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.50s**; same daemon PID answered `daemon.ping` continuously for ≥30s after short-lived Dial parent exited; SIGHUP also survived |
+| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.49s**; daemon **PID 80395** answered `daemon.ping` continuously for ≥30s after short-lived Dial parent exited (same PID); SIGHUP also survived |
 | `go build ./...` | **PASS** exit 0 |
 | `go vet ./...` | **PASS** exit 0 |
 | `go test -race ./...` | **PASS** exit 0 (**16** packages; ipc includes 30s survival) |

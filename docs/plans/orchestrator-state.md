@@ -1235,7 +1235,7 @@ P1-7 warm-DD on Lancer: **MET** (above). P1-6 B5 dual-window / late-acquire meas
 |---|---|
 | `go test -race ./internal/broker/... ./internal/ipc/... ./internal/daemon/... ./internal/mcp/... ./cmd/simurgh/...` | **PASS** exit 0 |
 | `go test -race ./internal/broker -run 'TestGlobalCapacity\|TestPerSpecCap\|TestProvisioning\|TestQueueReason\|TestFairness\|TestPressure' -count=1 -v` | **PASS** exit 0 (8 tests) |
-| `go test -race ./internal/ipc -run 'TestDialDaemonSurvivesParentExit' -count=1 -v` | **PASS** 32.50s |
+| `go test -race ./internal/ipc -run 'TestDialDaemonSurvivesParentExit' -count=1 -v` | **PASS** 32.49s; PID **80395** stable ≥30s |
 | `go build ./...` | **PASS** exit 0 |
 | `go vet ./...` | **PASS** exit 0 |
 | `go test -race ./...` | **PASS** exit 0 (16 packages) |

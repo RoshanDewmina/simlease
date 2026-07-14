@@ -60,6 +60,7 @@ func TestDialDaemonSurvivesParentExit(t *testing.T) {
 	if err != nil || daemonPID <= 0 {
 		t.Fatalf("invalid pid file %q: %v", raw, err)
 	}
+	t.Logf("daemon PID after parent exit: %d (must remain stable ≥30s)", daemonPID)
 	t.Cleanup(func() {
 		proc, err := os.FindProcess(daemonPID)
 		if err == nil {

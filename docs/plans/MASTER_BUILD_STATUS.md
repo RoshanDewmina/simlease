@@ -46,7 +46,8 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 ### Matching key (documented)
 
 Reuse matches **ACTIVE** (renew) or in-flight **PROVISIONING** (concurrent attach) when:
-`DeviceSpec` + exact `Labels` + non-empty `Owner.Agent` + non-empty `Owner.SessionID` are equal.
+`DeviceSpec` + exact non-empty `Labels` containing non-empty `project` +
+non-empty `Owner.Agent` + non-empty `Owner.SessionID` are equal.
 PID/PPID excluded. Project/Xcode/scheme are **not** first-class — encode in Labels.
 RELEASED / FAILED / RECLAIMED / CANCELLED never reused.
 
@@ -63,7 +64,7 @@ RELEASED / FAILED / RECLAIMED / CANCELLED never reused.
 | M0–M4 (v0 scaffold) | prior `master` lineage | historical complete |
 | Phase A P0 harness (partial) | `593a051` STOPPED/BLOCKED | not a Phase A pass |
 | **R-WP0** | `0757144` | complete |
-| **R-WP1** | original tip `7ed0197`; review fixes `5699780` code/tests + `b9ce49a` docs | complete |
+| **R-WP1** | prior tip `a7d8c78`; final arbitration `b69a685` code/tests + `6485c30` docs | complete |
 
 ## Open failures/risks
 
@@ -105,9 +106,8 @@ composition) remain unmet. Do not restart benchmarks unless owner directs.
 All four blocking reviewer findings addressed:
 
 1. **Identity:** reuse now requires both non-empty `Owner.Agent` and
-   `Owner.SessionID`; missing identity is a no-match/new allocation. CLI honors
-   `SIMURGH_SESSION_ID`, else `parent-pid:<PPID>`; MCP honors the variable, else
-   `mcp-pid:<PID>`. Raw IPC omission cannot reuse.
+   `Owner.SessionID`; missing identity is a no-match/new allocation. This entry
+   is superseded by the final arbitration below for project and fallback rules.
 2. **Queued-owner race:** public `Broker.CancelQueued` performs an atomic
    QUEUED→CANCELLED transition. A stale `"queued owner process exited"` decision
    after promotion is skipped and never falls through to Reclaim/reaper.
@@ -133,3 +133,41 @@ All four blocking reviewer findings addressed:
 | `go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v` | **PASS**, exit 0; `TestReuseIfExistsLive` 7.24s, package 8.458s |
 
 R-WP2 was not started. Its daemon-parent-shell obligation remains unchanged.
+
+## Final R-WP1 orchestrator arbitration (2026-07-14 15:09 UTC)
+
+This is the final bounded correction; no further review loop was requested or
+dispatched.
+
+- **Reuse partition:** exact `DeviceSpec`; exact non-empty Labels containing a
+  non-empty `project`; exact non-empty Agent and SessionID. Any missing
+  partition is a no-match/new allocation, not an error.
+- **Session generation:** explicit `SIMURGH_SESSION_ID` is honored. CLI fallback
+  is cryptographically random per one-shot process, so cross-invocation reuse
+  requires the environment variable. MCP fallback is cryptographically random
+  once per MCP server process and stable only within it. No PID-derived IDs.
+- **Trust boundary:** Owner/SessionID/Labels are partitioning metadata, **not
+  authentication**. The parent directory/socket are 0700/0600, but a same-user
+  raw IPC client can forge metadata and can already renew/release a known lease
+  ID. No unforgeable-identity claim is made.
+- **Live smoke:** uses explicit `SIMURGH_SESSION_ID=r-wp1-live-session` and
+  `project=r-wp1-live`; first result `reused=false`, second `reused=true`.
+
+### Arbitration commits
+
+- `b69a685` — mandatory project partition, random process IDs, tests/live smoke.
+- `6485c30` — CLI/MCP/agent/troubleshooting trust and usage docs.
+
+### Exact arbitration gates
+
+| Command | Result |
+|---|---|
+| `go test -race ./internal/broker/... ./internal/watcher/... ./internal/daemon/... ./internal/mcp/... ./cmd/simurgh/... -count=1` | **PASS**, exit 0 |
+| `go build ./...` | **PASS**, exit 0 |
+| `go vet ./...` | **PASS**, exit 0 |
+| `go test -race ./...` | **PASS**, exit 0 (16 packages) |
+| `go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v` | **PASS**, exit 0; test 3.25s, package 4.412s |
+
+One initial non-race focused compile attempt failed only on two stale test
+imports (`fmt` in CLI/MCP tests); those imports were removed before all gates
+above passed. R-WP2 was not started; no merge/push occurred.

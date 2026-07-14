@@ -1180,3 +1180,36 @@ P1-7 warm-DD on Lancer: **MET** (above). P1-6 B5 dual-window / late-acquire meas
 | `go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v` | PASS; test 7.24s, package 8.458s |
 
 - R-WP2 not started; existing daemon-parent-shell acceptance obligation remains.
+
+### 2026-07-14 15:09 UTC — final orchestrator-arbitrated R-WP1 correction
+
+- **Arbitration:** malicious same-user raw-IPC spoofing is outside this package's
+  authorization scope. Socket parent/socket modes are 0700/0600; same-user raw
+  callers can forge Owner/Labels and already renew/release known IDs. Identity
+  metadata partitions reuse and is not authentication or unforgeable.
+- **Bounded safety rule:** `reuseCompatible` requires exact Spec; exact non-empty
+  Labels with non-empty `project`; and exact non-empty Agent + SessionID.
+  Otherwise `ReuseIfExists` allocates new without error.
+- **Fallback correction:** explicit `SIMURGH_SESSION_ID` wins. CLI generates a
+  cryptographically random ID per process (cross-invocation reuse therefore
+  requires explicit env). MCP generates one random ID per server process.
+  PID/shared-parent derivation was removed.
+- **Coverage:** empty labels, labels without project, empty project, and
+  different projects never reuse; fresh random generation differs; explicit
+  env is stable; same project+explicit session reuses; raw IPC omission remains
+  no-reuse. Live smoke uses explicit env + project and asserts false→true.
+- **Commits:** `b69a685` implementation/tests; `6485c30` docs.
+
+#### Final arbitration gates
+
+| Command | Result |
+|---|---|
+| `go test -race ./internal/broker/... ./internal/watcher/... ./internal/daemon/... ./internal/mcp/... ./cmd/simurgh/... -count=1` | exit 0 |
+| `go build ./...` | exit 0 |
+| `go vet ./...` | exit 0 |
+| `go test -race ./...` | exit 0 (16 packages) |
+| `go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v` | PASS; test 3.25s, package 4.412s |
+
+- Initial focused non-race compile exposed only stale `fmt` imports in two test
+  files; removed before all final gates passed.
+- No review dispatch, R-WP2 start, merge, or push.

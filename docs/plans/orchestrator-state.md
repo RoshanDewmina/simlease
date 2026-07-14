@@ -1,16 +1,19 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 16:47 UTC
-**Owner:** Roshan  
-**Orchestrator:** Cursor coder subagent for **R-WP4** (readiness + warm-cache;
-implementation-complete / benchmark-deferred). Phase A remains
-**STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B
-continues only by that override recorded at `593a051`.  
-**Repository:** `/Users/roshansilva/Documents/simurgh`  
-**Active worktree:** `.worktrees/r-wp4-readiness-cache` on `feat/r-wp4-readiness-cache`  
+**Updated:** 2026-07-14 17:16 UTC
+**Owner:** Roshan
+**Orchestrator:** Cursor Sol session paused during **R-WP6** (XcodeBuildMCP
+adapter). Phase A remains **STOPPED/BLOCKED by explicit owner directive**
+(not a pass) — Phase B continues only by that override recorded at `593a051`.
+R-WP0…R-WP4 complete on stacked branches; **R-WP6 PAUSED** at `bec8670`
+(**not** complete, **not** reviewed).
+**Repository:** `/Users/roshansilva/Documents/simurgh`
+**Active worktree:** `.worktrees/r-wp6-xcodebuildmcp` on `feat/r-wp6-xcodebuildmcp`
 **Current phase:** Phase A STOPPED/BLOCKED (owner override) →
-**R-WP0/R-WP1/R-WP2/R-WP3/R-WP4(impl) complete**; next is **R-WP5 only after
-R-WP6 reassessment** (owner correction #3). Timed benchmark cells remain deferred.
+**R-WP0/R-WP1/R-WP2/R-WP3/R-WP4(impl) complete**; **R-WP6 PAUSED**; next is
+resume R-WP6 only, then **R-WP5 only after R-WP6 reassessment** (owner
+correction #3). Timed benchmark cells remain deferred. **Master remains
+`4447e3c` — nothing merged or pushed.**
 
 ## Operating decisions
 
@@ -1513,4 +1516,38 @@ time-to-green numbers, new bench/evidence — **unpublished / not run**.
   timed cell, XcodeBuildMCP composition, `bench/results`/`bench/evidence`
   mutation, or performance claim.
 - No merge, push, R-WP5, or review dispatch.
+
+### 2026-07-14 17:16 UTC — PAUSED: R-WP6 owner stop + Sol session report
+
+- **Status:** **PAUSED** (not complete, not reviewed). Owner directed stop
+  during R-WP6; coder pause handoff preserved untracked live test
+  byte-for-byte and performed owned-resource cleanup only.
+- **Worktree / branch / HEAD:** `.worktrees/r-wp6-xcodebuildmcp` on
+  `feat/r-wp6-xcodebuildmcp` @ `bec8670f24feb9da6e4043c7fdc707f41e336f0d`
+  (base `f395061`).
+- **Committed:** `bec8670 feat(integrations): add bounded XcodeBuildMCP
+  session adapter` — `simurgh integration xcodebuildmcp start|stop|status`,
+  lease-scoped bindings/config/PID lifecycle, unit+CLI attribution tests.
+- **Untracked (preserved, unverified):**
+  `internal/integrations/xcodebuildmcp/runtime_live_test.go`
+  (SHA-256 `9582650a420aa69976fe03a15a81a799d136eadfb8f71796fca7ce0dda13f5f3`).
+  Not formatted, compiled, or run.
+- **Last verified gates at `bec8670` (before untracked live test):** package
+  focused 7 tests PASS `6.722s`; CLI focused PASS `31.208s`; `go build` /
+  `go vet` PASS; `go test -race ./...` PASS 18 packages; capacity PASS
+  `1.814s`; detach PASS PID `66767` `35.990s`; live reuse PASS test
+  `13.25s` / package `14.484s`.
+- **Cleanup (pause handoff):** no R-WP6 runtime validation started; probe
+  lease `lease-163` cancelled; removed `/tmp/r-wp6-runtime` and
+  `/tmp/xcodebuildmcp-2.6.2.tgz`; no owned XcodeBuildMCP children remain;
+  unrelated daemon/processes left untouched.
+- **Docs this entry:** `docs/plans/SIMURGH_SOL_SESSION_REPORT_2026-07-14.md`;
+  `MASTER_BUILD_STATUS.md` retargeted to R-WP6 paused.
+- **Still binding:** Phase A STOPPED/BLOCKED (`593a051`); no benchmark
+  restart; no merge/push; **master remains `4447e3c`**; R-WP5 only after
+  R-WP6 reassessment; security unreachable-object caveat + no push of
+  rewritten history without owner review.
+- **Safe next boundary:** resume R-WP6 only in this worktree, or stop after
+  docs. Do not start R-WP5 / R-WP7+ / merge / push / Phase A drivers from
+  this pause alone.
 

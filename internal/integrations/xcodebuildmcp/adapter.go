@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
+	"github.com/RoshanDewmina/simurgh/internal/safety"
 )
 
 // DefaultPinnedVersion is the XcodeBuildMCP version Phase A composed with.
@@ -34,13 +34,13 @@ type PIDMeta struct {
 
 // Status is the adapter status for one session/lease.
 type Status struct {
-	LeaseID   string  `json:"leaseId"`
-	Running   bool    `json:"running"`
-	PID       int     `json:"pid,omitempty"`
-	Config    string  `json:"configPath,omitempty"`
-	LogPath   string  `json:"logPath,omitempty"`
-	Version   string  `json:"xcodebuildmcpVersion,omitempty"`
-	Bindings  *Bindings `json:"-"`
+	LeaseID  string    `json:"leaseId"`
+	Running  bool      `json:"running"`
+	PID      int       `json:"pid,omitempty"`
+	Config   string    `json:"configPath,omitempty"`
+	LogPath  string    `json:"logPath,omitempty"`
+	Version  string    `json:"xcodebuildmcpVersion,omitempty"`
+	Bindings *Bindings `json:"-"`
 }
 
 // Adapter owns XcodeBuildMCP lifecycle for Simurgh leases.
@@ -207,7 +207,15 @@ func (a *Adapter) Stop(ctx context.Context, sessionID string) error {
 	if a.LeasesRoot == "" {
 		return fmt.Errorf("xcodebuildmcp: leases root is required")
 	}
-	paths := AdapterDir(filepath.Join(a.LeasesRoot, sessionID))
+	// Stop has destructive side effects (kills a process, removes files), so
+	// it fails closed on an unvalidated sessionID rather than silently
+	// treating a malformed/traversal-shaped ID as "not found" — reuse the
+	// same allowlist internal/safety already establishes for lease paths.
+	leaseDir, err := safety.ValidateLeasePath(a.LeasesRoot, sessionID)
+	if err != nil {
+		return fmt.Errorf("xcodebuildmcp: invalid session %s: %w", sessionID, err)
+	}
+	paths := AdapterDir(leaseDir)
 	meta, err := readPIDMeta(paths.PIDMeta)
 	if err != nil {
 		return fmt.Errorf("xcodebuildmcp: no owned adapter for %s: %w", sessionID, err)
@@ -238,7 +246,15 @@ func (a *Adapter) Stop(ctx context.Context, sessionID string) error {
 // Status reports whether the owned adapter child is still running.
 func (a *Adapter) Status(ctx context.Context, sessionID string) (Status, error) {
 	_ = ctx
-	paths := AdapterDir(filepath.Join(a.LeasesRoot, sessionID))
+	// Read path, same allowlist as Stop: an invalid/traversal-shaped
+	// sessionID can never have anything running under it, so it collapses
+	// into the same "not running" result the existing no-metadata case
+	// already returns — no new error shape, but never a raw path join.
+	leaseDir, err := safety.ValidateLeasePath(a.LeasesRoot, sessionID)
+	if err != nil {
+		return Status{LeaseID: sessionID, Running: false}, nil
+	}
+	paths := AdapterDir(leaseDir)
 	meta, err := readPIDMeta(paths.PIDMeta)
 	if err != nil {
 		return Status{LeaseID: sessionID, Running: false}, nil

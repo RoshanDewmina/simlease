@@ -35,7 +35,7 @@ exec cat >/dev/null
 
 func TestXcodeBuildMCPStartStopOwnership(t *testing.T) {
 	bin := fakeXBMCP(t)
-	lease := activeLease("lease-own", "AAAAAAAA-0000-0000-0000-000000000001")
+	lease := activeLease("lease-901", "AAAAAAAA-0000-0000-0000-000000000001")
 
 	a := NewAdapter(t.TempDir(), func(_ context.Context, id string) (broker.Lease, error) {
 		if id != lease.ID {
@@ -46,7 +46,7 @@ func TestXcodeBuildMCPStartStopOwnership(t *testing.T) {
 	a.Command = []string{bin}
 	a.Version = "test-fake"
 
-	st, err := a.Start(context.Background(), "lease-own")
+	st, err := a.Start(context.Background(), "lease-901")
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -56,12 +56,12 @@ func TestXcodeBuildMCPStartStopOwnership(t *testing.T) {
 	if !processAlive(st.PID) {
 		t.Fatalf("child pid %d not alive after start", st.PID)
 	}
-	paths := AdapterDir(filepath.Join(a.LeasesRoot, "lease-own"))
+	paths := AdapterDir(filepath.Join(a.LeasesRoot, "lease-901"))
 	meta, err := readPIDMeta(paths.PIDMeta)
 	if err != nil {
 		t.Fatalf("pid meta: %v", err)
 	}
-	if meta.LeaseID != "lease-own" || meta.PID != st.PID {
+	if meta.LeaseID != "lease-901" || meta.PID != st.PID {
 		t.Fatalf("meta=%+v", meta)
 	}
 
@@ -69,7 +69,7 @@ func TestXcodeBuildMCPStartStopOwnership(t *testing.T) {
 	raw := waitFile(t, envPath, 2*time.Second)
 	text := string(raw)
 	for _, want := range []string{
-		"SIMURGH_LEASE_ID=lease-own",
+		"SIMURGH_LEASE_ID=lease-901",
 		"SIMURGH_UDID=AAAAAAAA-0000-0000-0000-000000000001",
 		"XCODEBUILDMCP_SIMULATOR_ID=AAAAAAAA-0000-0000-0000-000000000001",
 	} {
@@ -79,14 +79,14 @@ func TestXcodeBuildMCPStartStopOwnership(t *testing.T) {
 	}
 
 	pid := st.PID
-	if err := a.Stop(context.Background(), "lease-own"); err != nil {
+	if err := a.Stop(context.Background(), "lease-901"); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
 	waitDead(t, pid, 2*time.Second)
 	if _, err := os.Stat(paths.PIDMeta); !os.IsNotExist(err) {
 		t.Fatalf("pid meta should be removed after Stop, err=%v", err)
 	}
-	st2, err := a.Status(context.Background(), "lease-own")
+	st2, err := a.Status(context.Background(), "lease-901")
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -97,10 +97,10 @@ func TestXcodeBuildMCPStartStopOwnership(t *testing.T) {
 
 func TestXcodeBuildMCPTwoSessionAttribution(t *testing.T) {
 	bin := fakeXBMCP(t)
-	leaseA := activeLease("lease-A", "AAAAAAAA-0000-0000-0000-0000000000AA")
-	leaseB := activeLease("lease-B", "BBBBBBBB-0000-0000-0000-0000000000BB")
+	leaseA := activeLease("lease-101", "AAAAAAAA-0000-0000-0000-0000000000AA")
+	leaseB := activeLease("lease-102", "BBBBBBBB-0000-0000-0000-0000000000BB")
 	root := t.TempDir()
-	leases := map[string]broker.Lease{"lease-A": leaseA, "lease-B": leaseB}
+	leases := map[string]broker.Lease{"lease-101": leaseA, "lease-102": leaseB}
 	get := func(_ context.Context, id string) (broker.Lease, error) {
 		return leases[id], nil
 	}
@@ -111,17 +111,17 @@ func TestXcodeBuildMCPTwoSessionAttribution(t *testing.T) {
 		return a
 	}
 	a1, a2 := mk(), mk()
-	stA, err := a1.Start(context.Background(), "lease-A")
+	stA, err := a1.Start(context.Background(), "lease-101")
 	if err != nil {
 		t.Fatalf("Start A: %v", err)
 	}
-	stB, err := a2.Start(context.Background(), "lease-B")
+	stB, err := a2.Start(context.Background(), "lease-102")
 	if err != nil {
 		t.Fatalf("Start B: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = a1.Stop(context.Background(), "lease-A")
-		_ = a2.Stop(context.Background(), "lease-B")
+		_ = a1.Stop(context.Background(), "lease-101")
+		_ = a2.Stop(context.Background(), "lease-102")
 	})
 
 	if stA.PID == stB.PID {
@@ -131,15 +131,15 @@ func TestXcodeBuildMCPTwoSessionAttribution(t *testing.T) {
 		t.Fatalf("sessions share config path")
 	}
 
-	textA := string(waitFile(t, filepath.Join(a1.LeasesRoot, "lease-A", adapterSubdir, "child.env"), 2*time.Second))
-	textB := string(waitFile(t, filepath.Join(a2.LeasesRoot, "lease-B", adapterSubdir, "child.env"), 2*time.Second))
-	if !strings.Contains(textA, "SIMURGH_LEASE_ID=lease-A") || !strings.Contains(textA, "SIMURGH_UDID=AAAAAAAA-0000-0000-0000-0000000000AA") {
+	textA := string(waitFile(t, filepath.Join(a1.LeasesRoot, "lease-101", adapterSubdir, "child.env"), 2*time.Second))
+	textB := string(waitFile(t, filepath.Join(a2.LeasesRoot, "lease-102", adapterSubdir, "child.env"), 2*time.Second))
+	if !strings.Contains(textA, "SIMURGH_LEASE_ID=lease-101") || !strings.Contains(textA, "SIMURGH_UDID=AAAAAAAA-0000-0000-0000-0000000000AA") {
 		t.Fatalf("session A misattributed:\n%s", textA)
 	}
-	if !strings.Contains(textB, "SIMURGH_LEASE_ID=lease-B") || !strings.Contains(textB, "SIMURGH_UDID=BBBBBBBB-0000-0000-0000-0000000000BB") {
+	if !strings.Contains(textB, "SIMURGH_LEASE_ID=lease-102") || !strings.Contains(textB, "SIMURGH_UDID=BBBBBBBB-0000-0000-0000-0000000000BB") {
 		t.Fatalf("session B misattributed:\n%s", textB)
 	}
-	if strings.Contains(textA, "lease-B") || strings.Contains(textB, "lease-A") {
+	if strings.Contains(textA, "lease-102") || strings.Contains(textB, "lease-101") {
 		t.Fatalf("cross-session env leakage")
 	}
 
@@ -158,10 +158,10 @@ func TestXcodeBuildMCPTwoSessionAttribution(t *testing.T) {
 
 func TestXcodeBuildMCPCleanupIsolation(t *testing.T) {
 	bin := fakeXBMCP(t)
-	leaseA := activeLease("lease-A", "AAAAAAAA-0000-0000-0000-0000000000AA")
-	leaseB := activeLease("lease-B", "BBBBBBBB-0000-0000-0000-0000000000BB")
+	leaseA := activeLease("lease-101", "AAAAAAAA-0000-0000-0000-0000000000AA")
+	leaseB := activeLease("lease-102", "BBBBBBBB-0000-0000-0000-0000000000BB")
 	root := t.TempDir()
-	leases := map[string]broker.Lease{"lease-A": leaseA, "lease-B": leaseB}
+	leases := map[string]broker.Lease{"lease-101": leaseA, "lease-102": leaseB}
 	get := func(_ context.Context, id string) (broker.Lease, error) { return leases[id], nil }
 
 	mk := func() *Adapter {
@@ -171,42 +171,42 @@ func TestXcodeBuildMCPCleanupIsolation(t *testing.T) {
 		return a
 	}
 	a1, a2 := mk(), mk()
-	stA, err := a1.Start(context.Background(), "lease-A")
+	stA, err := a1.Start(context.Background(), "lease-101")
 	if err != nil {
 		t.Fatalf("Start A: %v", err)
 	}
-	stB, err := a2.Start(context.Background(), "lease-B")
+	stB, err := a2.Start(context.Background(), "lease-102")
 	if err != nil {
 		t.Fatalf("Start B: %v", err)
 	}
 
-	if err := a1.Stop(context.Background(), "lease-A"); err != nil {
+	if err := a1.Stop(context.Background(), "lease-101"); err != nil {
 		t.Fatalf("Stop A: %v", err)
 	}
 	waitDead(t, stA.PID, 2*time.Second)
 	if !processAlive(stB.PID) {
 		t.Fatalf("B was killed when stopping A — cleanup not isolated")
 	}
-	stB2, err := a2.Status(context.Background(), "lease-B")
+	stB2, err := a2.Status(context.Background(), "lease-102")
 	if err != nil || !stB2.Running {
 		t.Fatalf("B status after A stop: %+v err=%v", stB2, err)
 	}
 
-	if err := a1.Stop(context.Background(), "lease-A"); err == nil {
+	if err := a1.Stop(context.Background(), "lease-101"); err == nil {
 		t.Fatalf("expected error stopping already-stopped A")
 	}
 	if !processAlive(stB.PID) {
 		t.Fatalf("B died on second Stop A")
 	}
 
-	if err := a2.Stop(context.Background(), "lease-B"); err != nil {
+	if err := a2.Stop(context.Background(), "lease-102"); err != nil {
 		t.Fatalf("Stop B: %v", err)
 	}
 }
 
 func TestXcodeBuildMCPStopRejectsForeignPID(t *testing.T) {
 	root := t.TempDir()
-	paths := AdapterDir(filepath.Join(root, "lease-x"))
+	paths := AdapterDir(filepath.Join(root, "lease-999"))
 	if err := os.MkdirAll(paths.Root, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +218,7 @@ func TestXcodeBuildMCPStopRejectsForeignPID(t *testing.T) {
 	defer func() { _ = cmd.Process.Kill(); _, _ = cmd.Process.Wait() }()
 
 	meta := PIDMeta{
-		LeaseID: "lease-x",
+		LeaseID: "lease-999",
 		PID:     1 << 22,
 		PGID:    1 << 22,
 	}
@@ -226,9 +226,50 @@ func TestXcodeBuildMCPStopRejectsForeignPID(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := NewAdapter(root, nil)
-	_ = a.Stop(context.Background(), "lease-x")
+	_ = a.Stop(context.Background(), "lease-999")
 	if !processAlive(cmd.Process.Pid) {
 		t.Fatalf("Stop killed unrelated sleeper pid %d", cmd.Process.Pid)
+	}
+}
+
+func TestXcodeBuildMCPStopAndStatusRejectMalformedSessionID(t *testing.T) {
+	root := t.TempDir()
+	// A sentinel outside root: if Stop/Status ever built a path from an
+	// unvalidated sessionID and escaped root, this is what a traversal
+	// attempt would target.
+	victimDir := filepath.Join(filepath.Dir(root), "xbmcp-victim-"+filepath.Base(root))
+	if err := os.MkdirAll(victimDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(victimDir)
+	victimFile := filepath.Join(victimDir, "adapter.pid.json")
+	if err := os.WriteFile(victimFile, []byte(`{"leaseId":"sentinel","pid":1}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	a := NewAdapter(root, nil)
+	for _, bad := range []string{
+		"../" + filepath.Base(victimDir),
+		"../../etc",
+		"lease-1/../../etc",
+		"",
+		"lease-abc",
+		"lease-1.5",
+	} {
+		if err := a.Stop(context.Background(), bad); err == nil {
+			t.Fatalf("Stop(%q) = nil error, want rejection of malformed session id", bad)
+		}
+		st, err := a.Status(context.Background(), bad)
+		if err != nil {
+			t.Fatalf("Status(%q) unexpected error: %v", bad, err)
+		}
+		if st.Running {
+			t.Fatalf("Status(%q) = Running true, want false for malformed session id", bad)
+		}
+	}
+
+	if _, err := os.ReadFile(victimFile); err != nil {
+		t.Fatalf("victim file outside leases root was modified/removed: %v", err)
 	}
 }
 

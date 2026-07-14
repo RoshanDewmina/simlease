@@ -1819,3 +1819,35 @@ adapter and when moved; no `bench/evidence`/`bench/results` mutation; no
 performance/latency claims; R-WP5 still not started. R-WP6 is not yet
 re-reviewed against this fix — the B1+B2 review verdict above remains the
 last independent read until a fresh review covers this commit.
+
+### 2026-07-14 (continued) — B2 fix (740abdb) fixed the original bug but introduced 3 new findings: NOT MERGEABLE
+
+Second independent review pass, same blackbox-brief protocol. Verdict: **NOT MERGEABLE.**
+
+**Blocking (certain) — unsynchronized concurrent access to `Adapter.stdinHolders`.** Moving the
+adapter to one long-lived, daemon-shared instance (fixing B2) means `stdinHolders` — a bare
+`map[string]*os.File` with zero mutex, never exercised concurrently before — is now written/read
+from multiple per-connection goroutines simultaneously. Reviewer wrote a temporary `-race` test
+(deleted after use) that reliably reproduced `WARNING: DATA RACE` on both the Start write and the
+Stop read/delete. Worst case: `fatal error: concurrent map read and map write`, crashing the whole
+daemon (leases too, not just xcodebuildmcp).
+
+**Blocking (certain) — two unconditional env-var backdoors in the shipped daemon binary.**
+`SIMURGH_XBMCP_TEST_COMMAND` and `SIMURGH_TEST_SKIP_PRESSURE`, added to make the new regression
+test practical, are read directly in `runDaemon()` with no build-tag gate and no secondary
+test-mode signal — live in the real `simurgh daemon run` path. The first lets any process that can
+set an env var before daemon start substitute an arbitrary binary for XcodeBuildMCP inside the
+lease isolation env; the second silently and permanently disables the RAM/thermal/disk pressure
+gate. Per the reviewer: "the detached daemon process inherits [the CLI subprocess's] env" — so
+this is reachable through ordinary CLI invocation environments, not just deliberate test harnesses.
+
+**Major (certain) — lease-not-found error classification regressed.** The old CLI→IPC `lease.get`
+path returned structured `LEASE_NOT_FOUND` (exit 3, fix "simurgh list"). The new in-process
+`GetLease` closure in `cmd/simurgh/daemon.go` hand-rolls a bare `fmt.Errorf`, which `xbmcpErrorToIPC`
+doesn't recognize, falling through to generic `INTERNAL` (exit 5). Contradicts the change's own
+"exit codes are unchanged" claim. Only affects `start` (the only caller of `GetLease`).
+
+**No regression on B1** — `ValidateLeasePath` calls in Stop/Status are untouched; confirmed by spot-check.
+
+Next: bounded fix round for exactly these three, then a third review pass before any merge
+decision. R-WP6 remains unmerged; R-WP5 stays gated.

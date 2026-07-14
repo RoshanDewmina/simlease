@@ -172,7 +172,9 @@ Exit code is the child's exit code (not the IPC 0/2/3/4/5 contract).`)
 	}
 
 	argv := append([]string(nil), cmdArgs...)
-	var warmDDPath string
+	var warmKey WarmSeedKey
+	var haveWarmKey bool
+	var warmHome string
 	leaseDD := iso.Env["SIMURGH_DERIVED_DATA"]
 	if isXcodebuild(argv) {
 		// Inject base isolation flags after the binary (PATH shim is v0.1 — not built).
@@ -188,10 +190,19 @@ Exit code is the child's exit code (not the IPC 0/2/3/4/5 contract).`)
 		argv = append([]string{argv[0]}, append(flags, argv[1:]...)...)
 
 		if !isXcodebuildQueryOnly(argv) {
-			if projectPath, scheme := extractProjectScheme(argv); projectPath != "" {
-				if home, herr := simurghHomeDir(); herr == nil {
-					warmDDPath = warmDDCachePath(home, warmDDKey(projectPath, scheme))
-					seedDerivedDataFromWarm(warmDDPath, leaseDD)
+			if home, herr := simurghHomeDir(); herr == nil {
+				xcodeVersion, xcodeBuild := probeXcodeVersionBuild()
+				sdk, runtime := probeSDKRuntime()
+				pkgHash := resolvePackageResolvedHash(argv)
+				if key, ok := BuildWarmSeedKeyFromArgv(argv, xcodeVersion, xcodeBuild, sdk, runtime, pkgHash); ok {
+					warmHome = home
+					warmKey = key
+					haveWarmKey = true
+					_, _ = SeedWarmDerivedData(SeedWarmOptions{
+						Home:    home,
+						Key:     key,
+						LeaseDD: leaseDD,
+					})
 				}
 			}
 		}
@@ -209,8 +220,8 @@ Exit code is the child's exit code (not the IPC 0/2/3/4/5 contract).`)
 	cmd.Stdin = os.Stdin
 	err = cmd.Run()
 	if err == nil {
-		if warmDDPath != "" {
-			refreshWarmFromDerivedData(leaseDD, warmDDPath)
+		if haveWarmKey && leaseDD != "" {
+			_ = PublishWarmSeed(warmHome, warmKey, leaseDD)
 		}
 		return 0
 	}

@@ -86,11 +86,9 @@ func isXcodebuildQueryOnly(argv []string) bool {
 	return false
 }
 
-// seedDerivedDataFromWarm clonefile-copies a same-path warm cache into an
-// empty lease DerivedData dir, if one exists. No-op (not an error) if
-// there's no warm cache yet, or leaseDD isn't the pristine-empty
-// directory isolator.EnsureLeaseDir just created — never overwrites
-// anything already there.
+// seedDerivedDataFromWarm is the legacy same-path helper kept for existing
+// unit coverage. R-WP4 production seeding uses SeedWarmDerivedData with the
+// formal compatibility key (see warm_seed.go).
 func seedDerivedDataFromWarm(warmPath, leaseDD string) {
 	if warmPath == "" || leaseDD == "" {
 		return
@@ -114,10 +112,8 @@ func seedDerivedDataFromWarm(warmPath, leaseDD string) {
 	}
 }
 
-// refreshWarmFromDerivedData clonefile-copies the lease's DerivedData back
-// into the shared warm cache after a successful build, via a temp path +
-// rename so a concurrent seed from another lease never observes a
-// half-written cache.
+// refreshWarmFromDerivedData is the legacy same-path publisher kept for
+// existing unit coverage. Production refresh uses PublishWarmSeed.
 func refreshWarmFromDerivedData(leaseDD, warmPath string) {
 	if leaseDD == "" || warmPath == "" {
 		return

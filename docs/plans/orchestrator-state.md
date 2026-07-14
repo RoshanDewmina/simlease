@@ -1664,3 +1664,46 @@ run, no concurrency stress beyond two sessions, no independent review yet),
 so "retain as planned" rather than "expand" is the appropriately bounded
 read. This is a recommendation only; the owner decides.
 
+
+### 2026-07-14 (continued) — Independent review of `eb4a5a5`: NOT MERGEABLE
+
+Fresh-context reviewer (blackbox brief: diff + dependents map + REVIEW_STANDARDS.md,
+no build narrative) reviewed `f395061..eb4a5a5` in full. Orchestrator independently
+verified both blocking findings by reading the code directly before accepting the
+verdict — both confirmed real.
+
+**B1 (blocking, certain) — `Stop`/`Status` build filesystem paths from unvalidated
+`sessionID`.** `adapter.go:210`/`:241` do `filepath.Join(a.LeasesRoot, sessionID)`
+with no validation, bypassing `internal/safety.ValidateLeasePath` — documented
+elsewhere in this codebase as "the ONLY way to obtain a deletable filesystem path."
+`Start` resolves through the broker-trusted `lease.ID` first; `Stop`/`Status` don't.
+A crafted `--session` value can escape `LeasesRoot`.
+
+**B2 (blocking, certain) — the adapter's core CLI contract cannot work as designed.**
+Each `simurgh integration xcodebuildmcp <action>` invocation is a separate one-shot
+process (`main.go:99`, `os.Exit(runIntegration(...))`); `runIntegrationXcodeBuildMCP`
+constructs a fresh `Adapter` (empty `stdinHolders`) every call. `wStdin` — meant to
+"keep MCP stdio stdin pipes open until Stop" — lives only in that one process's
+memory and closes the instant the `start` process exits, EOF-ing the spawned child's
+stdin almost immediately. `start` now / `stop`-or-`status` later **as separate CLI
+invocations — the actual public interface** — is structurally broken. Invisible to
+every existing test (`adapter_test.go`, `runtime_live_test.go`) because both call
+`Start`/`Stop` in the same long-lived Go test process, never through separate real
+CLI invocations. This means today's live-test PASS evidence is real but does not
+validate the real CLI usage pattern.
+
+Minor/nit findings (PID-reuse verification gap, vague INVALID_STATE fix text,
+gofmt drift) do not block merge per REVIEW_STANDARDS.md and are not repeated here.
+
+**Verdict: NOT MERGEABLE. R-WP6 is not merged to master.** `eb4a5a5` remains on
+`feat/r-wp6-xcodebuildmcp` only. Fixing B1 is a small, bounded patch (route through
+the same lease-ID-allowlist pattern `internal/safety` already establishes). Fixing
+B2 is an architecture question, not a patch — the adapter's child process needs a
+long-lived owner (the existing `simurgh daemon` is the natural candidate) instead of
+a one-shot CLI process holding the stdin pipe; this needs an owner decision on
+design direction, not a subagent guessing at it.
+
+**R-WP5 recommendation is provisional, not final**, pending B2's resolution: R-WP5
+(PATH shims) assumes R-WP6's adapter lifecycle model works end-to-end via real CLI
+invocations, which B2 shows it currently doesn't. Re-affirm or revise the R-WP5
+recommendation once B2 has a chosen fix.

@@ -63,3 +63,16 @@ func TestStripCommandLinesKeepsOnlyProcessMetadata(t *testing.T) {
 		t.Fatalf("executable path survived StripCommandLines: %q", out)
 	}
 }
+
+func TestStripCommandLinesBareCursorAgentAPIKey(t *testing.T) {
+	// Bare binary name (no path prefix) — StripCommandLines falls back to
+	// Secrets so the token body cannot survive even when argv is not omitted.
+	bare := "user  1234  0.0  0.1  100  200  ??  S  12:00AM  0:00.01 cursor-agent --api-key crsr_TESTFAKE00000000000000000000000000000000 --endpoint https://example.test"
+	out := StripCommandLines(bare)
+	if strings.Contains(out, "crsr_") || strings.Contains(out, "TESTFAKE") {
+		t.Fatalf("credential body survived bare-argv StripCommandLines: %q", out)
+	}
+	if !strings.Contains(out, MarkerCursorAPIKey) && !strings.Contains(out, "[command_line_omitted]") {
+		t.Fatalf("expected cursor marker or omitted argv, got %q", out)
+	}
+}

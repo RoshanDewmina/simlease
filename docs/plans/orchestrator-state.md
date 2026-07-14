@@ -985,9 +985,16 @@ a continuation of this one.
 - **Owner actions completed:** Credential revoke/rotate done. Owner authorized
   a **local unpublished** targeted history rewrite on this branch only
   (`40a245a` → sanitized equivalent; containment tip rebuilt on that parent).
-- **Reachable history:** Branch tip rewritten and verified — credential-body
-  patterns report zero matches across all commits reachable from `HEAD`.
+- **Reachable history:** Branch tip rewritten and verified — the *leaked
+  credential body* (the specific revoked token value) has **zero matches**
+  across all commits reachable from `HEAD`. Synthetic test fixtures under
+  `internal/redact/*_test.go` and `bench/redact_secrets_test.py` intentionally
+  still contain `crsr_` strings that match the *generic* token shape
+  (`crsr_TESTFAKE…` and similar fakes) so redaction regressions stay covered;
+  those are not the leaked body and are not a containment failure.
 - **Still binding:** **No push** (local or remote) until owner review of the
   rewrite. Unreachable objects may remain in local reflogs / object DB pending
   separate cleanup (not performed in this step).
-- Benchmarks and Phase B remain **paused** — do not resume.
+- Security gate cleared for reachable history (owner revoke/rotate + rewrite +
+  fresh reviewer approve). Phase A evidence work may resume; Phase B stays
+  paused.

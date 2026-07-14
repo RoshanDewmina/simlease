@@ -1,14 +1,14 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 14:35 UTC  
+**Updated:** 2026-07-14 15:25 UTC  
 **Owner:** Roshan  
-**Orchestrator:** Cursor coder subagent for **R-WP0** (baseline protect); Phase A remains
-**STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B continues only by
-that override recorded at `593a051`.  
+**Orchestrator:** Cursor coder subagent for **R-WP2** (global capacity + daemon detach);
+Phase A remains **STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B
+continues only by that override recorded at `593a051`.  
 **Repository:** `/Users/roshansilva/Documents/simurgh`  
-**Active worktree:** `.worktrees/r-wp0-baseline` on `feat/r-wp0-baseline`  
-**Current phase:** Phase A STOPPED/BLOCKED (owner override) → **R-WP0 complete**; next is
-**R-WP1** (not started).
+**Active worktree:** `.worktrees/r-wp2-global-capacity` on `feat/r-wp2-global-capacity`  
+**Current phase:** Phase A STOPPED/BLOCKED (owner override) → **R-WP0/R-WP1/R-WP2 complete**;
+next is **R-WP3** (not started).
 
 ## Operating decisions
 
@@ -1213,3 +1213,37 @@ P1-7 warm-DD on Lancer: **MET** (above). P1-6 B5 dual-window / late-acquire meas
 - Initial focused non-race compile exposed only stale `fmt` imports in two test
   files; removed before all final gates passed.
 - No review dispatch, R-WP2 start, merge, or push.
+
+### 2026-07-14 15:25 UTC — R-WP2 complete (global capacity + daemon detach)
+
+- **Worktree:** `.worktrees/r-wp2-global-capacity` on `feat/r-wp2-global-capacity`
+  branched from gate-verified R-WP1 tip `e948d26`.
+- **Scope delivered:** host-global ACTIVE+PROVISIONING capacity (`SIMURGH_CAPACITY`
+  migration), optional `SIMURGH_PER_SPEC_CAPACITY` / `SIMURGH_MAX_PROVISIONING`,
+  explicit `reason`/`resourceClass` (`simulator_slot`|`provisioning_slot`|
+  `per_spec_slot`|`pressure`), deterministic oldest-first cross-spec fairness,
+  Dial auto-start detach (stdin `/dev/null` + Setsid + daemon `SIGHUP` ignore)
+  with OS-level `TestDialDaemonSurvivesParentExit` (≥30s same-PID ping).
+- **Commits:** `db55a0b` broker; `18880b0` ipc/daemon detach; `7a0277c` docs/wire;
+  status/orchestrator tip commit after gates.
+- **Non-goals preserved:** R-WP3 Session/Job/build slots; R-WP5 PATH; R-WP6
+  XcodeBuildMCP; dashboard; Phase A resume; merge/push.
+
+#### Exact R-WP2 gates
+
+| Command | Result |
+|---|---|
+| `go test -race ./internal/broker/... ./internal/ipc/... ./internal/daemon/... ./internal/mcp/... ./cmd/simurgh/...` | **PASS** exit 0 |
+| `go test -race ./internal/broker -run 'TestGlobalCapacity\|TestPerSpecCap\|TestProvisioning\|TestQueueReason\|TestFairness\|TestPressure' -count=1 -v` | **PASS** exit 0 (8 tests) |
+| `go test -race ./internal/ipc -run 'TestDialDaemonSurvivesParentExit' -count=1 -v` | **PASS** 32.50s |
+| `go build ./...` | **PASS** exit 0 |
+| `go vet ./...` | **PASS** exit 0 |
+| `go test -race ./...` | **PASS** exit 0 (16 packages) |
+| `go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v` | **PASS** test 2.60s |
+
+#### Sensitive risks logged
+
+- Capacity env migration tightens multi-spec hosts that previously multiplied
+  per SpecKey.
+- Detach proven for Dial auto-start; LaunchAgent still optional/future.
+- Next: **R-WP3** only — no merge/push of R-WP2 from this entry alone.

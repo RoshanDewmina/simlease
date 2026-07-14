@@ -57,7 +57,10 @@ else
 fi
 
 if [[ "$pf_pass" != "true" ]]; then
-  say "BLOCKED: preflight failed — $(cat "$PF_JSON")"
+  # Never dump full preflight JSON into logs — messages historically embedded
+  # process argv (and thus --api-key). Names of failing checks only.
+  fails="$(python3 -c 'import json;print(",".join(c["name"] for c in json.load(open("'"$PF_JSON"'"))["checks"] if not c["ok"]))' 2>/dev/null || echo "unknown")"
+  say "BLOCKED: preflight failed — checks: ${fails}"
   jq -nc \
     --arg ts "$(iso_ts)" \
     --arg status "blocked" \

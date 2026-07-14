@@ -5,6 +5,19 @@
 
 BENCH_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# --- credential scrubbing (evidence / preflight safety) ---------------
+#
+# Never persist process command lines, raw environ dumps, or credential-
+# shaped values into bench JSON. cursor-agent workers put --api-key crsr_*
+# on argv; embedding `ps aux` output has already leaked a live key into
+# committed evidence once.
+
+# bench_redact_secrets: stdin -> stdout with credential-like values replaced.
+# Implementation: bench/redact_secrets.py (mirrors internal/redact.Secrets).
+bench_redact_secrets() {
+  python3 "$BENCH_LIB_DIR/redact_secrets.py"
+}
+
 # --- timing -----------------------------------------------------------
 
 # Monotonic nanosecond timestamp. macOS `date` has no %N; python3's
@@ -57,7 +70,7 @@ bench_classify_log() {
   for pat in "${_BENCH_DD_CONTENTION_PATTERNS[@]}"; do
     if grep -qiE -- "$pat" "$logfile" 2>/dev/null; then
       local evidence
-      evidence="$(grep -iE -- "$pat" "$logfile" | head -1)"
+      evidence="$(grep -iE -- "$pat" "$logfile" | head -1 | bench_redact_secrets)"
       incidents="$(jq -c --arg t "dd_contention" --arg e "$evidence" \
         '. + [{type:$t, evidence:$e}]' <<<"$incidents")"
     fi
@@ -65,7 +78,7 @@ bench_classify_log() {
   for pat in "${_BENCH_LAUNCH_DESTINATION_PATTERNS[@]}"; do
     if grep -qiE -- "$pat" "$logfile" 2>/dev/null; then
       local evidence
-      evidence="$(grep -iE -- "$pat" "$logfile" | head -1)"
+      evidence="$(grep -iE -- "$pat" "$logfile" | head -1 | bench_redact_secrets)"
       incidents="$(jq -c --arg t "launch_destination_failure" --arg e "$evidence" \
         '. + [{type:$t, evidence:$e}]' <<<"$incidents")"
     fi
@@ -93,6 +106,8 @@ bench_step() {
   if [[ "$exit_code" -ne 0 && "$incidents" == "[]" ]]; then
     incidents='[{"type":"unclassified_failure","evidence":"nonzero exit, no known pattern matched"}]'
   fi
+  local log_snip
+  log_snip="$(tail -c 4000 "$logfile" | bench_redact_secrets)"
   jq -nc \
     --arg name "$name" \
     --argjson start_ns "$start" \
@@ -100,7 +115,7 @@ bench_step() {
     --argjson duration_ns "$dur" \
     --argjson exit_code "$exit_code" \
     --argjson incidents "$incidents" \
-    --arg log "$(tail -c 4000 "$logfile")" \
+    --arg log "$log_snip" \
     '{step:$name, start_ns:$start_ns, end_ns:$end_ns, duration_ns:$duration_ns, exit_code:$exit_code, incidents:$incidents, log:$log}'
   rm -f "$logfile"
   return "$exit_code"

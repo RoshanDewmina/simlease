@@ -14,6 +14,8 @@ CHECKS="[]"
 
 add_check() {
   local name="$1" ok="$2" message="$3"
+  # Defense in depth: scrub credential-shaped values before JSON/stderr.
+  message="$(printf '%s' "$message" | bench_redact_secrets)"
   CHECKS="$(jq -c --arg n "$name" --argjson ok "$ok" --arg m "$message" \
     '. + [{name:$n, ok:$ok, message:$m}]' <<<"$CHECKS")"
   if [[ "$ok" != "true" ]]; then
@@ -28,12 +30,20 @@ add_check() {
 #    which false-positives on this very session's own Claude Desktop
 #    renderer helper (its Chromium flags happen to contain the substring
 #    "worker" via --service-worker-schemes).
-stray="$(ps aux | grep -E 'cursor-agent-worker|cursor-agent$|cursor-agent ' | grep -v grep || true)"
-if [[ -n "$stray" ]]; then
+#
+# CRITICAL: never embed `ps aux` / full argv here. cursor-agent workers put
+# --api-key crsr_* on the command line; serializing that into preflight JSON
+# has leaked a live credential into committed evidence. Persist PIDs + count
+# only.
+stray_pids="$(pgrep -f 'cursor-agent-worker|cursor-agent$|cursor-agent ' || true)"
+if [[ -n "$stray_pids" ]]; then
+  stray_count="$(printf '%s\n' "$stray_pids" | grep -c . || true)"
+  stray_pid_list="$(printf '%s\n' "$stray_pids" | tr '\n' ',' | sed 's/,$//')"
+  stray_summary="count=${stray_count}; pids=[${stray_pid_list}]; command_lines_omitted"
   if [[ "${BENCH_PREFLIGHT_CONFIRM:-0}" == "1" ]]; then
-    add_check "stray_processes" true "found stray processes but BENCH_PREFLIGHT_CONFIRM=1 (owner acknowledged): $stray"
+    add_check "stray_processes" true "found stray processes but BENCH_PREFLIGHT_CONFIRM=1 (owner acknowledged): ${stray_summary}"
   else
-    add_check "stray_processes" false "stray agent processes found — owner must confirm via BENCH_PREFLIGHT_CONFIRM=1 or clear them: $stray"
+    add_check "stray_processes" false "stray agent processes found — owner must confirm via BENCH_PREFLIGHT_CONFIRM=1 or clear them: ${stray_summary}"
   fi
 else
   add_check "stray_processes" true "none found"

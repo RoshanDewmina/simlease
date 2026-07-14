@@ -972,3 +972,25 @@ a continuation of this one.
 - Still owed when the machine frees: the queued cells above, B6 third ARM-S rep (one rep per
   invocation), the XcodeBuildMCP composition check inside a live lease, warm-DD measured on a real
   Lancer worktree, and folding those numbers into RESULTS v2 / LAUNCH_NUMBERS.
+
+### 2026-07-14 — SECURITY BLOCKER: credential in unpublished ancestor history
+
+- **Working tree contained:** A `crsr_` Cursor API credential was captured into
+  committed warm-DD evidence via `bench/preflight.sh` embedding full `ps aux`
+  command lines for stray `cursor-agent` workers (argv includes `--api-key`).
+- **Containment done (this branch tip, forward commit only):** Working-tree and
+  evidence copies were sanitized in place with explicit
+  `[REDACTED:CURSOR_API_KEY]` markers. Preflight now records PID/count only
+  (no command lines); evidence paths scrub credential-shaped values; focused
+  regression tests added under `internal/redact` and `bench/redact_secrets_test.py`.
+- **Still true / owner-required before any publication:**
+  1. The live key **still exists in unpublished ancestor git history** on this
+     branch (commit that introduced the warm-DD evidence JSON). Sanitizing the
+     tip does **not** remove it from earlier commits.
+  2. **No push is allowed** (local or remote) until the owner explicitly
+     authorizes history rewriting **and** completes key revoke/rotate.
+  3. Owner must **revoke/rotate** the exposed Cursor API credential.
+  4. Owner must **explicitly authorize** any history rewrite (filter-repo /
+     equivalent). Agents must not amend, rebase, reset, or force-push for this.
+- Benchmarks and Phase B remain **paused** — do not resume until the owner
+  clears this blocker.

@@ -1,13 +1,14 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 14:30 UTC  
+**Updated:** 2026-07-14 14:35 UTC  
 **Owner:** Roshan  
-**Orchestrator:** Cursor overnight session (branch `claude/benchmark-blockers-2026-07-13-37773c`);
-Phase A evidence work **STOPPED/BLOCKED by explicit owner directive** (not a pass).  
-**Repository:** `/Users/roshansilva/Documents/simurgh` (worktree
-`.claude/worktrees/benchmark-blockers-2026-07-13-37773c`)  
-**Current phase:** Phase A STOPPED/BLOCKED → Phase B proceeds by owner override only;
-R-WP0 not started in this handoff commit.
+**Orchestrator:** Cursor coder subagent for **R-WP0** (baseline protect); Phase A remains
+**STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B continues only by
+that override recorded at `593a051`.  
+**Repository:** `/Users/roshansilva/Documents/simurgh`  
+**Active worktree:** `.worktrees/r-wp0-baseline` on `feat/r-wp0-baseline`  
+**Current phase:** Phase A STOPPED/BLOCKED (owner override) → **R-WP0 complete**; next is
+**R-WP1** (not started).
 
 ## Operating decisions
 
@@ -60,6 +61,7 @@ R-WP0 not started in this handoff commit.
 | M4.2 log rotation + daemon status --logs | merged locally as `02ceab1` | cleaned | `grok-4.5-high` | low | merged | green |
 | M4.3 error-message audit | merged locally as `7894cd9` | cleaned | `grok-4.5-high` | low | merged | green |
 | M4.4 docs (README/agent guide/troubleshooting) | merged locally as `002baf6` | cleaned | `grok-4.5-high` | low | merged | green |
+| **R-WP0** baseline protect | `feat/r-wp0-baseline` (see tip after commit) | `.worktrees/r-wp0-baseline` | coder | low (docs/status only) | **complete** | green (build/vet/race + darwin_sim) |
 
 ## Milestone gates
 
@@ -1053,3 +1055,45 @@ P1-7 warm-DD on Lancer: **MET** (above). P1-6 B5 dual-window / late-acquire meas
 - **Recommended baseline SHA for R-WP0 branching:** the tip of this documentation
   handoff commit on `claude/benchmark-blockers-2026-07-13-37773c` (see git log
   after commit; parent tip before handoff was `1bdeafd`).
+
+### 2026-07-14 14:35 UTC — R-WP0 complete (baseline protect; status/report only)
+
+- **Baseline SHA:** `593a051ac36539d8f76483246e3b17baf3d3f7d5` (Phase A STOPPED/BLOCKED handoff).
+- **Worktree / branch:** `/Users/roshansilva/Documents/simurgh/.worktrees/r-wp0-baseline`
+  on new branch `feat/r-wp0-baseline` (created exactly at `593a051`; no duplicate).
+- **Scope held:** no product code; no edits under `bench/evidence/`, `bench/results/`,
+  or `docs/dogfood/`; parent dirty/untracked files preserved (no reset/clean/stash).
+- **Phase A carry-forward:** owner override + unmet cells (B2 retries, B4-defaults-rep,
+  B5 dual-window, B6 third ARM-S, XcodeBuildMCP composition) recorded in
+  `docs/plans/MASTER_BUILD_STATUS.md` — Phase A still **not** complete.
+- **Narrative-only fix:** `bench/RESULTS.md` B2 naive claim **17/18 → 17/20** (3/20
+  success ⇒ 17/20 failures); raw evidence untouched.
+- **macOS suite search:** `docs/ROADMAP.md` path `./test/integration/...` missing;
+  found `//go:build darwin_sim` on
+  `internal/provisioner/integration_test.go`,
+  `internal/safety/integration_test.go`,
+  `internal/reaper/integration_test.go` — ran those (exit 0), including live
+  `TestProvisionRealClone`, `TestSafetyLiveDeletionGuards`,
+  `TestReaperLiveReclaimAndOrphanScan`.
+
+#### Exact gates (R-WP0 worktree)
+
+| Command | Result |
+|---|---|
+| `git status --short` | clean at start |
+| `git log --oneline -10` | tip `593a051` |
+| `go version` | `go1.26.5 darwin/arm64` |
+| `xcodebuild -version` | `Xcode 27.0` / `27A5194q` |
+| `xcrun simctl help >/dev/null` | exit 0 |
+| `go build ./...` | exit 0 |
+| `go vet ./...` | exit 0 |
+| `go test -race ./...` | exit 0 (16 packages) |
+| `go test -race -tags darwin_sim -count=1 ./internal/provisioner/ ./internal/safety/ ./internal/reaper/` | exit 0 |
+
+#### R-WP1 readiness
+
+- **Ready to start** from R-WP0 tip once orchestrator dispatches: implement real
+  `ReuseIfExists`; fold orphaned-QUEUED + daemon-dies-with-parent bugs per
+  `CURSOR_SOL_ORCHESTRATOR_PASTE.md` corrections.
+- **Do not** merge/push R-WP0 or start R-WP1 from this entry alone.
+- **Do not** resume Phase A benchmarks unless owner re-authorizes.

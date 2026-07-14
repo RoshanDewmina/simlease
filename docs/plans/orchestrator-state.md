@@ -952,3 +952,23 @@ a continuation of this one.
   bootstatus wait 9.4s + cold install ~10.5s + screenshot ~2s; the 5s launch window is identical
   in both arms. DIY's B1 median 38.64s confirms most of this is the cost of isolation-in-general,
   not Simurgh's mechanism.
+
+### 2026-07-13 — P0 session, deliverables committed; timed cells blocked on machine (recorded, not smoothed)
+
+- `bd0d007` RESULTS.md v2 (worktree-tracked now, was untracked in the main checkout) with the P0
+  addendum: closed items (P0-4 code, P0-5 receipts, P0-2 metric, P1-6 pattern, P1-8 decomposition,
+  P2-9/10), the retired "CoreSimulator contention" wording replaced by the evidenced machine-wide
+  load-episode root cause, three product bugs to file, and a blocked-cell ledger. `LAUNCH_NUMBERS.md`
+  lists the six claims safe to publish today (B2 100%-vs-15%, wrong-badge PNGs, naive scaling
+  50%→85% failure, B4 5/5-vs-4/4 residue, honest 41s solo overhead with decomposition, Bug-1 story)
+  and explicitly forbids B1/B5/B6/time-to-green claims until their cells land.
+- Timed cells stayed blocked all evening: no restart had actually happened (kern.boottime 08:34),
+  live keyboard input, an active cursor-agent on command-center, and ~23 GB of external Lancer
+  DerivedData growth that drove the Data volume to 100% (117 MB free). Freed only the session's own
+  1.6 GB Go cache; owner data untouched. `bench/p0_rerun_driver.sh` (nohup, survives session) holds
+  the full sequence — B1-fresh → B1-reuse → B2 → B4-defaults-rep → B5-dual-window — behind
+  per-scenario preflight + ≥10 min idle + ≥15 GB disk, with the documented dormant-stray exception
+  (measured <1s CPU/60s, evidence recorded beside each preflight JSON).
+- Still owed when the machine frees: the queued cells above, B6 third ARM-S rep (one rep per
+  invocation), the XcodeBuildMCP composition check inside a live lease, warm-DD measured on a real
+  Lancer worktree, and folding those numbers into RESULTS v2 / LAUNCH_NUMBERS.

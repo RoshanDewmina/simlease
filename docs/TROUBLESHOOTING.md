@@ -39,12 +39,18 @@ simurgh status --json
 ## `--reuse-if-exists` allocated a new lease
 
 Reuse renews compatible ACTIVE leases or attaches to compatible PROVISIONING.
-It requires the same DeviceSpec, **exact** Labels map, and non-empty Owner.Agent
-+ Owner.SessionID (PID ignored). Missing identity, different labels/agent/session,
-or a RELEASED/FAILED/RECLAIMED prior lease allocates new. CLI/MCP honor
-`SIMURGH_SESSION_ID`; their fallbacks are stable for the calling parent shell
-and MCP server process respectively. Encode project/Xcode/scheme in Labels if
-those must bound reuse. Check top-level `reused` in acquire output.
+It requires the same DeviceSpec, **exact** Labels map including non-empty
+`project`, and non-empty Owner.Agent + Owner.SessionID (PID ignored). Missing
+identity/project, different labels/agent/session, or a terminal prior lease
+allocates new. CLI/MCP honor `SIMURGH_SESSION_ID`; without it, CLI gets a fresh
+random identity per invocation while MCP's random identity lasts only for that
+server process. Set the variable for CLI cross-invocation reuse. Encode
+Xcode/scheme in Labels if those must also bound reuse. Check top-level `reused`.
+
+This identity is partitioning, not authentication. Socket/directory modes
+0600/0700 limit access to the local user, but another same-user raw IPC client
+can forge Owner/Labels and can already renew/release a known lease ID. Treat
+session IDs and labels as coordination metadata, not secrets or credentials.
 
 ## Daemon not running
 

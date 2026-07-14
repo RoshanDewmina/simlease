@@ -150,10 +150,11 @@ Unix socket, newline-delimited JSON frames, request/response + server events.
 ```
 
 `reuseIfExists=true` renews a compatible ACTIVE lease or attaches to compatible
-PROVISIONING. Compatibility requires same Spec, exact Labels, and **non-empty**
-Owner.Agent+SessionID (PID ignored). Missing identity or mismatch allocates a
-new resource. Acquire responses expose top-level `reused` (`true` for renewal
-or attach, `false` for new). Cancelled `--wait` acquires return `ACQUIRE_CANCELLED` and
+PROVISIONING. Compatibility requires same Spec, exact Labels including a
+non-empty `project`, and **non-empty** Owner.Agent+SessionID (PID ignored).
+Missing identity/project or mismatch allocates a new resource. Acquire responses
+expose top-level `reused` (`true` for renewal or attach, `false` for new).
+Cancelled `--wait` acquires return `ACQUIRE_CANCELLED` and
 CANCEL the still-QUEUED lease so capacity is not stranded.
 
 - Methods: `lease.acquire|renew|release|get|list|wait`, `pool.status`,
@@ -161,7 +162,10 @@ CANCEL the still-QUEUED lease so capacity is not stranded.
 - Every error: `code` (stable, machine-readable) + `message` (human) +
   `fix` (exact next command). This triple is a product requirement.
 - Versioning: `v` field; daemon rejects newer-major with upgrade hint.
-- Auth: socket file mode 0600 (same-user only). No network listener in v0.
+- Access boundary: parent directory 0700 + socket 0600 (same-user only); no
+  network listener in v0. Owner/SessionID/Labels partition reuse but are not
+  authentication—a same-user raw client can forge them and can already
+  renew/release a known lease ID.
 
 ## 6. Provisioning & warm templates
 

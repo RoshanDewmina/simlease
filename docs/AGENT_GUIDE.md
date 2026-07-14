@@ -49,6 +49,7 @@ Same daemon RPCs as the MCP tools:
 
 ```bash
 simurgh acquire --model "iPhone 17 Pro" --wait --rm --json
+SIMURGH_SESSION_ID=my-agent-session \
 simurgh acquire --model "iPhone 17 Pro" --label project=myapp --label agent=claude-a \
   --reuse-if-exists --wait --rm --json   # same Spec+labels+agent/session → renew same lease
 simurgh env <lease-id>                 # or: eval "$(simurgh env <lease-id>)"
@@ -62,10 +63,12 @@ simurgh release <lease-id>
 
 Compatible ACTIVE leases are renewed in place; compatible PROVISIONING
 requests attach and wait for that same grant. Both require Spec, **exact**
-Labels, and non-empty `Owner.Agent`+`Owner.SessionID` to match. PID is ignored.
-Missing identity is a no-match/new allocation. CLI honors
-`SIMURGH_SESSION_ID`, otherwise uses stable parent-shell identity; MCP honors
-the variable, otherwise uses stable MCP-server-process identity.
+Labels including a non-empty `project`, and non-empty
+`Owner.Agent`+`Owner.SessionID` to match. PID is ignored. Missing identity or
+project is a no-match/new allocation. CLI honors `SIMURGH_SESSION_ID`; without
+it, each one-shot CLI process gets a fresh random session ID, so
+cross-invocation reuse requires setting the variable. MCP honors the variable;
+its random fallback is stable only during that MCP server process.
 RELEASED / FAILED / RECLAIMED / CANCELLED leases are never reused. Concurrent
 identical reuse requests share one provision. Put project / Xcode / scheme
 identity in Labels — those dimensions are not first-class fields.
@@ -74,6 +77,14 @@ Acquire responses include top-level `reused`: `true` for ACTIVE renewal or
 PROVISIONING attach, `false` for a new allocation.
 
 MCP `lease_acquire` with `reuse_if_exists=true` uses the same match key.
+
+### Identity trust boundary
+
+Owner/label identity is a conservative reuse partition, not authentication.
+The daemon socket and parent directory are same-user protected (0600/0700),
+but a same-user raw IPC client can forge Owner/Labels and can already
+renew/release a known lease ID. Do not describe `SIMURGH_SESSION_ID`, Owner, or
+the project label as unforgeable credentials.
 Client commands auto-start the daemon via `ipc.Dial` if the socket is down.
 `simurgh doctor` and `simurgh daemon status` do **not** auto-start.
 

@@ -26,9 +26,13 @@ simurgh status --json
 ```
 
 Inspect `capacity` / `perSpecCapacity` / `maxProvisioningOperations`, the
-`pressure` block, and active/queued lease counts from `pool.status`. Free
-memory, cool thermal state, or release unused leases, then retry with
-`--wait`.
+`buildSlots` / `activeBuilds` / `queuedBuilds` fields, the `pressure` block,
+and active/queued lease counts from `pool.status`. Free memory, cool thermal
+state, or release unused leases, then retry with `--wait`.
+
+Build slots (`SIMURGH_BUILD_SLOTS`, resource class `build_slot`) are independent
+of simulator capacity. A `CAPACITY_QUEUED` on `lease.acquire` is always a
+device/simulator/pressure deny — never a build-slot queue.
 
 ## `--wait` acquire returns `ACQUIRE_CANCELLED`
 

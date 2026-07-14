@@ -1,14 +1,14 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 15:44 UTC
+**Updated:** 2026-07-14 15:57 UTC
 **Owner:** Roshan  
-**Orchestrator:** Cursor coder subagent for **R-WP2** (global capacity + daemon detach);
+**Orchestrator:** Cursor coder subagent for **R-WP3** (session/job + build slots);
 Phase A remains **STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B
 continues only by that override recorded at `593a051`.  
 **Repository:** `/Users/roshansilva/Documents/simurgh`  
-**Active worktree:** `.worktrees/r-wp2-global-capacity` on `feat/r-wp2-global-capacity`  
-**Current phase:** Phase A STOPPED/BLOCKED (owner override) → **R-WP0/R-WP1/R-WP2 complete**;
-next is **R-WP3** (not started).
+**Active worktree:** `.worktrees/r-wp3-session-jobs` on `feat/r-wp3-session-jobs`  
+**Current phase:** Phase A STOPPED/BLOCKED (owner override) → **R-WP0/R-WP1/R-WP2/R-WP3 complete**;
+next is **R-WP4** (not started).
 
 ## Operating decisions
 
@@ -1287,3 +1287,47 @@ passed: mcp 1.263s; daemon 1.260s; ipc 1.214s; broker 1.221s; cmd 1.237s.
 
 - This was the **only** bounded fix loop before one scoped re-review.
 - No R-WP3, merge, push, or review dispatch occurred.
+
+### 2026-07-14 15:57 UTC — R-WP3 complete (session/job + build slots)
+
+- **Worktree:** `.worktrees/r-wp3-session-jobs` on `feat/r-wp3-session-jobs`
+  branched from gate-verified R-WP2 tip `23c2dce`.
+- **Scope delivered:** `internal/controlplane` with Session/Job/Worker/Workspace/
+  Artifact/Event; job FSM (exact states including `retrying`); independent
+  `SIMURGH_BUILD_SLOTS` / resource class `build_slot`; device held only during
+  device phases; race-safe cancel of owned resources; phase/queue timings;
+  retry classification; lease compatibility adapter (no new public session
+  RPCs; `lease.acquire` never returns build queue errors). Additive
+  `pool.status` / MCP fields `buildSlots`/`activeBuilds`/`queuedBuilds`.
+- **Commits:** `bc86479` controlplane; `d1c789f` daemon/MCP wire; status/
+  orchestrator tip after gates.
+- **Non-goals preserved:** R-WP4 readiness/benchmarks; R-WP5 PATH; R-WP6
+  XcodeBuildMCP; SQLite/dashboard/multi-Mac; priority/aging; merge/push.
+- **Approved R-WP2 minor debt (untouched):** capacity migration surprise;
+  LaunchAgent optional; global queue-position semantics.
+
+#### Exact R-WP3 gates
+
+| Command | Result |
+|---|---|
+| controlplane named 7-test regex | **PASS** exit 0 (1.226s) |
+| `go build ./...` | **PASS** exit 0 |
+| `go vet ./...` | **PASS** exit 0 |
+| `go test -race ./...` | **PASS** exit 0 (17 packages; ipc 36.494s) |
+| package race broker/ipc/daemon/mcp/cmd | **PASS** exit 0 |
+| named capacity regex | **PASS** 8 tests |
+| `TestDialDaemonSurvivesParentExit` | **PASS** 32.50s; PID **6472** stable ≥30s |
+| `TestReuseIfExistsLive` | **PASS** test 2.48s, package 3.741s |
+
+#### Public symbols / dependents
+
+| Symbol / behavior | Dependents inspected |
+|---|---|
+| `controlplane.New` / `BuildSlotsFromEnv` | `cmd/simurgh` daemon run |
+| `controlplane.BuildStatus` / `DefaultBuildSlots` | `daemon.poolStatus` |
+| `daemon.Deps.ControlPlane` | `RegisterLeaseHandlers`, `TestPoolStatusCountsByState` |
+| MCP `poolStatusResult` build fields | `TestPoolStatusMapsResult` (direct structured assertions) |
+| broker deny order / `lease.acquire` | unchanged — no build_slot on device path |
+
+- Next: **R-WP4** only — no merge/push of R-WP3 from this entry alone.
+

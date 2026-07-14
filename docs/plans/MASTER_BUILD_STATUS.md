@@ -1,115 +1,83 @@
 # Simurgh Master Build Status
 
-**Updated:** 2026-07-14 15:44 UTC (America/Toronto 11:44 EDT)
+**Updated:** 2026-07-14 15:57 UTC (America/Toronto 11:57 EDT)
 **Roadmap naming:** Phase B packages use `R-WP*` (not Phase A `P0-*` / harness `WP*`).
 
 ## Baseline
 
-- Prior tip (R-WP1 gate-verified): `e948d26854f1fe9ea27851964a268b90ba78db16`
-- Branch/worktree: `feat/r-wp2-global-capacity` @ `/Users/roshansilva/Documents/simurgh/.worktrees/r-wp2-global-capacity`
+- Prior tip (R-WP2 gate-verified): `23c2dceeb3776c465f17b1d78a32200b8dac1576`
+- Branch/worktree: `feat/r-wp3-session-jobs` @ `/Users/roshansilva/Documents/simurgh/.worktrees/r-wp3-session-jobs`
 - Go: `go1.26.5 darwin/arm64`
 - macOS: `27.0` (Build `26A5378n`), `arm64`
 - Xcode: `27.0` (Build `27A5194q`); `xcrun simctl help` exit 0
 
 ## Current work package
 
-- ID: **R-WP2**
-- Goal: Host-global simulator capacity + optional per-spec/provisioning limits, explicit queue reasons, cross-spec fairness; daemon Dial survives parent exit
+- ID: **R-WP3**
+- Goal: Session/Job/Worker/Workspace/Artifact/Event domain; independent build slots; job FSM; cancellation ownership; retry classification; lease compatibility adapter
 - State: **complete** (all literal gates green; no merge/push)
-- Files owned (product): `internal/broker/*`, `internal/ipc/{client,protocol}.go`, `internal/daemon/daemon.go`, `cmd/simurgh/{daemon,lease}.go`, docs (`AGENT_GUIDE`, `ARCHITECTURE`, `TROUBLESHOOTING`, `README`), this status + orchestrator-state
-- Non-goals held: Session/Job/build slots (R-WP3), PATH shims (R-WP5), XcodeBuildMCP adapter (R-WP6), full priority/aging, dashboard, Phase A resume
+- Files owned (product): `internal/controlplane/*`, `internal/daemon/{daemon,daemon_test}.go`, `internal/mcp/{server,server_test}.go`, `cmd/simurgh/daemon.go`, docs (`AGENT_GUIDE`, `ARCHITECTURE`, `TROUBLESHOOTING`, `README`), this status + orchestrator-state
+- Non-goals held: readiness/benchmark reruns (R-WP4), PATH shims (R-WP5), XcodeBuildMCP adapter (R-WP6), SQLite/dashboard/multi-Mac, priority/aging, UI-test-slot scheduler
 
 ### Acceptance commands (exact)
 
 ```bash
-go test -race ./internal/broker/... ./internal/ipc/... ./internal/daemon/... ./internal/mcp/... ./cmd/simurgh/...
-go test -race ./internal/broker -run 'TestGlobalCapacity|TestPerSpecCap|TestProvisioning|TestQueueReason|TestFairness|TestPressure' -count=1 -v
-go test -race ./internal/ipc -run 'TestDialDaemonSurvivesParentExit' -count=1 -v
+go test -race ./internal/controlplane/... -run 'TestBuildProceedsWhileSimulatorFull|TestDeviceHeldOnlyDuringDevicePhase|TestCancelReleasesOnlyOwnedResources|TestJobStateTransitionsRejectInvalid|TestBuildSlotQueueMetadata|TestJobRetryClassification|TestPhaseAndQueueTimings' -count=1 -v
 go build ./...
 go vet ./...
 go test -race ./...
+go test -race ./internal/broker/... ./internal/ipc/... ./internal/daemon/... ./internal/mcp/... ./cmd/simurgh/...
+go test -race ./internal/broker -run 'TestGlobalCapacity|TestPerSpecCap|TestProvisioning|TestQueueReason|TestFairness|TestPressure' -count=1 -v
+go test -race ./internal/ipc -run 'TestDialDaemonSurvivesParentExit' -count=1 -v
 go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v
 ```
 
-### Gate results (R-WP2 worktree)
+### Gate results (R-WP3 worktree)
 
 | Gate | Result |
 |---|---|
-| package race (broker/ipc/daemon/mcp/cmd) | **PASS** exit 0 — broker 1.638s, ipc 37.336s, daemon 1.495s, mcp 1.289s, cmd 1.169s |
-| capacity named tests | **PASS** exit 0 — all 8 matching tests including `TestGlobalCapacityAcrossDifferentSpecs`, `TestPerSpecCapEnforced`, `TestProvisioningOpLimit`, `TestQueueReasonExplicit`, `TestFairness*`, `TestPressure*` |
-| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.49s**; daemon **PID 80395** answered `daemon.ping` continuously for ≥30s after short-lived Dial parent exited (same PID); SIGHUP also survived |
+| controlplane named tests (7) | **PASS** exit 0 — package 1.226s |
 | `go build ./...` | **PASS** exit 0 |
 | `go vet ./...` | **PASS** exit 0 |
-| `go test -race ./...` | **PASS** exit 0 (**16** packages; ipc includes 30s survival) |
-| `TestReuseIfExistsLive` (`darwin_sim`) | **PASS** exit 0 — test 2.60s, package 3.768s |
+| `go test -race ./...` | **PASS** exit 0 (**17** packages; ipc 36.494s) |
+| package race (broker/ipc/daemon/mcp/cmd) | **PASS** exit 0 — broker 1.579s, ipc 36.517s, daemon 1.544s, mcp 1.479s, cmd 1.181s |
+| capacity named tests | **PASS** exit 0 — all 8 matching tests |
+| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.50s**; daemon **PID 6472** stable ≥30s |
+| `TestReuseIfExistsLive` (`darwin_sim`) | **PASS** exit 0 — test 2.48s, package 3.741s |
 
-### Single bounded review-fix loop (complete)
+### Behavioral proof (R-WP3)
 
-All six scoped findings were addressed; no R-WP3 work or review dispatch:
+1. **Build vs simulator independence:** `TestBuildProceedsWhileSimulatorFull` saturates simulator capacity (`CAPACITY_QUEUED` / `simulator_slot`) then grants a build slot.
+2. **Device hold window:** `TestDeviceHeldOnlyDuringDevicePhase` holds a lease only for `waiting_for_device`…`testing`; released before `collecting`.
+3. **Cancel ownership:** `TestCancelReleasesOnlyOwnedResources` cancels one job's build+device resources without touching a peer job's build grant.
+4. **FSM:** `TestJobStateTransitionsRejectInvalid` rejects skips/backwards/terminal escapes; `CanTransition` table covers illegal pairs.
+5. **Build queue metadata:** `TestBuildSlotQueueMetadata` returns `BUILD_QUEUED` with `resourceClass=build_slot` and `queuedBuilds=1`.
+6. **Retry class:** `TestJobRetryClassification` maps infrastructure→safe, source/cancel→unsafe.
+7. **Timings:** `TestPhaseAndQueueTimings` records queue wait and phase start/end/duration.
 
-1. MCP `lease_acquire` preserves existing success fields and additively returns
-   structured `code`, `message`, `fix`, `queuePosition`, `reason`, and
-   `resourceClass` for `CAPACITY_QUEUED` (`IsError=true`).
-2. MCP `pool_status` now exposes daemon-matching `perSpecCapacity` and
-   `maxProvisioningOperations` JSON fields.
-3. Daemon startup calls `AdvanceRehydratedQueues` once after Broker/Reaper/
-   Provisioner and handlers are ready. A deterministic cross-spec rehydrate test
-   proves PROVISIONING→FAILED frees the slot, no provisioning occurs before
-   readiness, and the competing QUEUED spec is promoted immediately.
-4. `Broker.Reclaim` godoc now states deterministic host-global advancement.
-5. The fast detach test directly asserts the command's `/dev/null` stdin,
-   shared log stdout/stderr, Setsid, and argv. The real 30-second process proof
-   remains unchanged.
-6. `brokerErrorToIPC` fixture asserts `reason`, `resourceClass`, and
-   `queuePosition` together.
-
-Focused review-fix gate:
-
-```text
-go test -race ./internal/mcp ./internal/daemon ./internal/ipc ./internal/broker ./cmd/simurgh \
-  -run 'TestLeaseAcquireCapacityQueuedHasStructuredResourceReason|TestPoolStatusMapsResult|TestPoolStatusCountsByState|TestBrokerErrorToIPCMappings|TestStartupRehydrateAdvancesCompetingSpecImmediately|TestDetachedDaemonCommandUsesDevNullAndSetsid|TestFairnessCrossSpecReleaseAdvancesWaiter' \
-  -count=1 -v
-PASS: mcp 1.263s; daemon 1.260s; ipc 1.214s; broker 1.221s; cmd 1.237s
-```
-
-Literal gates after the review fixes:
-
-| Gate | Exact result |
-|---|---|
-| package race | **PASS** exit 0 — broker 2.958s, ipc 40.475s, daemon 2.561s, mcp 2.800s, cmd 1.565s |
-| named capacity regex | **PASS** exit 0 — 8 tests, broker 1.124s |
-| 30s detach | **PASS** exit 0 — PID **92313** stable after parent exit; test 32.52s, package 33.627s |
-| `go build ./...` | **PASS** exit 0 |
-| `go vet ./...` | **PASS** exit 0 |
-| `go test -race ./...` | **PASS** exit 0 — 16 packages |
-| R-WP1 `TestReuseIfExistsLive` | **PASS** exit 0 — test 6.14s, package 7.365s |
-
-### Commits (from `e948d26`)
+### Commits (from `23c2dce`)
 
 | SHA | Summary |
 |---|---|
-| `db55a0b` | feat(broker): host-global capacity with explicit queue reasons |
-| `18880b0` | fix(ipc): detach auto-start daemon from parent shell |
-| `7a0277c` | docs: document global capacity migration and queue reasons |
-| `d41edb5` | docs(plans): record R-WP2 gates and R-WP3 handoff |
-| `50417bd` | test(ipc): log surviving daemon PID in detach proof |
-| `c069e81` | fix(mcp): expose structured capacity queue metadata |
-| `8d374fa` | fix(daemon): advance rehydrated queues at startup |
-| *(status tip)* | docs(plans): record bounded R-WP2 review-fix gates |
+| `bc86479` | feat(controlplane): session/job model and independent build slots |
+| `d1c789f` | feat(daemon): surface build slot status on pool.status |
+| *(status tip)* | docs: R-WP3 architecture/status + orchestrator handoff |
 
-### Capacity model (R-WP2)
+### Model notes (R-WP3)
 
-- `SIMURGH_CAPACITY` → host-global ACTIVE+PROVISIONING cap (migrated from per-SpecKey).
-- Optional `SIMURGH_PER_SPEC_CAPACITY`, `SIMURGH_MAX_PROVISIONING`.
-- Deny order: `simulator_slot` → `provisioning_slot` → `per_spec_slot` → `pressure`.
-- Fairness: oldest `AcquiredAt` then ID across competing SpecKey queues on release/fail/reclaim/`RetryQueues`.
-- `CAPACITY_QUEUED` + `pool.status` expose `reason` / `resourceClass` and optional caps.
+- Env: `SIMURGH_BUILD_SLOTS` (default **2**).
+- Resource class `build_slot` is independent; R-WP2 device deny order unchanged.
+- `pool.status` / MCP additively expose `buildSlots`, `activeBuilds`, `queuedBuilds`.
+- Session/job state is **in-memory / non-durable** (documented); no SQLite.
+- No new public session/job CLI/RPC; lease.* remains the compatibility adapter and never returns build queue errors.
 
-### Daemon detach (R-WP2 obligation closed)
+### Approved R-WP2 minor debt (logged, untouched)
 
-- `startDetachedDaemon`: Setsid **and** stdin=`/dev/null` (Setsid alone was not accepted).
-- `daemon run`: `signal.Ignore(SIGHUP)`.
-- Proof: `TestDialDaemonSurvivesParentExit` — real `go build ./cmd/simurgh`, Dial from short-lived parent process, parent exit, same PID ping ≥30s (no unit-seam fake).
+Paths not modified in R-WP3; residual items remain accepted:
+
+1. Capacity env migration still tightens multi-spec hosts that previously multiplied per SpecKey.
+2. Dial detach is Go-only (Setsid + `/dev/null` + SIGHUP ignore); LaunchAgent remains optional/future.
+3. Queue position remains global rank among QUEUED leases (not per-spec-only).
 
 ## Completed packages
 
@@ -119,16 +87,14 @@ Literal gates after the review fixes:
 | Phase A P0 harness (partial) | `593a051` STOPPED/BLOCKED | not a Phase A pass |
 | **R-WP0** | `0757144` | complete |
 | **R-WP1** | tip `e948d26` | complete |
-| **R-WP2** | tip after status commit on `feat/r-wp2-global-capacity` | complete |
+| **R-WP2** | tip `23c2dce` | complete |
+| **R-WP3** | tip after status commit on `feat/r-wp3-session-jobs` | complete |
 
 ## Open failures/risks
 
-### Sensitive / residual
-
-1. **Capacity migration surprise:** hosts that relied on per-spec multiplication of `SIMURGH_CAPACITY` will see tighter effective concurrency after upgrade — document and monitor first multi-spec load.
-2. **Detach is Go-only, not LaunchAgent:** Dial auto-start now survives parent exit/SIGHUP under test; production may still prefer an explicit long-lived `daemon run` / future LaunchAgent for log/lifecycle ownership (not required for this gate).
-3. **Queue position is global rank** among QUEUED (AcquiredAt/ID), while per-spec FIFOs remain for ordering within a SpecKey — clients that assumed per-spec-only positions should re-check.
-4. **No build/UI-test slots yet** — simulator capacity still couples build-heavy agents until R-WP3.
+1. Control-plane Session/Job state is non-durable — daemon restart drops jobs/build queue; device leases remain on the broker journal.
+2. Build-slot Wait=false still enqueues for metadata (like broker QUEUED); auto-promote on release can grant without a second client round-trip — callers should re-read job/`BuildStatus` after waits.
+3. No public session/job CLI yet — agents continue on lease tools until a later WP exposes session RPCs.
 
 ### Phase A carry-forward
 
@@ -136,7 +102,7 @@ Unmet cells (B2 retries, B4-defaults-rep, B5 dual-window, B6 third ARM-S, XcodeB
 
 ## Next package
 
-- **R-WP3** — Session/Job model and separate build/device slots; compatibility adapter for existing lease commands; job state machine; cancellation ownership.
-- Do **not** merge/push R-WP2 from this package alone.
+- **R-WP4** — Readiness, warm-cache and benchmark improvements.
+- Do **not** merge/push R-WP3 from this package alone.
 - Gate R-WP5 behind R-WP6 reassessment (owner correction #3).
-- Handoff: start from R-WP2 tip on `feat/r-wp2-global-capacity`; capacity/resource-class vocabulary is stable for build-slot reasons later; do not reopen Setsid-only detach claims.
+- Handoff: start from R-WP3 tip on `feat/r-wp3-session-jobs`; build-slot vocabulary is stable; do not invent public session RPCs in R-WP4.

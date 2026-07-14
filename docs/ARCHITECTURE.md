@@ -23,6 +23,7 @@
 ┌─────────────────────────────────────────────────────────────┐
 │ simurghd (daemon, launchd LaunchAgent, single writer)       │
 │  ├── Broker        lease lifecycle, queue, capacity         │
+│  ├── ControlPlane  session/job + independent build slots     │
 │  ├── Provisioner   clone/boot/shutdown/delete sims          │
 │  ├── Isolator      per-lease env dirs + flags emission      │
 │  ├── Watcher       PID liveness, heartbeats, TTLs, pressure │
@@ -127,7 +128,7 @@ acquire ──► QUEUED ──► PROVISIONING ──► ACTIVE ──► RELEA
 
 Queue policy v0: FIFO per device-spec under a **host-global** capacity gate,
 with deterministic oldest-first promotion across specs when a slot frees.
-Full priority/aging is v1 (ROADMAP / R-WP3+).
+Full priority/aging remains later (not R-WP3).
 
 Capacity default: `min(floor(totalRAM_GB/6), physicalCores/2, 4)` concurrent
 **host-global** ACTIVE+PROVISIONING leases (not per DeviceSpec). Override with
@@ -140,8 +141,26 @@ slots → per-spec → pressure. Pressure check before grant: available RAM
 
 `CAPACITY_QUEUED` carries machine-readable `reason` / `resourceClass`:
 `simulator_slot`, `provisioning_slot`, `per_spec_slot`, or `pressure`.
-`pool.status` exposes `capacity`, `perSpecCapacity`, and
-`maxProvisioningOperations` alongside lease counts and pressure.
+Device deny order is unchanged by R-WP3.
+
+### Build slots (R-WP3)
+
+Independent of simulator capacity, the daemon hosts an in-memory control plane
+(`internal/controlplane`) with configurable build slots via
+`SIMURGH_BUILD_SLOTS` (default 2). Build grants use resource class `build_slot`
+and never alter `lease.acquire` error shapes. `pool.status` / MCP `pool_status`
+additively expose `buildSlots`, `activeBuilds`, and `queuedBuilds`.
+
+Session / Job / Worker / Workspace / Artifact / Event types and the job FSM
+(`queued` → … → `succeeded`, plus `failed` / `cancelled` / `orphaned` /
+`retrying`) live in that package. State is **non-durable** for this package
+(no SQLite). Existing lease CLI/MCP/IPC methods remain the public compatibility
+adapter; no new public session/job RPCs in R-WP3. Simulator leases are held
+only during device phases (`waiting_for_device` … `testing`).
+
+`pool.status` exposes `capacity`, `perSpecCapacity`,
+`maxProvisioningOperations`, `buildSlots`, `activeBuilds`, and `queuedBuilds`
+alongside lease counts and pressure.
 
 ## 5. IPC protocol
 
@@ -235,7 +254,7 @@ Tools (names stable, results mirror IPC):
 | `lease_renew` | lease_id, ttl? | new expiry |
 | `lease_release` | lease_id | confirmation + cleanup summary |
 | `lease_status` | lease_id? (default: caller's newest) | lease detail |
-| `pool_status` | — | global capacity, optional per-spec/provisioning caps, active/queued leases, pressure |
+| `pool_status` | — | global capacity, optional per-spec/provisioning caps, buildSlots/activeBuilds/queuedBuilds, active/queued leases, pressure |
 
 Tool descriptions are written for agent consumption: they state *when* to call
 (`"Call lease_acquire before any simulator interaction. Never pick a UDID

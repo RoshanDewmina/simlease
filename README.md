@@ -128,7 +128,7 @@ attaches. Then use the five tools: `lease_acquire`, `lease_renew`,
 | `simurgh acquire --model NAME [flags]` | Request a lease (clone + boot); `--wait` blocks on queue/pressure; `--json` for machine output |
 | `simurgh release [<lease-id>] [--all --label k=v] [--json]` | Release lease(s); tears down the clone device |
 | `simurgh renew <lease-id> [--ttl DUR] [--json]` | Extend an active lease’s TTL |
-| `simurgh status [--queue] [--json]` | Host-global capacity (+ optional per-spec/provisioning caps), lease counts, `pressure` |
+| `simurgh status [--queue] [--json]` | Host-global capacity (+ optional per-spec/provisioning caps), buildSlots/activeBuilds/queuedBuilds, lease counts, `pressure` |
 | `simurgh list [--label-selector k=v,...] [--json]` | List leases |
 | `simurgh env <lease-id> [--json]` | Print eval-able isolation `export` lines (or JSON env/flags) |
 | `simurgh exec <lease-id> -- <cmd...>` | Run a command with isolation env; injects xcodebuild flags |

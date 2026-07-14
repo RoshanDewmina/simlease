@@ -37,7 +37,7 @@ from `internal/mcp/server.go` — follow them literally.
 
 ### `pool_status`
 
-> Report pool capacity and how many leases are active, queued, or otherwise. Call before lease_acquire when you need to know whether the pool is under pressure, or after acquire/release to confirm pool accounting. Do not use this to pick a device or UDID — always go through lease_acquire for that.
+> Report pool capacity and how many leases are active, queued, or otherwise. Also reports independent buildSlots/activeBuilds/queuedBuilds (SIMURGH_BUILD_SLOTS). Call before lease_acquire when you need to know whether the pool is under pressure, or after acquire/release to confirm pool accounting. Do not use this to pick a device or UDID — always go through lease_acquire for that.
 
 Project setup (human or agent with shell): `simurgh init` writes `.simurgh.yaml`,
 registers the stdio MCP entry in `.mcp.json`, and prints a paste-ready rules
@@ -120,6 +120,17 @@ longer multiplies per DeviceSpec. Optional `SIMURGH_PER_SPEC_CAPACITY` and
 `CAPACITY_QUEUED` includes `reason` / `resourceClass`
 (`simulator_slot` | `provisioning_slot` | `per_spec_slot` | `pressure`).
 Call `pool_status` / `simurgh status --json` before blaming hangs on a bug.
+
+### Build slots (R-WP3)
+
+`SIMURGH_BUILD_SLOTS` configures an independent build pool (default 2). Build
+queueing uses resource class `build_slot` and is separate from simulator
+capacity — a full simulator pool does not block a free build slot. Existing
+`lease_acquire` / `lease.acquire` never return build-slot queue errors; those
+surface only through the internal control-plane build scheduler.
+`pool_status` additively reports `buildSlots` / `activeBuilds` /
+`queuedBuilds`. Session/job state is in-memory and non-durable in this
+package; keep using lease tools as the public compatibility surface.
 
 ## Release discipline
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,9 +21,17 @@ const (
 
 // BrokerOptions configures New. Zero-valued fields get sane defaults.
 type BrokerOptions struct {
-	// Capacity is the max concurrent ACTIVE+PROVISIONING leases per DeviceSpec
-	// key. Zero means compute via ComputeCapacity using the RAM/CPU seams.
+	// Capacity is the host-global max concurrent ACTIVE+PROVISIONING leases.
+	// Zero means compute via ComputeCapacity using the RAM/CPU seams.
+	// SIMURGH_CAPACITY maps here (migration: previously this value was applied
+	// per DeviceSpec key and could multiply across specs).
 	Capacity int
+	// PerSpecCapacity is an optional per-DeviceSpec ACTIVE+PROVISIONING cap.
+	// Zero means no per-spec limit (global Capacity alone applies).
+	PerSpecCapacity int
+	// MaxProvisioningOperations is an optional host-global cap on leases in
+	// PROVISIONING. Zero means no separate provisioning limit.
+	MaxProvisioningOperations int
 	// Provisioner is required for Acquire; tests inject a fake. M1.2 supplies
 	// the real implementation.
 	Provisioner Provisioner
@@ -48,12 +57,14 @@ type BrokerOptions struct {
 // persistence via internal/store (M1.6). When Store is configured, call
 // Rehydrate once after New and before accepting client traffic.
 type Broker struct {
-	capacity    int
-	provisioner Provisioner
-	clock       func() time.Time
-	pressureOK  func() (bool, string)
-	store       *store.Store
-	logger      func(format string, args ...any)
+	capacity       int
+	perSpecCap     int
+	maxProvisioning int
+	provisioner    Provisioner
+	clock          func() time.Time
+	pressureOK     func() (bool, string)
+	store          *store.Store
+	logger         func(format string, args ...any)
 
 	mu         sync.Mutex
 	leases     map[string]*Lease
@@ -101,22 +112,34 @@ func New(opts BrokerOptions) *Broker {
 	}
 
 	return &Broker{
-		capacity:    capacity,
-		provisioner: opts.Provisioner,
-		clock:       clock,
-		pressureOK:  pressureOK,
-		store:       opts.Store,
-		logger:      logger,
-		leases:      make(map[string]*Lease),
-		queues:      make(map[string]*fifoQueue),
-		waiters:     make(map[string][]chan struct{}),
-		failCauses:  make(map[string]error),
+		capacity:        capacity,
+		perSpecCap:      opts.PerSpecCapacity,
+		maxProvisioning: opts.MaxProvisioningOperations,
+		provisioner:     opts.Provisioner,
+		clock:           clock,
+		pressureOK:      pressureOK,
+		store:           opts.Store,
+		logger:          logger,
+		leases:          make(map[string]*Lease),
+		queues:          make(map[string]*fifoQueue),
+		waiters:         make(map[string][]chan struct{}),
+		failCauses:      make(map[string]error),
 	}
 }
 
-// Capacity returns the effective per-spec capacity.
+// Capacity returns the effective host-global ACTIVE+PROVISIONING capacity.
 func (b *Broker) Capacity() int {
 	return b.capacity
+}
+
+// PerSpecCapacity returns the optional per-spec cap (0 = unlimited).
+func (b *Broker) PerSpecCapacity() int {
+	return b.perSpecCap
+}
+
+// MaxProvisioningOperations returns the optional global provisioning cap (0 = unlimited).
+func (b *Broker) MaxProvisioningOperations() int {
+	return b.maxProvisioning
 }
 
 // ComputeCapacity implements ARCHITECTURE §4:
@@ -233,18 +256,15 @@ func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error)
 
 	q := b.queueForLocked(key)
 	q.enqueue(id)
-	pos := q.position(id)
-	active := b.slotCountLocked(key)
-	ok, reason := b.pressureOK()
-	if ok {
-		reason = ""
-	}
+	pos := b.globalQueuePositionLocked(id)
+	active := b.globalSlotCountLocked()
+	queueReason, detail := b.denyReasonLocked(key)
 
 	if !req.Wait {
 		out := cloneLease(lease)
 		b.persistLocked()
 		b.mu.Unlock()
-		return out, capacityQueued(pos, b.capacity, active, reason)
+		return out, capacityQueued(pos, b.capacity, active, queueReason, detail)
 	}
 
 	ch := b.addWaiterLocked(id)
@@ -280,7 +300,7 @@ func (b *Broker) Renew(ctx context.Context, leaseID string, ttl time.Duration) (
 }
 
 // Release transitions ACTIVE → RELEASED or QUEUED → CANCELLED, frees capacity,
-// and advances the per-spec FIFO queue.
+// and advances the host-global fair queue (may promote a competing DeviceSpec).
 //
 // M1.3 hook: the reaper (via M1.4 safety) is responsible for actual device
 // teardown / clone deletion after a lease leaves ACTIVE. This method only
@@ -330,7 +350,7 @@ func (b *Broker) Reclaim(ctx context.Context, leaseID string) (Lease, error) {
 	}
 	lease.State = LeaseReclaimed
 	b.notifyWaitersLocked(leaseID)
-	next := b.tryBeginNextLocked(SpecKey(lease.Spec))
+	next := b.tryBeginNextAnyLocked()
 	out := cloneLease(lease)
 	b.persistLocked()
 	b.mu.Unlock()
@@ -361,7 +381,7 @@ func (b *Broker) endActiveOrQueued(ctx context.Context, leaseID string, activeTe
 	case LeaseActive:
 		lease.State = activeTerminal
 		b.notifyWaitersLocked(leaseID)
-		next = b.tryBeginNextLocked(SpecKey(lease.Spec))
+		next = b.tryBeginNextAnyLocked()
 	case LeaseProvisioning:
 		b.mu.Unlock()
 		return Lease{}, invalidState(leaseID, lease.State, op)
@@ -450,41 +470,103 @@ func (b *Broker) slotCountLocked(key string) int {
 	return n
 }
 
-func (b *Broker) canGrantLocked(key string) bool {
-	if b.slotCountLocked(key) >= b.capacity {
-		return false
+func (b *Broker) globalSlotCountLocked() int {
+	n := 0
+	for _, lease := range b.leases {
+		switch lease.State {
+		case LeaseActive, LeaseProvisioning:
+			n++
+		}
 	}
-	ok, _ := b.pressureOK()
-	return ok
+	return n
+}
+
+func (b *Broker) provisioningCountLocked() int {
+	n := 0
+	for _, lease := range b.leases {
+		if lease.State == LeaseProvisioning {
+			n++
+		}
+	}
+	return n
+}
+
+// denyReasonLocked returns the stable queue reason and optional human detail
+// when a grant is not possible. Evaluation order: host simulator slots, then
+// provisioning slots, then optional per-spec policy, then pressure.
+func (b *Broker) denyReasonLocked(key string) (reason, detail string) {
+	if b.globalSlotCountLocked() >= b.capacity {
+		return QueueReasonSimulatorSlot, ""
+	}
+	if b.maxProvisioning > 0 && b.provisioningCountLocked() >= b.maxProvisioning {
+		return QueueReasonProvisioningSlot, ""
+	}
+	if b.perSpecCap > 0 && b.slotCountLocked(key) >= b.perSpecCap {
+		return QueueReasonPerSpecSlot, ""
+	}
+	ok, detail := b.pressureOK()
+	if !ok {
+		return QueueReasonPressure, detail
+	}
+	return "", ""
+}
+
+func (b *Broker) canGrantLocked(key string) bool {
+	reason, _ := b.denyReasonLocked(key)
+	return reason == ""
 }
 
 func (b *Broker) beginProvisionLocked(lease *Lease) {
 	lease.State = LeaseProvisioning
 }
 
-// RetryQueues re-attempts promotion for every spec key with a non-empty
-// queue.
+// globalQueuePositionLocked is 1-based rank among all QUEUED leases ordered by
+// AcquiredAt then ID (deterministic cross-spec fairness proxy).
+func (b *Broker) globalQueuePositionLocked(leaseID string) int {
+	type item struct {
+		id   string
+		at   time.Time
+	}
+	var queued []item
+	for _, lease := range b.leases {
+		if lease.State != LeaseQueued {
+			continue
+		}
+		queued = append(queued, item{id: lease.ID, at: lease.AcquiredAt})
+	}
+	sort.Slice(queued, func(i, j int) bool {
+		if !queued[i].at.Equal(queued[j].at) {
+			return queued[i].at.Before(queued[j].at)
+		}
+		return queued[i].id < queued[j].id
+	})
+	for i, q := range queued {
+		if q.id == leaseID {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// RetryQueues re-attempts promotion across all queued specs using deterministic
+// oldest-first fairness.
 //
-// tryBeginNextLocked only ever fires from Release/Acquire call sites. A
-// promotion attempt that fails solely because pressureOK() was transiently
-// false (canGrantLocked) has no other trigger to retry once conditions
-// recover — capacity can go fully idle while a queued lease waits forever,
-// since nothing re-checks it after the one attempt that happened to land
-// during a pressure dip. Found via B2 (BENCHMARK_PLAN.md bench matrix,
-// 4-agent scenario): two leases sat QUEUED with 0 ACTIVE and capacity
-// free for 20+ minutes. Intended to be called periodically (daemon wires
-// it into the same loop cadence as reclaim) so a transient dip gets
-// retried instead of stranding the lease permanently.
+// tryBeginNextAnyLocked only ever fires from Release/Acquire/failure/reclaim
+// call sites plus this periodic retry. A promotion attempt that fails solely
+// because pressureOK() was transiently false (canGrantLocked) has no other
+// trigger to retry once conditions recover — capacity can go fully idle while
+// a queued lease waits forever. Found via B2 (BENCHMARK_PLAN.md bench matrix,
+// 4-agent scenario). Intended to be called periodically (daemon wires it into
+// the same loop cadence as reclaim).
 func (b *Broker) RetryQueues(ctx context.Context) {
 	b.mu.Lock()
 	var toProvision []*Lease
-	for key, q := range b.queues {
-		if len(q.ids) == 0 {
-			continue
+	for {
+		next := b.tryBeginNextAnyLocked()
+		if next == nil {
+			break
 		}
-		if next := b.tryBeginNextLocked(key); next != nil {
-			toProvision = append(toProvision, next)
-		}
+		toProvision = append(toProvision, next)
 	}
 	b.mu.Unlock()
 
@@ -493,8 +575,44 @@ func (b *Broker) RetryQueues(ctx context.Context) {
 	}
 }
 
-// tryBeginNextLocked dequeues the next grantable lease for key and marks it
-// PROVISIONING. Returns nil if the queue is empty or canGrant is false.
+// tryBeginNextAnyLocked dequeues the oldest grantable QUEUED lease across all
+// DeviceSpec queues (AcquiredAt, then ID) and marks it PROVISIONING.
+func (b *Broker) tryBeginNextAnyLocked() *Lease {
+	type cand struct {
+		lease *Lease
+		key   string
+	}
+	var cands []cand
+	for key, q := range b.queues {
+		for _, id := range q.ids {
+			lease, exists := b.leases[id]
+			if !exists || lease.State != LeaseQueued {
+				continue
+			}
+			if !b.canGrantLocked(key) {
+				break
+			}
+			cands = append(cands, cand{lease: lease, key: key})
+			break
+		}
+	}
+	if len(cands) == 0 {
+		return nil
+	}
+	sort.Slice(cands, func(i, j int) bool {
+		if !cands[i].lease.AcquiredAt.Equal(cands[j].lease.AcquiredAt) {
+			return cands[i].lease.AcquiredAt.Before(cands[j].lease.AcquiredAt)
+		}
+		return cands[i].lease.ID < cands[j].lease.ID
+	})
+	chosen := cands[0]
+	b.queueForLocked(chosen.key).remove(chosen.lease.ID)
+	b.beginProvisionLocked(chosen.lease)
+	return chosen.lease
+}
+
+// tryBeginNextLocked remains for callers/tests that name a specific SpecKey; it
+// still participates in global/per-spec/provisioning checks via canGrantLocked.
 func (b *Broker) tryBeginNextLocked(key string) *Lease {
 	if !b.canGrantLocked(key) {
 		return nil
@@ -534,7 +652,7 @@ func (b *Broker) finishProvision(ctx context.Context, lease *Lease) (Lease, erro
 		lease.State = LeaseFailed
 		b.failCauses[lease.ID] = err
 		b.notifyWaitersLocked(lease.ID)
-		next := b.tryBeginNextLocked(SpecKey(lease.Spec))
+		next := b.tryBeginNextAnyLocked()
 		out := cloneLease(lease)
 		b.persistLocked()
 		b.mu.Unlock()

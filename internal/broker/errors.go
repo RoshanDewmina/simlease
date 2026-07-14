@@ -6,7 +6,7 @@ import (
 )
 
 // Error is the stable user-facing error triple (code/message/fix), plus optional
-// queue position for CAPACITY_QUEUED.
+// queue position / reason / resource class for CAPACITY_QUEUED.
 //
 // Duplicated from internal/ipc rather than imported: this package must stay
 // transport-agnostic. Future cleanup: extract a shared errors package.
@@ -15,7 +15,19 @@ type Error struct {
 	Message       string
 	Fix           string
 	QueuePosition *int
+	// Reason is a machine-readable queue reason (see QueueReason* constants).
+	Reason string
+	// ResourceClass is the contended resource class (same stable vocabulary).
+	ResourceClass string
 }
+
+// Stable CAPACITY_QUEUED reason / resource-class values (R-WP2).
+const (
+	QueueReasonSimulatorSlot    = "simulator_slot"
+	QueueReasonProvisioningSlot = "provisioning_slot"
+	QueueReasonPerSpecSlot      = "per_spec_slot"
+	QueueReasonPressure         = "pressure"
+)
 
 const (
 	CodeCapacityQueued    = "CAPACITY_QUEUED"
@@ -94,6 +106,8 @@ func (e *InvalidStateError) Unwrap() error { return errInvalidState }
 // full or pressure) and Wait is false.
 type CapacityQueuedError struct {
 	Position      int
+	Reason        string
+	ResourceClass string
 	ErrorEnvelope *Error
 }
 
@@ -145,16 +159,26 @@ func invalidState(id string, state LeaseState, op string) error {
 	return &InvalidStateError{LeaseID: id, State: state, ErrorEnvelope: env}
 }
 
-func capacityQueued(position, capacity, active int, reason string) error {
+func capacityQueued(position, capacity, active int, queueReason, detail string) error {
 	msg := fmt.Sprintf("%d leases ahead of you (capacity %d/%d active)", position, active, capacity)
-	if reason != "" {
-		msg = fmt.Sprintf("%s: %s", msg, reason)
+	if queueReason != "" {
+		msg = fmt.Sprintf("%s [%s]", msg, queueReason)
+	}
+	if detail != "" {
+		msg = fmt.Sprintf("%s: %s", msg, detail)
 	}
 	env, err := NewErrorWithQueuePosition(CodeCapacityQueued, msg, FixCapacityQueued, position)
 	if err != nil {
 		return errCapacityQueued
 	}
-	return &CapacityQueuedError{Position: position, ErrorEnvelope: env}
+	env.Reason = queueReason
+	env.ResourceClass = queueReason
+	return &CapacityQueuedError{
+		Position:      position,
+		Reason:        queueReason,
+		ResourceClass: queueReason,
+		ErrorEnvelope: env,
+	}
 }
 
 func provisionFailed(cause error) error {

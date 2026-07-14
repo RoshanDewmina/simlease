@@ -66,7 +66,9 @@ func TestReuseIfExists_CompatibleSameLeaseUDIDPaths(t *testing.T) {
 
 func TestReuseIfExists_IncompatibleAllocatesNewResource(t *testing.T) {
 	p := &fakeProvisioner{}
-	b := newTestBroker(t, 4, p)
+	// Host-global capacity (R-WP2): each incompatible case allocates a new
+	// ACTIVE lease, so headroom must cover first + all subcases.
+	b := newTestBroker(t, 8, p)
 	spec := testSpec()
 
 	first, err := b.Acquire(context.Background(), AcquireRequest{

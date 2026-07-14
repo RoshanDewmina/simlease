@@ -76,7 +76,11 @@ func TestReuseIfExistsLive(t *testing.T) {
 	if !firstResp.OK {
 		t.Fatalf("first acquire: %+v", firstResp.Error)
 	}
-	first := decodeLiveLease(t, firstResp.Result)
+	firstWrap := decodeLiveLease(t, firstResp.Result)
+	first := firstWrap.Lease
+	if firstWrap.Reused {
+		t.Fatal("first live allocation reported reused=true")
+	}
 	if first.Device == nil || first.Device.UDID == "" {
 		t.Fatalf("first missing device: %+v", first)
 	}
@@ -105,7 +109,11 @@ func TestReuseIfExistsLive(t *testing.T) {
 	if !secondResp.OK {
 		t.Fatalf("reuse acquire: %+v", secondResp.Error)
 	}
-	second := decodeLiveLease(t, secondResp.Result)
+	secondWrap := decodeLiveLease(t, secondResp.Result)
+	second := secondWrap.Lease
+	if !secondWrap.Reused {
+		t.Fatal("second live compatible acquisition missing reused=true")
+	}
 	if second.ID != first.ID {
 		t.Fatalf("lease ID=%s want %s (reuse)", second.ID, first.ID)
 	}
@@ -125,15 +133,18 @@ func TestReuseIfExistsLive(t *testing.T) {
 	}
 }
 
-func decodeLiveLease(t *testing.T, raw []byte) broker.Lease {
+type liveLeaseResult struct {
+	Lease  broker.Lease `json:"lease"`
+	Reused bool         `json:"reused"`
+}
+
+func decodeLiveLease(t *testing.T, raw []byte) liveLeaseResult {
 	t.Helper()
-	var wrap struct {
-		Lease broker.Lease `json:"lease"`
-	}
+	var wrap liveLeaseResult
 	if err := json.Unmarshal(raw, &wrap); err != nil {
 		t.Fatalf("unmarshal lease: %v raw=%s", err, raw)
 	}
-	return wrap.Lease
+	return wrap
 }
 
 func cleanupLiveClone(t *testing.T, udid string) {

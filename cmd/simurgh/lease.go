@@ -254,9 +254,9 @@ func parseAcquireFlags(args []string) (acquireFlags, error) {
 			}
 			f.Hard = d
 		case "--reuse-if-exists":
-			// ReuseIfExists matches an ACTIVE lease with the same Spec, exact
-			// Labels, and Owner.Agent+SessionID (PID excluded). Renews TTL/
-			// heartbeat and returns the same lease ID/UDID/isolation paths.
+			// ReuseIfExists matches ACTIVE or PROVISIONING leases with the same
+			// Spec, exact Labels, and non-empty Owner.Agent+SessionID (PID
+			// excluded). ACTIVE renews; PROVISIONING attaches to the same grant.
 			// Encode project/Xcode/scheme trust boundaries in Labels — they
 			// are not first-class AcquireRequest fields.
 			f.ReuseIfExists = true
@@ -356,12 +356,14 @@ func printLeaseResult(raw json.RawMessage, asJSON bool) error {
 		return enc.Encode(pretty)
 	}
 	var wrap struct {
-		Lease broker.Lease `json:"lease"`
+		Lease  broker.Lease `json:"lease"`
+		Reused bool         `json:"reused"`
 	}
 	if err := json.Unmarshal(raw, &wrap); err != nil {
 		return err
 	}
 	printLeaseHuman(wrap.Lease)
+	fmt.Printf("reused: %t\n", wrap.Reused)
 	return nil
 }
 
@@ -370,6 +372,15 @@ func ownerPID(rm bool) int {
 		return os.Getppid()
 	}
 	return os.Getpid()
+}
+
+func cliSessionID() string {
+	if explicit := strings.TrimSpace(os.Getenv("SIMURGH_SESSION_ID")); explicit != "" {
+		return explicit
+	}
+	// One-shot CLI PIDs change every invocation; the calling shell/agent
+	// parent PID is stable for repeated commands in the same session.
+	return fmt.Sprintf("parent-pid:%d", os.Getppid())
 }
 
 func runAcquire(args []string) int {
@@ -405,8 +416,9 @@ func runAcquire(args []string) int {
 			// watcher reclaim every --rm lease within one tick). The parent
 			// is the invoking shell/agent process, the thing whose death
 			// actually means "session over".
-			"pid":   ownerPID(f.RM),
-			"agent": cliAgentName,
+			"pid":       ownerPID(f.RM),
+			"agent":     cliAgentName,
+			"sessionId": cliSessionID(),
 		},
 		"timeouts": map[string]string{
 			"inactivity": durationString(f.Inactivity),
@@ -421,7 +433,8 @@ func runAcquire(args []string) int {
 	}
 
 	var wrap struct {
-		Lease broker.Lease `json:"lease"`
+		Lease  broker.Lease `json:"lease"`
+		Reused bool         `json:"reused"`
 	}
 	if err := json.Unmarshal(raw, &wrap); err != nil {
 		fmt.Fprintf(os.Stderr, "simurgh acquire: decode: %v\n", err)

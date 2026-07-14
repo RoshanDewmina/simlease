@@ -232,7 +232,7 @@ type leaseAcquireParams struct {
 	Runtime       string            `json:"runtime,omitempty" jsonschema:"optional iOS runtime version, e.g. 27.0"`
 	Labels        map[string]string `json:"labels,omitempty" jsonschema:"optional key/value labels attached to the lease"`
 	TTL           string            `json:"ttl,omitempty" jsonschema:"optional lease TTL duration string, e.g. 30m"`
-	ReuseIfExists bool              `json:"reuse_if_exists,omitempty" jsonschema:"if true, renew and return an existing ACTIVE lease with the same DeviceSpec, exact labels, and Owner.Agent+SessionID (PID ignored); mismatch allocates a new lease. Put project/Xcode/scheme identity in labels — those dimensions are not first-class fields"`
+	ReuseIfExists bool              `json:"reuse_if_exists,omitempty" jsonschema:"if true, renew a compatible ACTIVE lease or attach to compatible PROVISIONING; requires the same DeviceSpec, exact labels, and non-empty Owner.Agent+SessionID (PID ignored). Mismatch/missing identity allocates new. Put project/Xcode/scheme identity in labels"`
 	Wait          bool              `json:"wait,omitempty" jsonschema:"if true, wait when the pool is at capacity instead of failing immediately"`
 	Detach        bool              `json:"detach,omitempty" jsonschema:"if true, the lease survives this agent session ending; default false means the lease is reclaimed when this session's MCP server process exits"`
 	Inactivity    string            `json:"inactivity_timeout,omitempty" jsonschema:"optional inactivity timeout duration string, e.g. 10m; the lease is reclaimed after this long without activity"`
@@ -250,6 +250,7 @@ type leaseStatusParams struct {
 type leaseGrantResult struct {
 	ID              string            `json:"id" jsonschema:"lease id"`
 	State           string            `json:"state" jsonschema:"lease state, e.g. ACTIVE"`
+	Reused          bool              `json:"reused" jsonschema:"true when this acquire renewed or attached to an existing compatible lease"`
 	UDID            string            `json:"udid,omitempty" jsonschema:"simulator device UDID"`
 	Model           string            `json:"model,omitempty" jsonschema:"requested device model"`
 	Runtime         string            `json:"runtime,omitempty" jsonschema:"requested iOS runtime"`
@@ -289,7 +290,8 @@ type poolStatusPressureSignal struct {
 }
 
 type wireLeaseWrap struct {
-	Lease wireLease `json:"lease"`
+	Lease  wireLease `json:"lease"`
+	Reused bool      `json:"reused"`
 }
 
 type wireLease struct {
@@ -317,10 +319,11 @@ type wireLeaseEnv struct {
 	XcodebuildFlags []string          `json:"xcodebuildFlags"`
 }
 
-func grantFromWire(w wireLease) leaseGrantResult {
+func grantFromWire(w wireLease, reused bool) leaseGrantResult {
 	out := leaseGrantResult{
 		ID:              w.ID,
 		State:           w.State,
+		Reused:          reused,
 		Model:           w.Spec.Model,
 		Runtime:         w.Spec.Runtime,
 		ExpiresAt:       w.ExpiresAt,
@@ -331,6 +334,14 @@ func grantFromWire(w wireLease) leaseGrantResult {
 		out.UDID = w.Device.UDID
 	}
 	return out
+}
+
+func mcpSessionID() string {
+	if explicit := strings.TrimSpace(os.Getenv("SIMURGH_SESSION_ID")); explicit != "" {
+		return explicit
+	}
+	// The MCP server process spans all calls for one MCP session.
+	return fmt.Sprintf("mcp-pid:%d", os.Getpid())
 }
 
 // --- handlers ---
@@ -346,8 +357,8 @@ func (s *server) handleLeaseAcquire(ctx context.Context, _ *mcpsdk.CallToolReque
 			"model":    in.Model,
 			"runtime":  in.Runtime,
 		},
-		"labels":           in.Labels,
-		"ttl":              in.TTL,
+		"labels":        in.Labels,
+		"ttl":           in.TTL,
 		"reuseIfExists": in.ReuseIfExists,
 		"wait":          in.Wait,
 		// Session-bound by default (P0-4): this MCP server process lives
@@ -357,8 +368,9 @@ func (s *server) handleLeaseAcquire(ctx context.Context, _ *mcpsdk.CallToolReque
 		// crash-cleanup story (B4) is allowed to claim.
 		"releaseOnPIDExit": !in.Detach,
 		"owner": map[string]any{
-			"pid":   os.Getpid(),
-			"agent": mcpAgentName,
+			"pid":       os.Getpid(),
+			"agent":     mcpAgentName,
+			"sessionId": mcpSessionID(),
 		},
 		"timeouts": map[string]string{"inactivity": in.Inactivity},
 	}
@@ -373,7 +385,7 @@ func (s *server) handleLeaseAcquire(ctx context.Context, _ *mcpsdk.CallToolReque
 	if err := s.writeLastLease(wrap.Lease.ID); err != nil {
 		return nil, zero, fmt.Errorf("write last-lease: %w", err)
 	}
-	return nil, grantFromWire(wrap.Lease), nil
+	return nil, grantFromWire(wrap.Lease, wrap.Reused), nil
 }
 
 func (s *server) handleLeaseRenew(ctx context.Context, _ *mcpsdk.CallToolRequest, in leaseIDParams) (*mcpsdk.CallToolResult, leaseRenewResult, error) {
@@ -439,7 +451,7 @@ func (s *server) handleLeaseStatus(ctx context.Context, _ *mcpsdk.CallToolReques
 	if err := json.Unmarshal(raw, &wrap); err != nil {
 		return nil, zero, fmt.Errorf("decode lease.get: %w", err)
 	}
-	return nil, grantFromWire(wrap.Lease), nil
+	return nil, grantFromWire(wrap.Lease, false), nil
 }
 
 func (s *server) handlePoolStatus(ctx context.Context, _ *mcpsdk.CallToolRequest, _ struct{}) (*mcpsdk.CallToolResult, poolStatusResult, error) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +78,7 @@ func toolNames(tools []*mcpsdk.Tool) []string {
 }
 
 func TestLeaseAcquireMapsParamsAndResult(t *testing.T) {
+	t.Setenv("SIMURGH_SESSION_ID", "explicit-mcp-session")
 	var gotMethod string
 	var gotParams map[string]any
 	srv := newServer(serverConfig{
@@ -90,6 +92,7 @@ func TestLeaseAcquireMapsParamsAndResult(t *testing.T) {
 				return nil, err
 			}
 			return json.RawMessage(`{
+				"reused": true,
 				"lease": {
 					"id": "lease-1",
 					"state": "ACTIVE",
@@ -145,16 +148,38 @@ func TestLeaseAcquireMapsParamsAndResult(t *testing.T) {
 	if gotParams["releaseOnPIDExit"] != true {
 		t.Fatalf("releaseOnPIDExit = %#v, want true by default", gotParams["releaseOnPIDExit"])
 	}
+	owner, _ := gotParams["owner"].(map[string]any)
+	if owner["agent"] != mcpAgentName || owner["sessionId"] != "explicit-mcp-session" {
+		t.Fatalf("owner identity = %#v", owner)
+	}
 
 	out := decodeStructured[leaseGrantResult](t, res)
 	if out.ID != "lease-1" || out.UDID != "UDID-ABC" {
 		t.Fatalf("result = %+v", out)
+	}
+	if !out.Reused {
+		t.Fatalf("result missing reused=true: %+v", out)
 	}
 	if out.Env["SIMURGH_UDID"] != "UDID-ABC" {
 		t.Fatalf("env = %#v", out.Env)
 	}
 	if len(out.XcodebuildFlags) != 2 || out.XcodebuildFlags[0] != "-derivedDataPath" {
 		t.Fatalf("xcodebuildFlags = %#v", out.XcodebuildFlags)
+	}
+}
+
+func TestMCPSessionIDExplicitAndStableProcessFallback(t *testing.T) {
+	t.Setenv("SIMURGH_SESSION_ID", "explicit-mcp-session")
+	if got := mcpSessionID(); got != "explicit-mcp-session" {
+		t.Fatalf("explicit session ID=%q", got)
+	}
+
+	t.Setenv("SIMURGH_SESSION_ID", "")
+	first := mcpSessionID()
+	second := mcpSessionID()
+	want := fmt.Sprintf("mcp-pid:%d", os.Getpid())
+	if first != want || second != want {
+		t.Fatalf("fallback IDs=%q/%q want %q", first, second, want)
 	}
 }
 

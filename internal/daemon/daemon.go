@@ -291,7 +291,10 @@ func (h *handlers) poolStatus(_ context.Context, _ ipc.Request) (json.RawMessage
 // marshalLeaseResult shapes a single-lease wire response, recomputing
 // IsolationEnv when the lease has a Device (pure; does not mutate broker state).
 func (h *handlers) marshalLeaseResult(lease broker.Lease) (json.RawMessage, *ipc.Error) {
-	raw, err := json.Marshal(map[string]any{"lease": h.withIsolationEnv(lease)})
+	raw, err := json.Marshal(map[string]any{
+		"lease":  h.withIsolationEnv(lease),
+		"reused": lease.Reused,
+	})
 	if err != nil {
 		return nil, internalErr(err)
 	}
@@ -749,30 +752,35 @@ func (l *ReclaimLoop) runQueueRetry(ctx context.Context, interval time.Duration)
 
 func (l *ReclaimLoop) applyDecisions(ctx context.Context, decisions []watcher.ReclaimDecision, logger func(string, ...any)) {
 	for _, d := range decisions {
+		if d.Reason == "queued owner process exited" {
+			lease, err := l.Deps.Broker.CancelQueued(d.LeaseID)
+			if err != nil {
+				// A promotion between watcher snapshot and apply makes the
+				// decision stale. Skip it; never fall through to Reclaim.
+				logger("simurgh reclaim: skip stale queued-owner decision lease=%s: %v", d.LeaseID, err)
+				continue
+			}
+			logger("simurgh reclaim: cancelled QUEUED lease %s reason=%q state=%s", lease.ID, d.Reason, lease.State)
+			continue
+		}
+
 		cur, ok := l.Deps.Broker.Get(d.LeaseID)
 		if !ok {
 			logger("simurgh reclaim: lease %s gone before apply reason=%q", d.LeaseID, d.Reason)
 			continue
 		}
-		switch cur.State {
-		case broker.LeaseQueued:
-			// Dead queued owner / stranded waiter: CANCELLED via Release, no device teardown.
-			lease, err := l.Deps.Broker.Release(ctx, d.LeaseID)
-			if err != nil {
-				logger("simurgh reclaim: broker.Release(%s) reason=%q: %v", d.LeaseID, d.Reason, err)
-				continue
-			}
-			logger("simurgh reclaim: cancelled QUEUED lease %s reason=%q state=%s", lease.ID, d.Reason, lease.State)
-		default:
-			lease, err := l.Deps.Broker.Reclaim(ctx, d.LeaseID)
-			if err != nil {
-				logger("simurgh reclaim: broker.Reclaim(%s) reason=%q: %v", d.LeaseID, d.Reason, err)
-				continue
-			}
-			if err := l.Deps.Reaper.Reclaim(ctx, lease); err != nil {
-				logger("simurgh reclaim: reaper.Reclaim(%s) reason=%q: %v", d.LeaseID, d.Reason, err)
-				// Continue — next decision / next tick still runs.
-			}
+		if cur.State != broker.LeaseActive {
+			logger("simurgh reclaim: skip stale decision lease=%s state=%s reason=%q", d.LeaseID, cur.State, d.Reason)
+			continue
+		}
+		lease, err := l.Deps.Broker.Reclaim(ctx, d.LeaseID)
+		if err != nil {
+			logger("simurgh reclaim: broker.Reclaim(%s) reason=%q: %v", d.LeaseID, d.Reason, err)
+			continue
+		}
+		if err := l.Deps.Reaper.Reclaim(ctx, lease); err != nil {
+			logger("simurgh reclaim: reaper.Reclaim(%s) reason=%q: %v", d.LeaseID, d.Reason, err)
+			// Continue — next decision / next tick still runs.
 		}
 	}
 }

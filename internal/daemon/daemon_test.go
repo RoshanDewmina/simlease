@@ -18,6 +18,7 @@ import (
 	"github.com/RoshanDewmina/simurgh/internal/provisioner"
 	"github.com/RoshanDewmina/simurgh/internal/reaper"
 	"github.com/RoshanDewmina/simurgh/internal/safety"
+	"github.com/RoshanDewmina/simurgh/internal/watcher"
 )
 
 func testSpec() broker.DeviceSpec {
@@ -140,7 +141,8 @@ func TestAcquireReturnsLeaseJSON(t *testing.T) {
 		t.Fatalf("acquire failed: %+v", resp.Error)
 	}
 	var wrap struct {
-		Lease broker.Lease `json:"lease"`
+		Lease  broker.Lease `json:"lease"`
+		Reused bool         `json:"reused"`
 	}
 	if err := json.Unmarshal(resp.Result, &wrap); err != nil {
 		t.Fatalf("unmarshal: %v raw=%s", err, resp.Result)
@@ -154,6 +156,77 @@ func TestAcquireReturnsLeaseJSON(t *testing.T) {
 	if wrap.Lease.TTL != 30*time.Minute {
 		t.Fatalf("ttl = %v want 30m", wrap.Lease.TTL)
 	}
+	if wrap.Reused {
+		t.Fatal("new allocation must report reused=false")
+	}
+}
+
+func TestAcquireReuseIdentityAndObservableBoundary(t *testing.T) {
+	t.Run("raw callers without identity never reuse", func(t *testing.T) {
+		deps, _, _ := newTestDeps(t, 2)
+		h := newHandlers(deps)
+		params := map[string]any{
+			"spec":          map[string]string{"platform": "iOS", "model": "iPhone 17 Pro"},
+			"labels":        map[string]string{"project": "same"},
+			"reuseIfExists": true,
+			"wait":          true,
+			"owner":         map[string]any{"pid": 1},
+		}
+		first := callHandler(t, h.acquire, "raw-1", params)
+		params["owner"] = map[string]any{"pid": 2}
+		second := callHandler(t, h.acquire, "raw-2", params)
+		if !first.OK || !second.OK {
+			t.Fatalf("acquires failed: first=%+v second=%+v", first.Error, second.Error)
+		}
+		var a, b struct {
+			Lease  broker.Lease `json:"lease"`
+			Reused bool         `json:"reused"`
+		}
+		if err := json.Unmarshal(first.Result, &a); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(second.Result, &b); err != nil {
+			t.Fatal(err)
+		}
+		if a.Lease.ID == b.Lease.ID || a.Reused || b.Reused {
+			t.Fatalf("raw callers reused: first=%+v second=%+v", a, b)
+		}
+	})
+
+	t.Run("same explicit session reuses and reports true", func(t *testing.T) {
+		deps, _, _ := newTestDeps(t, 2)
+		h := newHandlers(deps)
+		params := map[string]any{
+			"spec":          map[string]string{"platform": "iOS", "model": "iPhone 17 Pro"},
+			"labels":        map[string]string{"project": "same"},
+			"reuseIfExists": true,
+			"wait":          true,
+			"owner": map[string]any{
+				"pid": 1, "agent": "agent-a", "sessionId": "session-a",
+			},
+		}
+		first := callHandler(t, h.acquire, "explicit-1", params)
+		params["owner"] = map[string]any{
+			"pid": 2, "agent": "agent-a", "sessionId": "session-a",
+		}
+		second := callHandler(t, h.acquire, "explicit-2", params)
+		if !first.OK || !second.OK {
+			t.Fatalf("acquires failed: first=%+v second=%+v", first.Error, second.Error)
+		}
+		var a, b struct {
+			Lease  broker.Lease `json:"lease"`
+			Reused bool         `json:"reused"`
+		}
+		if err := json.Unmarshal(first.Result, &a); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(second.Result, &b); err != nil {
+			t.Fatal(err)
+		}
+		if a.Lease.ID != b.Lease.ID || a.Reused || !b.Reused {
+			t.Fatalf("explicit session reuse flags wrong: first=%+v second=%+v", a, b)
+		}
+	})
 }
 
 func TestAcquireCapacityQueuedHasQueuePosition(t *testing.T) {
@@ -1161,6 +1234,46 @@ func TestReclaimLoopCancelsDeadQueuedOwner(t *testing.T) {
 	// Holding ACTIVE lease must remain untouched.
 	if active, ok := b.Get(first.ID); !ok || active.State != broker.LeaseActive {
 		t.Fatalf("active lease disturbed: %+v ok=%v", active, ok)
+	}
+}
+
+func TestReclaimLoopSkipsQueuedOwnerDecisionAfterPromotion(t *testing.T) {
+	deps, b, deleter := newTestDeps(t, 1)
+	first, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), TTL: time.Hour, Owner: broker.Owner{PID: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), TTL: time.Hour, Wait: false, Owner: broker.Owner{PID: 424242},
+	})
+	if !errors.As(err, new(*broker.CapacityQueuedError)) {
+		t.Fatalf("want CAPACITY_QUEUED, got %v", err)
+	}
+
+	// Deterministically model the race: watcher took its QUEUED snapshot, then
+	// capacity freed and promoted the lease before applyDecisions ran.
+	if _, err := b.Release(context.Background(), first.ID); err != nil {
+		t.Fatalf("release first: %v", err)
+	}
+	promoted, ok := b.Get(queued.ID)
+	if !ok || promoted.State != broker.LeaseActive {
+		t.Fatalf("queued lease not promoted: %+v ok=%v", promoted, ok)
+	}
+
+	loop := &ReclaimLoop{Deps: deps}
+	loop.applyDecisions(context.Background(), []watcher.ReclaimDecision{{
+		LeaseID: queued.ID,
+		Reason:  "queued owner process exited",
+	}}, func(string, ...any) {})
+
+	got, ok := b.Get(queued.ID)
+	if !ok || got.State != broker.LeaseActive {
+		t.Fatalf("stale queued-owner decision changed promoted lease: %+v ok=%v", got, ok)
+	}
+	if deleted := deleter.deleted(); len(deleted) != 0 {
+		t.Fatalf("stale queued-owner decision reached reaper: deleted=%v", deleted)
 	}
 }
 

@@ -29,6 +29,12 @@ func reuseCompatible(req AcquireRequest, lease *Lease) bool {
 	if lease == nil {
 		return false
 	}
+	if req.Owner.Agent == "" || req.Owner.SessionID == "" {
+		return false
+	}
+	if lease.Owner.Agent == "" || lease.Owner.SessionID == "" {
+		return false
+	}
 	if SpecKey(req.Spec) != SpecKey(lease.Spec) {
 		return false
 	}

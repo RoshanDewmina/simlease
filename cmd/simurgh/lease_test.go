@@ -2,8 +2,11 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -75,6 +78,47 @@ func TestParseKV(t *testing.T) {
 	}
 	if _, _, err := parseKV("=novalue"); err == nil {
 		t.Fatal("want error for empty key")
+	}
+}
+
+func TestCLISessionIDExplicitAndStableFallback(t *testing.T) {
+	t.Setenv("SIMURGH_SESSION_ID", "explicit-cli-session")
+	if got := cliSessionID(); got != "explicit-cli-session" {
+		t.Fatalf("explicit session ID=%q", got)
+	}
+
+	t.Setenv("SIMURGH_SESSION_ID", "")
+	first := cliSessionID()
+	second := cliSessionID()
+	want := fmt.Sprintf("parent-pid:%d", os.Getppid())
+	if first != want || second != want {
+		t.Fatalf("fallback IDs=%q/%q want %q", first, second, want)
+	}
+}
+
+func TestPrintLeaseResultSurfacesReused(t *testing.T) {
+	raw := []byte(`{"reused":true,"lease":{"id":"lease-1","state":"active","spec":{"model":"iPhone 17 Pro"},"ttl":""}}`)
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = old })
+
+	if err := printLeaseResult(raw, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = old
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(out), "reused: true") {
+		t.Fatalf("human acquire output missing reused=true:\n%s", out)
 	}
 }
 

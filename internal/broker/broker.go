@@ -166,6 +166,7 @@ func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error)
 			case LeaseActive:
 				b.renewInPlaceLocked(existing, req, ttl)
 				out := cloneLease(existing)
+				out.Reused = true
 				b.persistLocked()
 				b.mu.Unlock()
 				return out, nil
@@ -174,7 +175,7 @@ func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error)
 				id := existing.ID
 				b.persistLocked()
 				b.mu.Unlock()
-				return b.waitForLease(ctx, id, ch, false)
+				return b.waitForReusable(ctx, id, ch)
 			}
 		}
 		b.mu.Unlock()
@@ -206,6 +207,7 @@ func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error)
 			case LeaseActive:
 				b.renewInPlaceLocked(existing, req, ttl)
 				out := cloneLease(existing)
+				out.Reused = true
 				b.persistLocked()
 				b.mu.Unlock()
 				return out, nil
@@ -214,7 +216,7 @@ func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error)
 				id := existing.ID
 				b.persistLocked()
 				b.mu.Unlock()
-				return b.waitForLease(ctx, id, ch, false)
+				return b.waitForReusable(ctx, id, ch)
 			}
 		}
 	}
@@ -285,6 +287,27 @@ func (b *Broker) Renew(ctx context.Context, leaseID string, ttl time.Duration) (
 // mutates broker state and starts provisioning the next queued lease.
 func (b *Broker) Release(ctx context.Context, leaseID string) (Lease, error) {
 	return b.endActiveOrQueued(ctx, leaseID, LeaseReleased, "release")
+}
+
+// CancelQueued atomically transitions QUEUED → CANCELLED. It is used by the
+// watcher for a "queued owner process exited" decision so a stale decision
+// cannot reclaim a lease that was promoted after the watcher snapshot.
+func (b *Broker) CancelQueued(leaseID string) (Lease, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	lease, ok := b.leases[leaseID]
+	if !ok {
+		return Lease{}, leaseNotFound(leaseID)
+	}
+	if lease.State != LeaseQueued {
+		return Lease{}, invalidState(leaseID, lease.State, "cancel queued")
+	}
+	b.queueForLocked(SpecKey(lease.Spec)).remove(leaseID)
+	lease.State = LeaseCancelled
+	b.notifyWaitersLocked(leaseID)
+	b.persistLocked()
+	return cloneLease(lease), nil
 }
 
 // Reclaim transitions ACTIVE → RECLAIMED, frees capacity, and advances the
@@ -602,6 +625,14 @@ func (b *Broker) waitForLease(ctx context.Context, leaseID string, ch chan struc
 			return out, nil
 		}
 	}
+}
+
+func (b *Broker) waitForReusable(ctx context.Context, leaseID string, ch chan struct{}) (Lease, error) {
+	lease, err := b.waitForLease(ctx, leaseID, ch, false)
+	if err == nil {
+		lease.Reused = true
+	}
+	return lease, err
 }
 
 // cancelWaiter drops the waiter registration. When cancelQueuedOnDone is true

@@ -47,6 +47,9 @@ func TestReuseIfExists_CompatibleSameLeaseUDIDPaths(t *testing.T) {
 	if second.ID != first.ID {
 		t.Fatalf("lease ID=%s want %s", second.ID, first.ID)
 	}
+	if !second.Reused {
+		t.Fatal("compatible ACTIVE renewal must report Reused=true")
+	}
 	if second.Device == nil || second.Device.UDID != first.Device.UDID {
 		t.Fatalf("UDID=%v want %s", second.Device, first.Device.UDID)
 	}
@@ -104,7 +107,7 @@ func TestReuseIfExists_IncompatibleAllocatesNewResource(t *testing.T) {
 		{
 			name: "different model",
 			req: AcquireRequest{
-				Spec: DeviceSpec{Platform: "iOS", Model: "iPhone 16", Runtime: "27.0"},
+				Spec:   DeviceSpec{Platform: "iOS", Model: "iPhone 16", Runtime: "27.0"},
 				Labels: reuseLabels(), TTL: time.Minute,
 				ReuseIfExists: true, Owner: reuseOwner(5),
 			},
@@ -124,6 +127,66 @@ func TestReuseIfExists_IncompatibleAllocatesNewResource(t *testing.T) {
 				t.Fatalf("want distinct UDID, got %+v", got.Device)
 			}
 		})
+	}
+}
+
+func TestReuseIfExists_MissingIdentityNeverReuses(t *testing.T) {
+	cases := []struct {
+		name  string
+		owner Owner
+	}{
+		{name: "both missing", owner: Owner{PID: 1}},
+		{name: "agent missing", owner: Owner{PID: 1, SessionID: "session-1"}},
+		{name: "session missing", owner: Owner{PID: 1, Agent: "agent-a"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &fakeProvisioner{}
+			b := newTestBroker(t, 2, p)
+			req := AcquireRequest{
+				Spec: testSpec(), Labels: reuseLabels(), TTL: time.Minute,
+				ReuseIfExists: true, Owner: tc.owner,
+			}
+			first, err := b.Acquire(context.Background(), req)
+			if err != nil {
+				t.Fatalf("first Acquire: %v", err)
+			}
+			req.Owner.PID++
+			second, err := b.Acquire(context.Background(), req)
+			if err != nil {
+				t.Fatalf("second Acquire: %v", err)
+			}
+			if second.ID == first.ID || second.Reused {
+				t.Fatalf("missing identity reused: first=%s second=%s reused=%v",
+					first.ID, second.ID, second.Reused)
+			}
+			if p.callCount() != 2 {
+				t.Fatalf("provision calls=%d want 2", p.callCount())
+			}
+		})
+	}
+}
+
+func TestReuseIfExists_SameExplicitSessionReuses(t *testing.T) {
+	p := &fakeProvisioner{}
+	b := newTestBroker(t, 2, p)
+	req := AcquireRequest{
+		Spec: testSpec(), Labels: reuseLabels(), TTL: time.Minute,
+		ReuseIfExists: true,
+		Owner:         Owner{PID: 10, Agent: "agent-a", SessionID: "explicit-session"},
+	}
+	first, err := b.Acquire(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first Acquire: %v", err)
+	}
+	req.Owner.PID = 11
+	second, err := b.Acquire(context.Background(), req)
+	if err != nil {
+		t.Fatalf("second Acquire: %v", err)
+	}
+	if second.ID != first.ID || !second.Reused {
+		t.Fatalf("same explicit session did not reuse: first=%s second=%s reused=%v",
+			first.ID, second.ID, second.Reused)
 	}
 }
 
@@ -170,6 +233,10 @@ func TestReuseIfExists_ConcurrentDuplicateOneResource(t *testing.T) {
 	}
 	if results[0].ID != results[1].ID {
 		t.Fatalf("concurrent reuse got distinct IDs %s and %s", results[0].ID, results[1].ID)
+	}
+	if results[0].Reused == results[1].Reused {
+		t.Fatalf("want one new and one reused response, got reused=%v/%v",
+			results[0].Reused, results[1].Reused)
 	}
 	if results[0].Device == nil || results[1].Device == nil {
 		t.Fatal("missing device on concurrent reuse")

@@ -110,8 +110,11 @@ type IsolationEnv struct {
 // TTL (and Timeouts) serialize as duration strings at the JSON boundary only;
 // in-process code continues to use plain time.Duration.
 type Lease struct {
-	ID               string            `json:"id"`
-	State            LeaseState        `json:"state"`
+	ID    string     `json:"id"`
+	State LeaseState `json:"state"`
+	// Reused is transient acquisition metadata. It is emitted by acquire
+	// response wrappers but is not persisted as lease state.
+	Reused           bool              `json:"-"`
 	Owner            Owner             `json:"owner"`
 	Labels           map[string]string `json:"labels,omitempty"`
 	Spec             DeviceSpec        `json:"spec"`

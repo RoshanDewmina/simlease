@@ -180,10 +180,13 @@ func runDaemon() int {
 	// but has nothing to do with R-WP6/B2 (adapter process-lifetime
 	// ownership) — it would otherwise make an unrelated resource gate the
 	// bottleneck for a CLI-integration test that needs a real ACTIVE lease.
-	// Unset in production.
-	if os.Getenv("SIMURGH_TEST_SKIP_PRESSURE") == "1" {
-		pressureOK = func() (bool, string) { return true, "" }
-	}
+	// R-WP6 second-review Fix 2: the SIMURGH_TEST_SKIP_PRESSURE env-var read
+	// itself is compiled in only under -tags darwin_sim (see
+	// xbmcp_test_seams_darwin_sim.go / xbmcp_test_seams_other.go) — a
+	// tagless `go build ./...` (the real shipped binary) links the no-op, so
+	// this seam has zero effect in production no matter what any process's
+	// environment contains.
+	pressureOK = applyTestSkipPressureOverride(pressureOK)
 	brk := broker.New(broker.BrokerOptions{
 		Provisioner:               prov,
 		Store:                     st,
@@ -229,7 +232,13 @@ func runDaemon() int {
 	xbmcpAdapter := xbmcp.NewAdapter(leasesRoot, func(_ context.Context, id string) (broker.Lease, error) {
 		lease, ok := brk.Get(id)
 		if !ok {
-			return broker.Lease{}, fmt.Errorf("xcodebuildmcp: lease %q not found", id)
+			// R-WP6 second-review Fix 3: reuse the broker's own typed
+			// "lease not found" error (not a bare fmt.Errorf) so
+			// internal/daemon's xbmcpErrorToIPC classifies it as
+			// LEASE_NOT_FOUND/exit 3 — matching the pre-B2-fix CLI→IPC
+			// lease.get path exactly, instead of falling through to
+			// generic INTERNAL/exit 5.
+			return broker.Lease{}, broker.NewLeaseNotFoundError(id)
 		}
 		return lease, nil
 	})
@@ -241,10 +250,10 @@ func runDaemon() int {
 	// long-lived child for the real `npx xcodebuildmcp mcp` server (which
 	// needs network + the real npm package) — mirrors the Adapter.Command
 	// override the in-process live test (runtime_live_test.go) already uses.
-	// Unset in production.
-	if raw := strings.TrimSpace(os.Getenv("SIMURGH_XBMCP_TEST_COMMAND")); raw != "" {
-		xbmcpAdapter.Command = strings.Fields(raw)
-	}
+	// R-WP6 second-review Fix 2: same compile-time gate as pressureOK above —
+	// the SIMURGH_XBMCP_TEST_COMMAND env-var read only exists under -tags
+	// darwin_sim; a tagless build's applyXBMCPTestCommandOverride is a no-op.
+	applyXBMCPTestCommandOverride(xbmcpAdapter)
 
 	srv := ipc.NewServer(ln)
 	deps := daemon.Deps{

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
 	"syscall"
 	"time"
 
@@ -59,7 +60,15 @@ type Adapter struct {
 	// LookPath resolves binaries; defaults to exec.LookPath.
 	LookPath func(file string) (string, error)
 
-	// stdinHolders keep MCP stdio stdin pipes open until Stop.
+	// stdinMu guards stdinHolders. The daemon constructs exactly one Adapter
+	// for its whole lifetime (R-WP6 review finding B2) and reaches it from a
+	// goroutine per IPC connection, so Start/Stop for different (or the same)
+	// sessions can run concurrently — unlike the pre-B2-fix world where every
+	// CLI invocation got its own throwaway *Adapter and this map was never
+	// shared across goroutines. All other Adapter fields (LeasesRoot,
+	// GetLease, Command, Version, ProbeVersion, Clock, LookPath) are set once
+	// at construction and only ever read afterward, so they need no lock.
+	stdinMu      sync.Mutex
 	stdinHolders map[string]*os.File
 }
 
@@ -183,10 +192,12 @@ func (a *Adapter) Start(ctx context.Context, sessionID string) (Status, error) {
 		_ = signalOwned(meta, syscall.SIGKILL)
 		return Status{}, err
 	}
+	a.stdinMu.Lock()
 	if a.stdinHolders == nil {
 		a.stdinHolders = map[string]*os.File{}
 	}
 	a.stdinHolders[lease.ID] = wStdin
+	a.stdinMu.Unlock()
 	// Detach Wait into background so Stop can still signal; reaping happens on Stop.
 	go func() { _ = cmd.Wait() }()
 
@@ -223,9 +234,12 @@ func (a *Adapter) Stop(ctx context.Context, sessionID string) error {
 	if meta.LeaseID != sessionID {
 		return fmt.Errorf("xcodebuildmcp: pid metadata lease %s does not match session %s", meta.LeaseID, sessionID)
 	}
-	if holder := a.stdinHolders[sessionID]; holder != nil {
+	a.stdinMu.Lock()
+	holder := a.stdinHolders[sessionID]
+	delete(a.stdinHolders, sessionID)
+	a.stdinMu.Unlock()
+	if holder != nil {
 		_ = holder.Close()
-		delete(a.stdinHolders, sessionID)
 	}
 	if processAlive(meta.PID) {
 		if err := signalOwned(meta, syscall.SIGTERM); err != nil {

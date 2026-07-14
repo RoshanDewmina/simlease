@@ -200,7 +200,14 @@ func buildRealSimurghBinaryForDaemonTest(t *testing.T) string {
 	t.Helper()
 	outDir := t.TempDir()
 	out := filepath.Join(outDir, "simurgh")
-	cmd := exec.Command("go", "build", "-o", out, ".")
+	// -tags darwin_sim: this test relies on SIMURGH_XBMCP_TEST_COMMAND and
+	// SIMURGH_TEST_SKIP_PRESSURE actually being read by the daemon it
+	// launches (R-WP6 second-review Fix 2 moved those reads behind the
+	// darwin_sim build tag — see cmd/simurgh/xbmcp_test_seams_darwin_sim.go).
+	// A tagless build here would silently no-op both seams and this test
+	// would hang/fail against the real npx package and the real pressure
+	// gate instead of exercising the B2 regression it's meant to prove.
+	cmd := exec.Command("go", "build", "-tags", "darwin_sim", "-o", out, ".")
 	if outBytes, buildErr := cmd.CombinedOutput(); buildErr != nil {
 		t.Fatalf("build simurgh: %v\n%s", buildErr, outBytes)
 	}

@@ -398,13 +398,9 @@ func parseOptionalDuration(s string) (time.Duration, error) {
 }
 
 func leaseNotFoundErr(id string) error {
-	// Reconstruct the same typed error broker uses so mapping stays uniform.
-	msg := fmt.Sprintf("lease %q not found", id)
-	env, err := broker.NewError(broker.CodeLeaseNotFound, msg, broker.FixLeaseNotFound)
-	if err != nil {
-		return fmt.Errorf("lease %q not found", id)
-	}
-	return &broker.LeaseNotFoundError{LeaseID: id, ErrorEnvelope: env}
+	// Reuse the broker's own typed-error constructor so mapping stays
+	// uniform no matter which code path resolved the lease.
+	return broker.NewLeaseNotFoundError(id)
 }
 
 func badRequest(err error) *ipc.Error {
@@ -806,18 +802,31 @@ func (h *handlers) xbmcpStatus(ctx context.Context, req ipc.Request) (json.RawMe
 }
 
 // xbmcpErrorToIPC maps a raw Adapter.Start/Stop/Status error to the ipc.Error
-// wire triple. The message-based classification mirrors, verbatim, the
-// mapping cmd/simurgh's printXBMCPErr used to apply client-side when the
-// Adapter ran in-process (pre-B2-fix): "want active"/"no ACTIVE" and
-// "no owned adapter"/"already running" become INVALID_STATE, everything else
-// stays INTERNAL. Reusing those exact code strings — which equal
-// broker.CodeInvalidState and ipc.CodeDaemonNotRunning — means
+// wire triple. Before the errors.As check below (R-WP6 second-review Fix 3),
+// GetLease's "lease not found" case fell through to the message-based
+// classification like everything else and was misclassified as INTERNAL —
+// regressing the pre-B2 behavior where the CLI→IPC lease.get path returned a
+// structured LEASE_NOT_FOUND (exit 3). GetLease now returns
+// broker.NewLeaseNotFoundError (cmd/simurgh/daemon.go), so it is classified
+// exactly like the broker's own lease.get handler (brokerErrorToIPC) instead
+// of falling into the fragile string-matching fallback below.
+//
+// Everything else keeps the message-based classification, which mirrors,
+// verbatim, the mapping cmd/simurgh's printXBMCPErr used to apply
+// client-side when the Adapter ran in-process (pre-B2-fix): "want active"/
+// "no ACTIVE" and "no owned adapter"/"already running" become INVALID_STATE,
+// everything else stays INTERNAL. Reusing those exact code strings — which
+// equal broker.CodeInvalidState and ipc.CodeDaemonNotRunning — means
 // exitCodeForIPCError on the client reproduces the same exit codes the old
 // in-process exitCodeForCode mapping produced, so the CLI's observable
 // behavior (message, fix, exit code) is unchanged by moving execution here.
 func xbmcpErrorToIPC(err error) *ipc.Error {
 	if err == nil {
 		return nil
+	}
+	var nf *broker.LeaseNotFoundError
+	if errors.As(err, &nf) {
+		return copyBrokerEnvelope(nf.ErrorEnvelope)
 	}
 	msg := err.Error()
 	code := "INTERNAL"

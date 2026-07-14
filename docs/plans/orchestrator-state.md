@@ -1851,3 +1851,116 @@ doesn't recognize, falling through to generic `INTERNAL` (exit 5). Contradicts t
 
 Next: bounded fix round for exactly these three, then a third review pass before any merge
 decision. R-WP6 remains unmerged; R-WP5 stays gated.
+
+### 2026-07-14 (continued) — bounded fix round for the three second-review findings (Fix 1/2/3)
+
+Built on `a8319b8` (second review verdict, docs-only tip; code base is `740abdb`). Fixes exactly
+the three findings from the "B2 fix (740abdb) fixed the original bug but introduced 3 new
+findings" review entry above — no other behavior changed.
+
+**Fix 1 (blocking) — unsynchronized concurrent access to `Adapter.stdinHolders`.**
+`internal/integrations/xcodebuildmcp/adapter.go`: added `stdinMu sync.Mutex` to `Adapter`,
+guarding every `stdinHolders` read/write/delete — `Start`'s write (was: unguarded map insert) and
+`Stop`'s read+delete (was: unguarded map read then `delete`). Audited every other `Adapter` field
+(`LeasesRoot`, `GetLease`, `Command`, `Version`, `ProbeVersion`, `Clock`, `LookPath`): all are set
+once at construction and only read afterward — `stdinHolders` was the only mutable field exposed
+by B2's daemon-shared-Adapter change. New permanent test
+`TestXcodeBuildMCPStdinHoldersConcurrentAccessRace` (`internal/integrations/xcodebuildmcp/adapter_test.go`):
+8 sessions, one shared `*Adapter`, gated to fire `Start`+`Stop` concurrently via a closed channel.
+Verified against the pre-fix code first (mutex hunks manually reverted, not committed): failed
+reliably 3/3 runs under `-race` with `WARNING: DATA RACE` on both the `Start` write
+(`adapter.go:198`, `mapaccess2_faststr`/`mapassign`) and the `Stop` delete (`adapter.go:237`,
+`mapassign_faststr`) — the exact two sites the review named. Restored the mutex fix: same test
+passes 3/3 (and 5/5 in an earlier check) under `-race`.
+
+**Fix 2 (blocking) — two ungated env-var overrides in the production daemon binary.**
+`SIMURGH_XBMCP_TEST_COMMAND` and `SIMURGH_TEST_SKIP_PRESSURE` were read unconditionally inside
+`runDaemon()` (`cmd/simurgh/daemon.go`), reachable in the real shipped binary via any process env.
+Extracted both reads into `applyXBMCPTestCommandOverride(adapter *xbmcp.Adapter)` and
+`applyTestSkipPressureOverride(pressureOK func() (bool, string)) func() (bool, string)`, each
+defined twice with the same build-tag split this codebase already uses for `darwin_sim`-gated live
+test files:
+- `cmd/simurgh/xbmcp_test_seams_darwin_sim.go` (`//go:build darwin_sim`) — the real
+  `os.Getenv`-reading implementation.
+- `cmd/simurgh/xbmcp_test_seams_other.go` (`//go:build !darwin_sim`) — pure no-ops; never call
+  `os.Getenv` at all.
+
+`runDaemon()` calls both helpers unconditionally; which file links in is decided purely by the
+build tag. Verified the exclusion three ways, not just by inspection:
+1. `go list -f '{{.GoFiles}}' ./cmd/simurgh` (tagless) lists `xbmcp_test_seams_other.go`;
+   `go list -tags darwin_sim -f '{{.GoFiles}}' ./cmd/simurgh` lists
+   `xbmcp_test_seams_darwin_sim.go` — mutually exclusive, confirmed by direct `go list` output.
+2. Built both binaries (`go build ./cmd/simurgh` and `go build -tags darwin_sim ./cmd/simurgh`)
+   and ran `strings` over each: the tagless binary contains **zero** occurrences of
+   `SIMURGH_XBMCP_TEST_COMMAND` or `SIMURGH_TEST_SKIP_PRESSURE`; the darwin_sim binary contains
+   both. This is binary-level proof, not just source-level.
+3. `cmd/simurgh/integration_xcodebuildmcp_daemon_test.go`'s `buildRealSimurghBinaryForDaemonTest`
+   built its nested test binary via plain `go build -o out .` (no tags) — meaning the B2
+   regression test's own subject binary would have silently no-op'd both seams under the new
+   split. Fixed to `go build -tags darwin_sim -o out .`; confirmed the daemon auto-start path
+   resolves via `os.Executable()` (`internal/ipc/client.go`), i.e. the auto-started daemon really
+   is this same tagged binary, not a separately-resolved system `simurgh`.
+`docs/ARCHITECTURE.md` §14 updated to describe the split and the binary-level verification.
+
+**Fix 3 (major) — lease-not-found error classification regressed.** Added
+`broker.NewLeaseNotFoundError(id string) error` (`internal/broker/errors.go`), a thin exported
+wrapper around the package's existing unexported `leaseNotFound` constructor (previously only
+reachable from inside `internal/broker`), so callers with no `error` to propagate from
+`Broker.Get`'s `(Lease, bool)` return can synthesize the identical typed/structured error the
+broker's own `lease.get` handler already returns. `cmd/simurgh/daemon.go`'s `GetLease` closure now
+returns `broker.NewLeaseNotFoundError(id)` instead of a bare `fmt.Errorf`.
+`internal/daemon/daemon.go`'s `xbmcpErrorToIPC` now checks `errors.As(err, &nf)` for a
+`*broker.LeaseNotFoundError` first and reuses `copyBrokerEnvelope` (the same helper
+`brokerErrorToIPC` uses) before falling into
+the pre-existing message-matching classification — no new error taxonomy invented. Also simplified
+`leaseNotFoundErr` (used by the `lease.get` handler itself) to call the new exported constructor
+instead of duplicating the envelope-construction logic inline. Searched for an existing
+`LeaseNotFoundError`/`ErrLeaseNotFound` before adding anything: `broker.LeaseNotFoundError` was
+already exported and already used by `brokerErrorToIPC`; only a public constructor was missing.
+New tests, both through real daemon-RPC paths (no mocks):
+- `TestXBMCPStartUnknownSessionOverRealIPCReturnsLeaseNotFound` (`internal/daemon/daemon_test.go`):
+  real `*ipc.Server`/Unix-socket pair, `RegisterXcodeBuildMCPHandlers`, an `XBMCPAdapter` wired the
+  same way `cmd/simurgh/daemon.go` wires it; asserts the wire response is `LEASE_NOT_FOUND`.
+- `TestXcodeBuildMCPCLIStartUnknownSessionReturnsLeaseNotFound` (`cmd/simurgh/integration_xcodebuildmcp_test.go`,
+  untagged): builds the real binary, runs it directly (not `go run .` — that always exits 1 on any
+  non-zero child code, confirmed with a throwaway repro, which would have made this test unable to
+  observe `exit(3)`), auto-starts a real daemon against a fresh `SIMURGH_HOME`, calls
+  `integration xcodebuildmcp start --session lease-999999 --json` for a lease that provably cannot
+  exist, asserts exit code 3 and `{"code":"LEASE_NOT_FOUND",...}`.
+Verified against pre-fix code first (GetLease closure and `xbmcpErrorToIPC` manually reverted, not
+committed): both new tests failed as expected — `INTERNAL`/exit 5 — reproducing the exact
+regression described. Restored the fix: both pass.
+
+**Gates (real output, this session, on this branch):**
+- `gofmt -l .`: lists the same three pre-existing-drift files as the prior B2-fix entry
+  (`internal/broker/errors.go`, `internal/integrations/xcodebuildmcp/{bindings,config}.go`);
+  confirmed via `git stash`/re-check that the drift predates this session's changes too (my
+  `NewLeaseNotFoundError` addition to `errors.go` sits outside the misaligned block). Every file
+  actually touched or created this session is independently `gofmt`-clean.
+- `go build ./...`: clean. `go vet ./...`: clean. `go vet -tags darwin_sim ./...`: clean.
+- `go test -race ./... -count=1`: all 18 packages `ok`.
+- `go test -race -tags darwin_sim ./... -count=1`: two unrelated packages I never touched
+  (`internal/ipc`'s `TestDialDaemonSurvivesParentExit`, `internal/provisioner`'s
+  `TestProvisionRealClone`) flaked under full-suite parallelism — real `xcrun simctl` device
+  listing racing across concurrently-running packages on this shared dev host, the same class of
+  bench-machine fragility noted elsewhere in this repo's history. Re-ran each in isolation: both
+  pass standalone. Re-ran the full `-tags darwin_sim` suite with `-p 1` (serialized): all 18
+  packages `ok`, no failures.
+- `go test -race ./internal/integrations/xcodebuildmcp/... -count=1 -v`: 9/9 PASS (8 pre-existing
+  + `TestXcodeBuildMCPStdinHoldersConcurrentAccessRace`).
+- `go test -race ./internal/daemon/... -count=1 -v`: 23/23 PASS (22 pre-existing +
+  `TestXBMCPStartUnknownSessionOverRealIPCReturnsLeaseNotFound`).
+- `go test -race -tags darwin_sim ./cmd/simurgh -run 'TestXcodeBuildMCP|TestIntegrationXcodeBuildMCP' -count=1 -v`:
+  5/5 PASS, including `TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess` (the B2 regression proof,
+  still green with the nested binary now built `-tags darwin_sim`) and both new Fix-3 tests.
+- `go test -race -tags darwin_sim ./internal/integrations/xcodebuildmcp -run TestXcodeBuildMCPRuntimeTwoSessionAttribution -count=1 -v`:
+  PASS, 58.6s, verdict `"composes"` unchanged from the original R-WP6 evidence.
+- No leftover `simurgh-clone[...]`/`simurgh-warm[...]` devices after this session's runs
+  (`xcrun simctl list devices` shows only the pre-existing `simurgh-base[...]` template).
+
+**Still binding:** no merge/push; `feat/r-wp6-xcodebuildmcp` only; B1 fix (`84a0ce7`,
+`safety.ValidateLeasePath` in Stop/Status) untouched — confirmed by spot-check, no diff touches
+those call sites; CLI flags/JSON output shape for `simurgh integration xcodebuildmcp
+start|stop|status` unchanged; no `bench/evidence`/`bench/results` mutation; no
+performance/latency claims; R-WP5 still not started. This fix round has not yet had its own
+independent review pass — a third review should cover this commit before any merge decision.

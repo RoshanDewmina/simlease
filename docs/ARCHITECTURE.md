@@ -417,6 +417,15 @@ reconstructed per call:
   single `Adapter`'s `stdinHolders` map persists for the daemon process's
   actual lifetime, so a child started by one CLI invocation stays owned and
   alive when a later, separate CLI invocation calls `stop` or `status`.
+  `GetLease` returns `broker.NewLeaseNotFoundError` (not a bare
+  `fmt.Errorf`) on an unknown lease, so an unknown-session `start` is
+  classified as `LEASE_NOT_FOUND`/exit 3 — the same broker-typed error the
+  daemon's own `lease.get` handler returns — instead of falling into
+  `xbmcpErrorToIPC`'s message-matching fallback as generic `INTERNAL`/exit 5
+  (second-review Fix 3; regression-tested by
+  `TestXBMCPStartUnknownSessionOverRealIPCReturnsLeaseNotFound` in
+  `internal/daemon` and `TestXcodeBuildMCPCLIStartUnknownSessionReturnsLeaseNotFound`
+  in `cmd/simurgh`).
 - `internal/daemon.RegisterXcodeBuildMCPHandlers` registers
   `integration.xcodebuildmcp.start|stop|status` on the `*ipc.Server`,
   following the exact pattern `RegisterLeaseHandlers` already established
@@ -429,6 +438,18 @@ reconstructed per call:
   with the same `printXBMCPStatus`/`printXBMCPErr`/`printErrorTriple`
   functions as before. The CLI's flags, JSON shape, and error-triple format
   are unchanged; only where the `Status`/error value comes from moved.
+- `Adapter.stdinHolders` is guarded by an unexported `Adapter.stdinMu
+  sync.Mutex` (second-review Fix 1). Before B2, every CLI call got a
+  throwaway `*Adapter`, so this in-process map was never touched by more
+  than one goroutine; after B2, the daemon's single shared `*Adapter` is
+  reached from a goroutine per IPC connection, so concurrent `start`/`stop`
+  calls (different sessions, or the same one) write/read/delete it
+  concurrently. All other `Adapter` fields are set once at construction and
+  only read afterward, so only `stdinHolders` needed a lock.
+  `TestXcodeBuildMCPStdinHoldersConcurrentAccessRace`
+  (`internal/integrations/xcodebuildmcp`) reproduces `WARNING: DATA RACE`
+  reliably on the pre-mutex code under `go test -race` and passes with the
+  mutex in place.
 
 **B2 regression proof (`TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess`,
 `darwin_sim`-tagged, `cmd/simurgh`):** this is the test that would have
@@ -444,8 +465,30 @@ substitutes a fake long-lived child for the real `npx xcodebuildmcp mcp`
 server (mirrors the `Adapter.Command` override the live runtime test below
 already uses), and `SIMURGH_TEST_SKIP_PRESSURE` bypasses the host RAM
 pressure gate (`internal/pressure`), which is unrelated to B2 and was
-otherwise the test's bottleneck on a loaded machine. Both are inert unless
-explicitly set and default to unchanged production behavior.
+otherwise the test's bottleneck on a loaded machine.
+
+**Both env seams are compiled out of the real shipped binary at build time
+(second-review Fix 2).** The first version of this fix read both env vars
+unconditionally inside `runDaemon()` with no gate at all — reachable in the
+real `simurgh daemon run` binary via any process's environment (a detached
+daemon inherits its triggering CLI subprocess's env), not just deliberate
+test harnesses: one substituted an arbitrary binary for XcodeBuildMCP inside
+the lease isolation env, the other silently and permanently disabled the
+pressure gate. The fix follows the same build-tag split this codebase
+already uses for `darwin_sim`-gated live test files: the two env-var reads
+live only in `cmd/simurgh/xbmcp_test_seams_darwin_sim.go`
+(`//go:build darwin_sim`), behind `applyXBMCPTestCommandOverride` and
+`applyTestSkipPressureOverride`; `cmd/simurgh/xbmcp_test_seams_other.go`
+(`//go:build !darwin_sim`) provides pure no-op implementations of the same
+two functions. `runDaemon()` calls both unconditionally; which
+implementation links in is decided purely by the build tag. A tagless
+`go build ./...` — how the real binary ships — links the no-op file, so
+neither env var is ever read in production, regardless of what any calling
+process's environment contains. `TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess`
+now builds its nested test binary with `-tags darwin_sim` explicitly (it
+depends on the real, gated implementation to substitute the fake XcodeBuildMCP
+command and skip the pressure gate); a tagless build of that same test binary
+would silently no-op both seams instead.
 
 **Live runtime validation (`TestXcodeBuildMCPRuntimeTwoSessionAttribution`,
 `darwin_sim`-tagged, real `xcrun simctl` + real `npx xcodebuildmcp`):** two

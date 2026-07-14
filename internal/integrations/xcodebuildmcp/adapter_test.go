@@ -2,10 +2,12 @@ package xcodebuildmcp
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -270,6 +272,90 @@ func TestXcodeBuildMCPStopAndStatusRejectMalformedSessionID(t *testing.T) {
 
 	if _, err := os.ReadFile(victimFile); err != nil {
 		t.Fatalf("victim file outside leases root was modified/removed: %v", err)
+	}
+}
+
+// TestXcodeBuildMCPStdinHoldersConcurrentAccessRace proves stdinHolders is
+// safe for the concurrency shape the daemon actually exercises now that
+// R-WP6 review finding B2 replaced "one throwaway *Adapter per CLI process"
+// with "one long-lived *Adapter shared across every IPC connection/goroutine
+// for the daemon's whole lifetime". Before B2, this map was never touched by
+// more than one goroutine at a time, so the missing mutex was safe by
+// accident; after B2, concurrent Start/Stop calls for different (or the
+// same) sessions race on it. A second independent review reproduced
+// `WARNING: DATA RACE` on both the Start write and the Stop read/delete with
+// a throwaway (deleted) -race repro; this is the permanent version — it must
+// fail under `go test -race` on the pre-mutex code and pass once
+// Adapter.stdinMu guards every stdinHolders access.
+func TestXcodeBuildMCPStdinHoldersConcurrentAccessRace(t *testing.T) {
+	bin := fakeXBMCP(t)
+	root := t.TempDir()
+
+	const sessions = 8
+	ids := make([]string, sessions)
+	leases := make(map[string]broker.Lease, sessions)
+	for i := 0; i < sessions; i++ {
+		// safety.ValidateLeasePath requires ^lease-[0-9]+$ — Stop/Status
+		// reject anything else before ever touching stdinHolders.
+		id := fmt.Sprintf("lease-9%03d", i)
+		ids[i] = id
+		leases[id] = activeLease(id, fmt.Sprintf("AAAAAAAA-0000-0000-0000-%012d", i))
+	}
+	get := func(_ context.Context, id string) (broker.Lease, error) {
+		lease, ok := leases[id]
+		if !ok {
+			return broker.Lease{}, fmt.Errorf("unknown lease %s", id)
+		}
+		return lease, nil
+	}
+
+	// One shared Adapter, as the daemon constructs exactly once at startup —
+	// this is the concurrency shape B2 introduced.
+	a := NewAdapter(root, get)
+	a.Command = []string{bin}
+	a.Version = "test-fake"
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	errs := make(chan string, sessions*2)
+	pids := make(chan int, sessions)
+
+	for _, id := range ids {
+		id := id
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start // release all goroutines at once to maximize overlap
+			st, err := a.Start(context.Background(), id)
+			if err != nil {
+				errs <- fmt.Sprintf("Start(%s): %v", id, err)
+				return
+			}
+			pids <- st.PID
+			if err := a.Stop(context.Background(), id); err != nil {
+				errs <- fmt.Sprintf("Stop(%s): %v", id, err)
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+	close(pids)
+
+	for msg := range errs {
+		t.Error(msg)
+	}
+	// A corrupted stdinHolders map (the pre-fix failure mode) can also
+	// manifest as a lost/duplicated holder entry that leaves a child running
+	// after Stop reports success — check every started child was reaped.
+	deadline := time.Now().Add(3 * time.Second)
+	for pid := range pids {
+		for processAlive(pid) && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if processAlive(pid) {
+			t.Errorf("pid %d still alive after concurrent Stop", pid)
+		}
 	}
 }
 

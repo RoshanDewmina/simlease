@@ -15,6 +15,7 @@ import (
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
 	"github.com/RoshanDewmina/simurgh/internal/controlplane"
+	xbmcp "github.com/RoshanDewmina/simurgh/internal/integrations/xcodebuildmcp"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
 	"github.com/RoshanDewmina/simurgh/internal/provisioner"
 	"github.com/RoshanDewmina/simurgh/internal/reaper"
@@ -707,6 +708,81 @@ func TestRegisterLeaseHandlersWiresMethods(t *testing.T) {
 	if err != nil || !resp.OK {
 		t.Fatalf("acquire over socket: err=%v resp=%+v", err, resp)
 	}
+	_ = conn.Close()
+	cancel()
+	select {
+	case <-errc:
+	case <-time.After(2 * time.Second):
+		t.Fatal("Serve did not exit")
+	}
+}
+
+// TestXBMCPStartUnknownSessionOverRealIPCReturnsLeaseNotFound is the R-WP6
+// second-review Fix 3 regression proof at the handler layer (complementing
+// cmd/simurgh's CLI-level black-box proof of the same fix). It wires
+// integration.xcodebuildmcp.start onto a real *ipc.Server/Unix-socket pair —
+// the actual daemon-RPC path, not a mock — with an XBMCPAdapter whose
+// GetLease closure mirrors cmd/simurgh/daemon.go's production wiring
+// (broker.NewLeaseNotFoundError on an unknown lease, same as this test file
+// exercises for lease.get in TestUnknownLeaseIDReturnsLeaseNotFound). Before
+// the fix, this same wiring's hand-rolled fmt.Errorf produced generic
+// INTERNAL over this exact wire path.
+func TestXBMCPStartUnknownSessionOverRealIPCReturnsLeaseNotFound(t *testing.T) {
+	deps, b, _ := newTestDeps(t, 1)
+	leasesRoot := t.TempDir()
+	deps.LeasesRoot = leasesRoot
+	deps.XBMCPAdapter = xbmcp.NewAdapter(leasesRoot, func(_ context.Context, id string) (broker.Lease, error) {
+		lease, ok := b.Get(id)
+		if !ok {
+			return broker.Lease{}, broker.NewLeaseNotFoundError(id)
+		}
+		return lease, nil
+	})
+
+	// macOS sun_path is ~104 bytes; t.TempDir() paths are often too long.
+	dir, err := os.MkdirTemp("/tmp", "sm-d-xbmcp-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "s.sock")
+	ln, err := ipc.Listen(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	srv := ipc.NewServer(ln)
+	RegisterXcodeBuildMCPHandlers(srv, deps)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Serve(ctx) }()
+
+	conn, err := net.DialTimeout("unix", sock, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	params, _ := json.Marshal(map[string]any{"sessionId": "lease-does-not-exist"})
+	if err := ipc.Encode(conn, ipc.Request{
+		V: ipc.ProtocolVersion, ID: "start", Method: "integration.xcodebuildmcp.start", Params: params,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := ipc.DecodeResponse(conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.OK || resp.Error == nil || resp.Error.Code != broker.CodeLeaseNotFound {
+		t.Fatalf("want LEASE_NOT_FOUND over real IPC, got %+v", resp)
+	}
+	if resp.Error.Fix == "" || resp.Error.Message == "" {
+		t.Fatalf("incomplete error triple: %+v", resp.Error)
+	}
+
 	_ = conn.Close()
 	cancel()
 	select {

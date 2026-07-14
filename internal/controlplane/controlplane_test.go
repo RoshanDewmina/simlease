@@ -1129,3 +1129,66 @@ func TestPhaseInstrumentationCoverage(t *testing.T) {
 		t.Fatal("build alias must share real StartedAt with building state timing")
 	}
 }
+
+func TestRetryResetsInstrumentedPhaseTiming(t *testing.T) {
+	var mu sync.Mutex
+	now := time.Date(2026, 7, 14, 16, 0, 0, 0, time.UTC)
+	cp, err := New(Options{
+		BuildSlots: 1,
+		Broker:     testBroker(t, 1),
+		Clock: func() time.Time {
+			mu.Lock()
+			defer mu.Unlock()
+			return now
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	advance := func() {
+		mu.Lock()
+		now = now.Add(time.Second)
+		mu.Unlock()
+	}
+	ctx := context.Background()
+	session, _ := cp.CreateSession(CreateSessionRequest{Project: "p", Agent: "a"})
+	job, _ := cp.StartJob(session.ID, JobKindBuild)
+
+	for _, state := range []JobState{JobSyncing, JobPreparing, JobBuilding} {
+		advance()
+		if _, err := cp.TransitionJob(ctx, job.ID, state); err != nil {
+			t.Fatal(err)
+		}
+	}
+	advance()
+	failed, err := cp.FailJob(ctx, job.ID, FailureInfrastructure, "retry me")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := failed.Timings.Phases[PhaseBuild]
+	if first.StartedAt.IsZero() || first.EndedAt.IsZero() || first.Duration <= 0 {
+		t.Fatalf("first build timing not closed: %+v", first)
+	}
+
+	for _, state := range []JobState{JobRetrying, JobQueued, JobSyncing, JobPreparing, JobBuilding} {
+		advance()
+		if _, err := cp.TransitionJob(ctx, job.ID, state); err != nil {
+			t.Fatalf("transition %s: %v", state, err)
+		}
+	}
+	retried, err := cp.GetJob(job.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := retried.Timings.Phases[PhaseBuild]
+	stateTiming := retried.Timings.Phases[string(JobBuilding)]
+	if !second.StartedAt.After(first.StartedAt) {
+		t.Fatalf("retry StartedAt=%v must be after first=%v", second.StartedAt, first.StartedAt)
+	}
+	if !second.EndedAt.IsZero() || second.Duration != 0 {
+		t.Fatalf("retry alias retained prior end/duration: %+v", second)
+	}
+	if second != stateTiming {
+		t.Fatalf("alias=%+v state=%+v; retry timing must reset consistently", second, stateTiming)
+	}
+}

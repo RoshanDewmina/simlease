@@ -355,10 +355,9 @@ func (cp *ControlPlane) TransitionJob(ctx context.Context, jobID string, to JobS
 	if from == JobBuilding {
 		j.BuildGrantID = ""
 	}
-	pt := j.Timings.Phases[string(to)]
-	if pt.StartedAt.IsZero() {
-		pt.StartedAt = now
-	}
+	// Entering a state always begins a new attempt. Retry may re-enter an
+	// instrumented state whose prior attempt is already closed.
+	pt := PhaseTiming{StartedAt: now}
 	j.Timings.Phases[string(to)] = pt
 	cp.recordInstrumentedAliasLocked(j, to, pt)
 	out := cloneJob(j)

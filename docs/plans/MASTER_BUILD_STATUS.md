@@ -63,7 +63,7 @@ RELEASED / FAILED / RECLAIMED / CANCELLED never reused.
 | M0–M4 (v0 scaffold) | prior `master` lineage | historical complete |
 | Phase A P0 harness (partial) | `593a051` STOPPED/BLOCKED | not a Phase A pass |
 | **R-WP0** | `0757144` | complete |
-| **R-WP1** | this branch tip (see commits below) | complete |
+| **R-WP1** | `e980e40` broker; `194b0d1` watcher/daemon/live; `ac21244` docs/status (tip) | complete |
 
 ## Open failures/risks
 

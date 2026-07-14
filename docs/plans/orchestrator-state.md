@@ -1,6 +1,6 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 16:35 UTC
+**Updated:** 2026-07-14 16:47 UTC
 **Owner:** Roshan  
 **Orchestrator:** Cursor coder subagent for **R-WP4** (readiness + warm-cache;
 implementation-complete / benchmark-deferred). Phase A remains
@@ -1472,4 +1472,45 @@ time-to-green numbers, new bench/evidence — **unpublished / not run**.
 
 - Next: R-WP5 only after R-WP6 reassessment. No merge/push of R-WP4 from
   this entry alone.
+
+### 2026-07-14 16:47 UTC — bounded R-WP4 review-fix loop complete
+
+- **Warm-key correctness:** omitted/empty `-configuration` now returns typed
+  `WarmSeedKeyIncompleteError`; no invented `Debug`, seed, or publish.
+- **Cross-process serialization:** per-digest filesystem `flock`; shared for
+  complete seed validation+clone and exclusive for unique publish staging +
+  live replacement. No reader can observe delete/partial state. Failure cleans
+  staging; lock acquisition honors context; all descriptors unlock/close.
+- **Readiness:** `FallbackTimeout` defaults to positive
+  `min(primary timeout, 5s)`. Fallback runs under caller-derived context;
+  blocking fallback returns classified `READINESS_TIMEOUT` within bound;
+  caller cancellation remains `context.Canceled`. `WaitBooted` mapping tests
+  added; provision wire remains `BOOT_TIMEOUT`.
+- **Confinement:** existing symlinks (root and cache paths) resolve through the
+  nearest existing parent; missing descendants remain valid only under the
+  resolved root. Default Xcode DerivedData/SwiftPM and symlink escapes reject
+  before creation.
+- **Retry instrumentation:** state re-entry resets phase timing and additive
+  alias consistently for the new attempt.
+- **Review-fix commits:** `25f2926`, `0d07d60`, `0b47e3d`, `42174fc`,
+  `4e500f1`; final status commit is branch tip.
+
+#### Review-fix gates
+
+| Gate | Result |
+|---|---|
+| focused warm-seed 8 | **PASS** 12.236s |
+| cross-process/goroutine stress `-race -count=3` | **PASS** 34.282s |
+| focused isolator 4 | **PASS** 1.981s |
+| focused readiness/provisioner | **PASS** 1.708s |
+| focused controlplane 5 | **PASS** 1.695s |
+| build / vet / full race | **PASS**; 17 packages |
+| capacity named 8 | **PASS** 1.226s |
+| detach 30s | **PASS** 33.51s; PID **4277** |
+| live reuse | **PASS** 2.67s; package 3.887s |
+
+- **Benchmark-deferred preserved:** no driver, `BENCH_START_AT`, B1/B2/B4/B5/B6
+  timed cell, XcodeBuildMCP composition, `bench/results`/`bench/evidence`
+  mutation, or performance claim.
+- No merge, push, R-WP5, or review dispatch.
 

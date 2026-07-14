@@ -1,6 +1,6 @@
 # Simurgh Master Build Status
 
-**Updated:** 2026-07-14 16:35 UTC (America/Toronto 12:35 EDT)
+**Updated:** 2026-07-14 16:47 UTC (America/Toronto 12:47 EDT)
 **Roadmap naming:** Phase B packages use `R-WP*` (not Phase A `P0-*` / harness `WP*`).
 **Package state:** **R-WP4 implementation-complete / benchmark-deferred**
 
@@ -84,14 +84,22 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 | `1d51667` | feat(controlplane): additive acquire/build/install/launch/test/capture timings |
 | `36e1943` | docs(plans): record R-WP4 implementation-complete / benchmark-deferred |
 | `6c1277e` | docs(plans): pin R-WP4 tip SHA in MASTER_BUILD_STATUS |
+| `4133a4b` | docs(plans): finalize pre-review R-WP4 status |
+| `25f2926` | fix(warm-seed): require complete keys and serialize seed replacement |
+| `0d07d60` | fix(provisioner): bound fallback probes and preserve cancellation |
+| `0b47e3d` | fix(isolator): resolve symlinks before cache confinement |
+| `42174fc` | fix(controlplane): reset phase timings on retry attempts |
+| `4e500f1` | test(warm-seed): stress cross-process publish and seed locking |
+| *(final status commit is branch tip)* | docs(plans): close bounded R-WP4 review-fix loop |
 
 ### Public symbols / dependents
 
 | Symbol | Dependents |
 |---|---|
-| `WarmSeedKey` / `SeedWarmDerivedData` / `PublishWarmSeed` | `cmd/simurgh` `runExec` (`env.go`) |
+| `WarmSeedKey` / `WarmSeedKeyIncompleteError` | `BuildWarmSeedKeyFromArgv`; `cmd/simurgh` `runExec` |
+| `SeedWarmDerivedData` / `PublishWarmSeedContext` / per-digest lock | `cmd/simurgh` `runExec`; cross-process stress helper |
 | `ValidateWritableCachesUnderLeaseRoot` | `EnsureLeaseDir`; isolator tests |
-| `PollReadiness` / `ReadinessTimeoutError` | `execSimctlClient.WaitBooted`; `Provisioner.Provision` |
+| `PollReadiness` / `FallbackTimeout` / `ReadinessTimeoutError` | `execSimctlClient.WaitBooted`; `Provisioner.Provision` |
 | `InstrumentedPhases` / aliases | `ControlPlane.TransitionJob` / `endPhaseLocked` |
 
 ### Model notes (R-WP4)
@@ -101,6 +109,47 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 - No public session/job CLI/RPC added.
 - Broker capacity/reuse identity untouched.
 - **No performance claims** from this package.
+
+### Single bounded R-WP4 review-fix loop
+
+All blocking/major/minor/nit findings were addressed with tests:
+
+1. `BuildWarmSeedKeyFromArgv` returns typed
+   `WarmSeedKeyIncompleteError` for missing/empty configuration and other
+   required dimensions. Omitted config never aliases explicit `Debug`; both
+   seed and publish cold-skip.
+2. Per-digest BSD `flock`: seed holds shared lock for validation+clone;
+   publish holds exclusive lock for unique staging + live replacement.
+   Replacement moves the old complete tree aside under lock, atomically
+   renames the staged tree live, then removes backup. Context cancellation
+   while acquiring a lock is returned; descriptors unlock/close on every exit.
+3. `FallbackTimeout` bounds fallback probes (default
+   `min(primary timeout, 5s)`, positive). Fallback context derives from caller;
+   blocking/ignoring fallback is still bounded and classified
+   `READINESS_TIMEOUT`; caller `context.Canceled` remains distinguishable.
+4. Cache confinement resolves symlinks through nearest existing ancestors,
+   including root; not-yet-created descendants remain supported. Symlink
+   escapes and default Xcode DerivedData/SwiftPM paths are rejected before
+   directory creation.
+5. Retried instrumented phases reset start/end/duration and aliases together.
+6. `WaitBooted` timeout/cancel mapping is tested; `Provision` retains the
+   existing `BOOT_TIMEOUT` error contract with the dead duplicate branch
+   removed.
+
+#### Review-fix gate proof
+
+| Gate | Result |
+|---|---|
+| focused warm-seed 8 tests | **PASS** 12.236s |
+| cross-process/goroutine stress `-race -count=3` | **PASS** 34.282s |
+| focused isolator 4 tests | **PASS** 1.981s |
+| focused readiness/provisioner tests | **PASS** 1.708s |
+| focused controlplane 5 tests | **PASS** 1.695s |
+| `go build ./...` / `go vet ./...` | **PASS** |
+| `go test -race ./...` | **PASS** 17 packages; cmd 10.839s |
+| capacity named 8 | **PASS** 1.226s |
+| detach 30s | **PASS** 33.51s; PID **4277** stable |
+| live `darwin_sim` reuse | **PASS** test 2.67s, package 3.887s |
 
 ## Completed packages
 
@@ -112,7 +161,7 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 | **R-WP1** | tip `e948d26` | complete |
 | **R-WP2** | tip `23c2dce` | complete |
 | **R-WP3** | tip `b811736` | complete |
-| **R-WP4** | tip `6c1277e` on `feat/r-wp4-readiness-cache` | **implementation-complete / benchmark-deferred** |
+| **R-WP4** | review-fix code tip `4e500f1`; final status commit is branch tip | **implementation-complete / benchmark-deferred** |
 
 ## Open failures/risks
 

@@ -46,14 +46,14 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 ### Matching key (documented)
 
 Reuse matches **ACTIVE** (renew) or in-flight **PROVISIONING** (concurrent attach) when:
-`DeviceSpec` + exact `Labels` + `Owner.Agent` + `Owner.SessionID` are equal.
+`DeviceSpec` + exact `Labels` + non-empty `Owner.Agent` + non-empty `Owner.SessionID` are equal.
 PID/PPID excluded. Project/Xcode/scheme are **not** first-class — encode in Labels.
 RELEASED / FAILED / RECLAIMED / CANCELLED never reused.
 
 ### QUEUED liveness (R-WP1)
 
 - Cancelled `Acquire(Wait=true)` → `ACQUIRE_CANCELLED` + QUEUED→CANCELLED (persisted).
-- Watcher always checks QUEUED owner PID; dead → Release→CANCELLED via ReclaimLoop.
+- Watcher always checks QUEUED owner PID; dead → atomic `CancelQueued` via ReclaimLoop.
 - Wait RPC cancel does **not** cancel another client's QUEUED lease.
 
 ## Completed packages
@@ -63,7 +63,7 @@ RELEASED / FAILED / RECLAIMED / CANCELLED never reused.
 | M0–M4 (v0 scaffold) | prior `master` lineage | historical complete |
 | Phase A P0 harness (partial) | `593a051` STOPPED/BLOCKED | not a Phase A pass |
 | **R-WP0** | `0757144` | complete |
-| **R-WP1** | `e980e40` broker; `194b0d1` watcher/daemon/live; `ac21244`+`ef1d4bb` docs/status (tip `ef1d4bb`) | complete |
+| **R-WP1** | original tip `7ed0197`; review fixes `5699780` code/tests + `b9ce49a` docs | complete |
 
 ## Open failures/risks
 
@@ -99,3 +99,37 @@ composition) remain unmet. Do not restart benchmarks unless owner directs.
   daemon-dies-with-parent Setsid/detach acceptance obligation above.
 - Do **not** merge/push R-WP1 from this package alone.
 - Gate R-WP5 behind R-WP6 reassessment (owner correction #3).
+
+## R-WP1 bounded review-fix loop (2026-07-14 14:49 UTC)
+
+All four blocking reviewer findings addressed:
+
+1. **Identity:** reuse now requires both non-empty `Owner.Agent` and
+   `Owner.SessionID`; missing identity is a no-match/new allocation. CLI honors
+   `SIMURGH_SESSION_ID`, else `parent-pid:<PPID>`; MCP honors the variable, else
+   `mcp-pid:<PID>`. Raw IPC omission cannot reuse.
+2. **Queued-owner race:** public `Broker.CancelQueued` performs an atomic
+   QUEUED→CANCELLED transition. A stale `"queued owner process exited"` decision
+   after promotion is skipped and never falls through to Reclaim/reaper.
+3. **Observable outcome:** acquire response wrappers include top-level
+   `reused`; true for ACTIVE renewal or PROVISIONING attach, false for new.
+   CLI human/JSON and MCP structured results surface it.
+4. **Docs:** ACTIVE renewal and PROVISIONING attach are both documented,
+   including identity requirements and stable path fallbacks.
+
+### Review-fix commits
+
+- `5699780` — identity, reused boundary, atomic stale-decision fix, tests.
+- `b9ce49a` — CLI/MCP/API documentation corrections.
+
+### Exact review-fix gates
+
+| Command | Result |
+|---|---|
+| `go test -race ./internal/broker/... ./internal/watcher/... ./internal/daemon/... ./internal/mcp/... ./cmd/simurgh/...` | **PASS**, exit 0 |
+| `go build ./...` | **PASS**, exit 0 |
+| `go vet ./...` | **PASS**, exit 0 |
+| `go test -race ./...` | **PASS**, exit 0 (16 packages) |
+| `go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v` | **PASS**, exit 0; `TestReuseIfExistsLive` 7.24s, package 8.458s |
+
+R-WP2 was not started. Its daemon-parent-shell obligation remains unchanged.

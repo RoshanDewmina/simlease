@@ -1149,3 +1149,34 @@ P1-7 warm-DD on Lancer: **MET** (above). P1-6 B5 dual-window / late-acquire meas
 | isolator paths (unchanged API; same lease ID) | daemon `withIsolationEnv` / live smoke |
 
 - **Do not** merge/push R-WP1 or start R-WP2 from this entry alone without orchestrator dispatch.
+
+### 2026-07-14 14:49 UTC — R-WP1 bounded review-fix loop complete
+
+- **Commits:** `5699780` code/tests; `b9ce49a` docs.
+- **Identity correction:** `reuseCompatible` now requires non-empty Agent and
+  SessionID on request and candidate, plus exact Spec/Labels. Anonymous raw IPC
+  calls are no-match/new. CLI session is explicit `SIMURGH_SESSION_ID` or stable
+  parent PID; MCP session is explicit env or stable MCP process PID.
+- **Outcome correction:** transient `Lease.Reused` feeds top-level IPC `reused`;
+  CLI human/JSON and MCP structured output expose true for ACTIVE renewal and
+  PROVISIONING attach, false for new.
+- **Race correction:** `Broker.CancelQueued` atomically validates QUEUED and
+  cancels. `ReclaimLoop` handles `"queued owner process exited"` only through
+  that method; promotion makes the decision stale and it is skipped without
+  Reclaim/reaper. Deterministic promotion-before-apply test is green.
+- **Coverage:** unrelated missing/default identities do not reuse; same explicit
+  session does; raw IPC omission does not reuse; CLI/MCP explicit + stable
+  fallback identities; IPC/CLI/MCP reused visibility; live smoke asserts false
+  then true.
+
+#### Exact post-fix gates
+
+| Command | Result |
+|---|---|
+| `go test -race ./internal/broker/... ./internal/watcher/... ./internal/daemon/... ./internal/mcp/... ./cmd/simurgh/...` | exit 0 |
+| `go build ./...` | exit 0 |
+| `go vet ./...` | exit 0 |
+| `go test -race ./...` | exit 0 (16 packages) |
+| `go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v` | PASS; test 7.24s, package 8.458s |
+
+- R-WP2 not started; existing daemon-parent-shell acceptance obligation remains.

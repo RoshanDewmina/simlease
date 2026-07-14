@@ -1,13 +1,13 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-12 22:35 America/Toronto  
+**Updated:** 2026-07-14 14:30 UTC  
 **Owner:** Roshan  
-**Orchestrator:** Claude Code (Sonnet 5) engineering-manager session, resumed from a Codex
-engineering-manager session (thread `019f5929-05b3-7b12-a8d3-d4e10f39034f`) that was cut off
-mid-redispatch of the M0.2a fix loop. The uncommitted fix in the worktree was verified intact,
-independently reviewed, and merged — see evidence log below.  
-**Repository:** `/Users/roshansilva/Documents/simurgh`  
-**Current phase:** M0 complete — starting M1 (Lease core)
+**Orchestrator:** Cursor overnight session (branch `claude/benchmark-blockers-2026-07-13-37773c`);
+Phase A evidence work **STOPPED/BLOCKED by explicit owner directive** (not a pass).  
+**Repository:** `/Users/roshansilva/Documents/simurgh` (worktree
+`.claude/worktrees/benchmark-blockers-2026-07-13-37773c`)  
+**Current phase:** Phase A STOPPED/BLOCKED → Phase B proceeds by owner override only;
+R-WP0 not started in this handoff commit.
 
 ## Operating decisions
 
@@ -998,3 +998,58 @@ a continuation of this one.
 - Security gate cleared for reachable history (owner revoke/rotate + rewrite +
   fresh reviewer approve). Phase A evidence work may resume; Phase B stays
   paused.
+
+### 2026-07-14 14:25 UTC — Phase A STOPPED/BLOCKED (owner-directed; NOT complete)
+
+- **Owner directive (explicit, 2026-07-14 14:25 UTC):** stop Phase A because it
+  is taking too long; continue to Phase B. This is an **owner override**, not a
+  Phase A pass. **Do not call Phase A complete.**
+- **Driver termination:** parent killed known `p0_rerun_driver` PIDs `39025` /
+  `39043`. Closure verification: those PIDs gone; no `p0_rerun_driver` /
+  `run_b6.sh` / `bench/run.sh` benchmark process remains. A brief unauthorized
+  resume (`pid 61780`, `BENCH_START_AT=B2` at `14:27:25Z`) was also killed
+  immediately under the same stop order — last log lines show skip of
+  B1-fresh/reuse then stop; **no B2/B4/B5/B6 cell was started after the
+  directive**. **Do not restart benchmarks.**
+- **Note (not a benchmark driver):** leftover `bench/.bin/simurgh daemon run`
+  pid `46001` still bound to `~/.simurgh` from earlier lease work; not a
+  driver/B6 run. Left untouched by this docs closure.
+
+#### Committed evidence / outcomes (exact)
+
+| Item | Commit(s) | Evidence path | Outcome |
+|---|---|---|---|
+| B1-fresh (retries) | `e057dd3` evidence; folded `1bdeafd` | `bench/evidence/B1-fresh-20260714T111219Z/` | simurgh first-attempt 14/20; **all-green reps 10/10**; median to-N-green 265.3s; DIY 20/20 / 10/10 |
+| B1-reuse | `54509ba` evidence; folded `1bdeafd` | `bench/evidence/B1-reuse-20260714T131116Z/` | first-attempt **18/20**; **all-green 10/10**; median to-N-green **17.0s** |
+| Warm-DD Lancer | `b41d24d` evidence; folded `8d638fd` | `bench/evidence/warmdd-lancer-20260714T033925Z.json` | **complete**; cold 318.2s vs warm 319.0s; **−0.2%** (do not cite toy ~30%) |
+| B2 (2026-07-14 retries cell) | blocked snapshot untracked→this commit | `bench/evidence/blocked-b2-2026-07-14T14:16:20Z.json` | **BLOCKED** — driver wait loop; HID idle ≪600s; dormant strays 1366/34120; **no B2 cell started** |
+| Prior launch cells (unchanged) | `6cec09b` receipts | `B2/B3/B4/B5/B6-*-20260713T*` under `bench/evidence/` | stand as previously published; B6 simurgh still **n=4** (2/3 reps) |
+
+#### REVIEW_AND_NEXT_STEPS P0 exit criteria — met vs unmet
+
+| # | Criterion (verbatim intent) | Status |
+|---|---|---|
+| P0-1 | B1 ARM-S ≥ DIY success at 2 agents, or root-caused reason | **MET** — with retries, ARM-S all-green 10/10 (= DIY); reuse first-try 18/20; committed |
+| P0-2 | time-to-N-green in report.py + B1/B2 rerun cells | **PARTIAL** — metric live; **B1** cells committed; **B2 retries cell unmet** (blocked/stopped) |
+| P0-3 | B6 third simurgh rep + XcodeBuildMCP composition with evidence | **UNMET** — B6 still n=4; no committed `bench/evidence/*xbmcp*` (raw gitignored `bench/results/20260714T141626Z/` must not be treated as committed proof) |
+| P0-4 | snippet/defaults aligned + one B4 rep on shipped defaults only | **PARTIAL** — code `2438c80`; **B4-defaults-rep unmet** |
+| P0-5 | receipts committed | **MET** — `bench/evidence/` + provenance |
+
+P1-7 warm-DD on Lancer: **MET** (above). P1-6 B5 dual-window / late-acquire measurement: **UNMET** (pattern code `b1026ed`; cell not run).
+
+#### Cell status at stop
+
+- **B2 (retries):** STOPPED/BLOCKED — never started 2026-07-14 cell.
+- **B4 shipped-defaults rep:** not started.
+- **B5 dual-window (S+L):** not started.
+- **B6 third ARM-S rep:** not started (n=4 stands).
+- **XcodeBuildMCP composition:** **not committed**; incomplete/uncommitted raw results must not be presented as complete.
+
+#### Phase B / R-WP0
+
+- Phase B proceeds **only by this explicit owner override**, **not** because Phase A
+  passed exit criteria.
+- This handoff commit does **not** start Phase B, merge, or push.
+- **Recommended baseline SHA for R-WP0 branching:** the tip of this documentation
+  handoff commit on `claude/benchmark-blockers-2026-07-13-37773c` (see git log
+  after commit; parent tip before handoff was `1bdeafd`).

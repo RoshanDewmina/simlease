@@ -505,13 +505,14 @@ longer substring-matches `xcodebuildmcp` (P2-10).
 
 ## What remains blocked, and why (recorded, not smoothed)
 
-Every timed cell (B1 fresh/reuse, B2, B4 shipped-defaults rep, B5 dual-window,
-B6 third ARM-S rep, XcodeBuildMCP composition check) is
-queued behind a quiet-machine driver (`bench/p0_rerun_driver.sh`) because the
-machine never met the plan's ground rule 4 during the evening session that
-queued them. **P1-7 warm-DD on Lancer is no longer in that queue** — measured
-2026-07-14 (see Feature section above; `-0.2%`). Remaining blockers as of the
-original queue:
+**As of owner stop 2026-07-14 14:25 UTC:** Phase A is STOPPED/BLOCKED by
+directive (not a pass). Remaining unmet timed cells are B2-retries,
+B4-defaults-rep, B5 dual-window, B6 third ARM-S rep, and committed
+XcodeBuildMCP evidence — see Phase A addendum. Warm-DD on Lancer is done
+(`warmdd-lancer-20260714T033925Z`, −0.2%).
+
+Earlier queue context (evening of 2026-07-13 / morning of 2026-07-14), kept for
+provenance of why the quiet-machine driver existed:
 
 - **No restart happened** (booted 08:34, before the original bench window) —
   verified via `kern.boottime`, not assumed.
@@ -535,22 +536,26 @@ cells if you disagree. Broken reps, if any, stay logged broken.
 |---|---|
 | 4 agents, 100% vs 15%, zero incidents, install_clobber evidence (B2) | ✅ receipts committed |
 | Agents screenshot each other's app without isolation (PNGs) | ✅ receipts committed |
-| Crash cleanup: DIY orphans 5/5, Simurgh reclaims (B4) | ✅ defaults aligned in code; ⏳ one shipped-defaults rep pending machine |
+| Crash cleanup: DIY orphans 5/5, Simurgh reclaims (B4) | ✅ defaults aligned in code; ❌ shipped-defaults confirming rep unmet at Phase A stop |
 | Dogfooding found+fixed real queue-stuck bug (Bug 1) | ✅ |
 | Honest solo overhead ~41s with decomposition (B3) | ✅ table above |
 | Warm-DD on real Lancer | ✅ measured −0.2% (`warmdd-lancer-20260714T033925Z`) — do not cite toy ~30% |
 | Zero collisions at 2 agents (B1) | ✅ **with retries / reuse**: all-green reps 10/10 (= DIY) in both fresh and reuse; first-attempt fresh 14/20, reuse 18/20. See Phase A addendum. |
 | Time-to-green comparison (B1) | ✅ metric live in `B1-fresh-20260714T111219Z` / `B1-reuse-20260714T131116Z` summaries |
-| Queueing beats thrash (B5) | ⏳ late-acquire pattern implemented, rerun queued |
-| Works on our real app (B6) | ⏳ n=4 stands; third rep + XcodeBuildMCP check queued |
+| Queueing beats thrash (B5) | ❌ unmet at Phase A stop — late-acquire code exists; dual-window cell not run |
+| Works on our real app (B6) | ❌ unmet at Phase A stop — n=4 stands; third rep + committed XcodeBuildMCP evidence absent |
 
 ---
 
-# Phase A addendum — 2026-07-14 (partial; cells still running)
+# Phase A addendum — 2026-07-14 (STOPPED/BLOCKED — owner-directed; NOT complete)
 
-Worktree tip advancing on `claude/benchmark-blockers-2026-07-13-37773c`. Security
-gate cleared for reachable history before resume. Driver relaunch
-`2026-07-14T11:08:02Z` / durable job from `11:11:16Z`.
+Worktree tip on `claude/benchmark-blockers-2026-07-13-37773c`. Security gate
+cleared for reachable history before resume. Driver relaunch
+`2026-07-14T11:08:02Z` / durable job from `11:11:16Z`. **Owner directive
+2026-07-14 14:25 UTC: stop Phase A (too long) and continue to Phase B.** Phase A
+is **STOPPED/BLOCKED by owner override**, not passed. Drivers `39025`/`39043`
+terminated; no benchmark driver remains. See
+`docs/plans/orchestrator-state.md` (2026-07-14 14:25 UTC entry).
 
 ## B1-fresh (`bench/evidence/B1-fresh-20260714T111219Z/`)
 
@@ -578,9 +583,15 @@ median-to-green and nearly matches DIY first-try rate. This is the recommended
 agent pattern; fresh-clone churn is real cost, not "shared CoreSimulator
 contention" as a unique Simurgh failure mode.
 
-## Still queued behind quiet-machine driver
+## Uncompleted at owner stop (2026-07-14 14:25 UTC) — not fabricated
 
-B2 (retries), B4 shipped-defaults rep, B5 dual-window (S+L), then separately:
-B6 third ARM-S rep (foreground one-rep), XcodeBuildMCP composition check.
-Driver currently waits on HID idle ≥600s between cells while the owner is
-active.
+| Cell | Status | Notes |
+|---|---|---|
+| B2 retries (2026-07-14) | **STOPPED/BLOCKED** | Never started; wait-loop evidence `bench/evidence/blocked-b2-2026-07-14T14:16:20Z.json` (driver pid 39043, idle ≪600s). Prior B2 `B2-20260713T171721Z` still the publishable cell. |
+| B4 shipped-defaults rep | **not started** | Defaults code landed (`2438c80`); confirming rep unmet. |
+| B5 dual-window (S+L) | **not started** | Late-acquire arm `L` landed (`b1026ed`); measurement unmet. |
+| B6 third ARM-S rep | **not started** | Simurgh still **n=4** from 2026-07-13 evidence. |
+| XcodeBuildMCP composition | **not committed** | No `bench/evidence/*xbmcp*`. Do not treat gitignored `bench/results/20260714T141626Z/` as committed proof. |
+
+Phase B may proceed only by the explicit owner override above — **not** because
+Phase A exit criteria all passed.

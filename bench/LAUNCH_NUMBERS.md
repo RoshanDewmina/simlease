@@ -47,7 +47,11 @@ of RESULTS.md v2.
    Source: `bench/evidence/warmdd-lancer-20260714T033925Z.json`.
 
 **Do not publish yet:** any B5 throughput claim, any "we build our own app
-with it" B6 claim (n=4 + incomplete XcodeBuildMCP), any B2 time-to-green
-until the 2026-07-14 B2 cell with `--retries` lands. B1 zero-collision /
-time-to-green claims are publishable from the fresh+reuse evidence above
-(all-green 10/10; cite reuse for the recommended pattern).
+with it" B6 claim (n=4; third rep + committed XcodeBuildMCP evidence absent),
+any B2 time-to-green until a 2026-07-14 B2 cell with `--retries` lands
+(blocked/stopped — see `blocked-b2-2026-07-14T14:16:20Z.json`). B1
+zero-collision / time-to-green claims are publishable from the fresh+reuse
+evidence above (all-green 10/10; cite reuse for the recommended pattern).
+
+**Phase A status:** STOPPED/BLOCKED by owner directive 2026-07-14 14:25 UTC —
+not complete. Phase B proceeds by owner override only.

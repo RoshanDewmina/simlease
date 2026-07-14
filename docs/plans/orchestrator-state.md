@@ -1,6 +1,6 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 16:01 UTC
+**Updated:** 2026-07-14 16:14 UTC
 **Owner:** Roshan  
 **Orchestrator:** Cursor coder subagent for **R-WP3** (session/job + build slots);
 Phase A remains **STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B
@@ -1376,4 +1376,46 @@ passed: mcp 1.263s; daemon 1.260s; ipc 1.214s; broker 1.221s; cmd 1.237s.
 | `BuildSlotsFromEnv` | `cmd/simurgh` daemon startup |
 
 - No R-WP4, merge, push, or review dispatch occurred.
+
+### 2026-07-14 16:14 UTC — final orchestrator-escalated R-WP3 resolution
+
+- **Atomic terminal claim:** Cancel/Fail validate under `cp.mu`, commit terminal
+  state/timings/generation, snapshot owned IDs, then unlock for cleanup.
+  installing→launching cannot win once the terminal state is visible.
+- **Retained cleanup ownership:** terminal jobs retain exact build/device IDs
+  until release succeeds. Same-terminal idempotent calls retry retained cleanup;
+  cleanup clears only matching IDs at the same terminal generation.
+- **Promoted waiter ownership:** Wait=true waiters remain tracked with exact
+  promoted grant ID after FIFO removal. Context cancellation atomically removes
+  a queued waiter or releases its promoted grant and advances the next FIFO
+  waiter. Wait=false remains non-enqueueing.
+- **Commit:** `f49a258`.
+
+#### Escalated deterministic proofs
+
+| Test / gate | Result |
+|---|---|
+| `TestTerminalClaimBeatsInstallingToLaunching` (Cancel + Fail) | **PASS** |
+| `TestIdempotentTerminalCallRetriesRetainedCleanup` | **PASS** |
+| `TestPromotedBuildWaiterCancellationReleasesGrantAndPromotesNext` | **PASS** |
+| `TestBuildWaiterPromotionCancelRaceDoesNotStrandSlot` | **PASS** |
+| focused four tests `-race -count=50` | **PASS** 1.412s |
+| original named 7-test gate | **PASS** 1.149s |
+| `go build ./...` / `go vet ./...` | **PASS** |
+| `go test -race ./...` | **PASS** 17 packages |
+| package regressions broker/ipc/daemon/mcp/cmd | **PASS** |
+| R-WP2 capacity regex | **PASS** 8 tests, 1.124s |
+| detach 30s | **PASS** PID **39686**, 32.53s |
+| R-WP1 live reuse | **PASS** test 2.62s, package 3.753s |
+
+#### Final changed symbols
+
+| Symbol | Integration dependents |
+|---|---|
+| `ControlPlane.FailJob` / `CancelJob` | terminal race, ownership, retry cleanup tests |
+| `ControlPlane.cleanupTerminal` | exact broker lease + build grant release paths |
+| `buildScheduler.acquire` / `cancelWaiter` | `AcquireBuildSlot`, terminal cleanup |
+| `buildScheduler.promoteLocked` / `takePromoted` | Wait=true FIFO handoff |
+
+- Per owner: no third review or dispatch. No R-WP4, merge, or push.
 

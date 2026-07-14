@@ -153,6 +153,9 @@ additively expose `buildSlots`, `activeBuilds`, and `queuedBuilds`.
 Only `Wait:true` creates a FIFO build waiter counted by `queuedBuilds`.
 `Wait:false` returns structured `BUILD_QUEUED` / `build_slot` retry metadata
 without leaving a waiter and can never consume a later-freed slot.
+A waiter remains scheduler-owned after FIFO promotion until its caller accepts
+the exact grant. If context cancellation wins that ready/cancel race, the
+scheduler atomically releases that promoted grant and advances the next waiter.
 
 Session / Job / Worker / Workspace / Artifact / Event types and the job FSM
 (`queued` → … → `succeeded`, plus `failed` / `cancelled` / `orphaned` /
@@ -163,11 +166,13 @@ only during device phases (`waiting_for_device` … `testing`).
 Worker and Artifact are intentionally domain types only in R-WP3; lifecycle
 and persistence arrive in their roadmap packages rather than speculative APIs.
 
-Job state/resource mutations use a private generation check. Device acquisition
-commits state and timings atomically under the control-plane lock; if cancel,
-fail, or another transition wins while acquisition is unlocked, only the newly
-acquired lease is released and winner state/timings remain unchanged. Retry
-edges are exactly `failed → retrying → queued`.
+Job state/resource mutations use a private generation check. Cancel/Fail claim
+their terminal state and timings under the control-plane lock before cleanup;
+they then release only the snapshotted resource IDs. IDs remain on the terminal
+Job until exact release succeeds, so an idempotent terminal call can retry
+cleanup. Device acquisition also commits atomically; a losing acquisition race
+releases only its newly acquired lease. Retry edges are exactly
+`failed → retrying → queued`.
 
 `pool.status` exposes `capacity`, `perSpecCapacity`,
 `maxProvisioningOperations`, `buildSlots`, `activeBuilds`, and `queuedBuilds`

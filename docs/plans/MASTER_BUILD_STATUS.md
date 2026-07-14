@@ -1,6 +1,6 @@
 # Simurgh Master Build Status
 
-**Updated:** 2026-07-14 16:01 UTC (America/Toronto 12:01 EDT)
+**Updated:** 2026-07-14 16:14 UTC (America/Toronto 12:14 EDT)
 **Roadmap naming:** Phase B packages use `R-WP*` (not Phase A `P0-*` / harness `WP*`).
 
 ## Baseline
@@ -24,6 +24,7 @@
 ```bash
 go test -race ./internal/controlplane/... -run 'TestBuildProceedsWhileSimulatorFull|TestDeviceHeldOnlyDuringDevicePhase|TestCancelReleasesOnlyOwnedResources|TestJobStateTransitionsRejectInvalid|TestBuildSlotQueueMetadata|TestJobRetryClassification|TestPhaseAndQueueTimings' -count=1 -v
 go test -race ./internal/controlplane/... -run 'TestTransitionCancelDuringDeviceAcquireCleansLease|TestFailCancelAndSucceedRacesPreserveTerminalWinner|TestCancelFailedJobIsRejectedWithoutMutation|TestJobStateTransitionMatrixExhaustive|TestWaitFalseBuildQueueDoesNotConsumeFutureSlot|TestBuildSlotsFromEnv' -count=1 -v
+go test -race ./internal/controlplane/... -run 'TestTerminalClaimBeatsInstallingToLaunching|TestIdempotentTerminalCallRetriesRetainedCleanup|TestPromotedBuildWaiterCancellationReleasesGrantAndPromotesNext|TestBuildWaiterPromotionCancelRaceDoesNotStrandSlot' -count=50
 go build ./...
 go vet ./...
 go test -race ./...
@@ -37,15 +38,16 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 
 | Gate | Result |
 |---|---|
-| controlplane named tests (7), post-fix | **PASS** exit 0 — package 1.289s |
+| controlplane named tests (7), final | **PASS** exit 0 — package 1.149s |
 | review race/FSM/Wait=false/env tests (6) | **PASS** exit 0 — package 1.160s |
+| escalated terminal/waiter tests (4) | **PASS** exit 0 — 1.123s; `-count=50` 1.412s |
 | `go build ./...` | **PASS** exit 0 |
 | `go vet ./...` | **PASS** exit 0 |
 | `go test -race ./...` | **PASS** exit 0 (**17** packages) |
 | package race (broker/ipc/daemon/mcp/cmd) | **PASS** exit 0 |
 | capacity named tests | **PASS** exit 0 — all 8 matching tests |
-| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.58s**; daemon **PID 15735** stable ≥30s |
-| `TestReuseIfExistsLive` (`darwin_sim`) | **PASS** exit 0 — test 2.37s, package 3.515s |
+| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.53s**; daemon **PID 39686** stable ≥30s |
+| `TestReuseIfExistsLive` (`darwin_sim`) | **PASS** exit 0 — test 2.62s, package 3.753s |
 
 ### Behavioral proof (R-WP3)
 
@@ -65,7 +67,9 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 | `d1c789f` | feat(daemon): surface build slot status on pool.status |
 | `0f28d7a` | docs: record R-WP3 build slots and session/job handoff |
 | `4050a5e` | fix(controlplane): make job transitions race-safe |
-| *(status tip)* | docs: record bounded R-WP3 review-fix gates |
+| `292cda9` | docs(plans): record bounded R-WP3 review-fix gates |
+| `f49a258` | fix(controlplane): atomically claim terminal resources |
+| *(status tip)* | docs(plans): record escalated R-WP3 integration resolution |
 
 ### Model notes (R-WP3)
 
@@ -101,6 +105,28 @@ go test -race ./internal/controlplane -run \
   'TestTransitionCancelDuringDeviceAcquireCleansLease|TestFailCancelAndSucceedRacesPreserveTerminalWinner|TestWaitFalseBuildQueueDoesNotConsumeFutureSlot|TestCancelFailedJobIsRejectedWithoutMutation' \
   -count=50
 PASS — package 1.323s
+```
+
+### Final orchestrator-escalated integration resolution
+
+1. `CancelJob` / `FailJob` now claim terminal state, phase timings, and a new
+   generation while holding `cp.mu`, before any resource release.
+2. Exact `BuildGrantID` / `DeviceLeaseID` snapshots remain on the terminal Job
+   until each release succeeds. An idempotent same-terminal call retries retained
+   cleanup ownership; stale operations cannot release a winner's later resource.
+3. Deterministic installing→launching versus Cancel/Fail tests block terminal
+   cleanup and prove the transition cannot win after the atomic terminal claim.
+4. A promoted Wait=true waiter remains tracked outside the FIFO with its exact
+   grant ID. Context cancellation atomically removes a queued waiter or releases
+   its promoted grant and advances the next waiter.
+
+Final race proof:
+
+```text
+go test -race ./internal/controlplane/... -run \
+  'TestTerminalClaimBeatsInstallingToLaunching|TestIdempotentTerminalCallRetriesRetainedCleanup|TestPromotedBuildWaiterCancellationReleasesGrantAndPromotesNext|TestBuildWaiterPromotionCancelRaceDoesNotStrandSlot' \
+  -count=50
+PASS — package 1.412s
 ```
 
 ### Approved R-WP2 minor debt (logged, untouched)

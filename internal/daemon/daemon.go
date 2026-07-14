@@ -278,9 +278,11 @@ func (h *handlers) poolStatus(_ context.Context, _ ipc.Request) (json.RawMessage
 		}
 	}
 	raw, err := json.Marshal(map[string]any{
-		"capacity": h.deps.Broker.Capacity(),
-		"leases":   counts,
-		"pressure": pressure.Check(h.deps.LeasesRoot),
+		"capacity":                  h.deps.Broker.Capacity(),
+		"perSpecCapacity":           h.deps.Broker.PerSpecCapacity(),
+		"maxProvisioningOperations": h.deps.Broker.MaxProvisioningOperations(),
+		"leases":                    counts,
+		"pressure":                  pressure.Check(h.deps.LeasesRoot),
 	})
 	if err != nil {
 		return nil, internalErr(err)
@@ -404,9 +406,11 @@ func copyBrokerEnvelope(env *broker.Error) *ipc.Error {
 		return out
 	}
 	out := &ipc.Error{
-		Code:    env.Code,
-		Message: env.Message,
-		Fix:     env.Fix,
+		Code:          env.Code,
+		Message:       env.Message,
+		Fix:           env.Fix,
+		Reason:        env.Reason,
+		ResourceClass: env.ResourceClass,
 	}
 	if env.QueuePosition != nil {
 		pos := *env.QueuePosition

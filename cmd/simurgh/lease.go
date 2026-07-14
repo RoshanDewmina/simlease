@@ -124,6 +124,12 @@ func printIPCError(err error, asJSON bool) {
 		if re.e.QueuePosition != nil {
 			fmt.Fprintf(os.Stdout, "queuePosition: %d\n", *re.e.QueuePosition)
 		}
+		if re.e.Reason != "" {
+			fmt.Fprintf(os.Stdout, "reason: %s\n", re.e.Reason)
+		}
+		if re.e.ResourceClass != "" {
+			fmt.Fprintf(os.Stdout, "resourceClass: %s\n", re.e.ResourceClass)
+		}
 		fmt.Fprintf(os.Stdout, "fix: %s\n", re.e.Fix)
 		return
 	}

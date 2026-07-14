@@ -125,12 +125,23 @@ acquire ──► QUEUED ──► PROVISIONING ──► ACTIVE ──► RELEA
   (journal ∪ device-name scan), so a daemon crash mid-cleanup self-heals on
   restart. Orphan scan = any `simurgh-clone[...]` device with no journal entry.
 
-Queue policy v0: FIFO per device-spec, no priorities. Fairness/preemption is
-v1 (ROADMAP).
+Queue policy v0: FIFO per device-spec under a **host-global** capacity gate,
+with deterministic oldest-first promotion across specs when a slot frees.
+Full priority/aging is v1 (ROADMAP / R-WP3+).
 
 Capacity default: `min(floor(totalRAM_GB/6), physicalCores/2, 4)` concurrent
-active leases; override in config. Pressure check before grant: available RAM
-> 4GB and thermal state nominal, else queue with reason.
+**host-global** ACTIVE+PROVISIONING leases (not per DeviceSpec). Override with
+`SIMURGH_CAPACITY` (same env name as before; semantics migrated from per-spec
+to global — a previous value of `2` no longer allows `2 × N specs`). Optional
+`SIMURGH_PER_SPEC_CAPACITY` and `SIMURGH_MAX_PROVISIONING` add independent
+limits. Grant checks run in order: global simulator slots → provisioning
+slots → per-spec → pressure. Pressure check before grant: available RAM
+> 4GB and thermal state nominal, else queue with reason `pressure`.
+
+`CAPACITY_QUEUED` carries machine-readable `reason` / `resourceClass`:
+`simulator_slot`, `provisioning_slot`, `per_spec_slot`, or `pressure`.
+`pool.status` exposes `capacity`, `perSpecCapacity`, and
+`maxProvisioningOperations` alongside lease counts and pressure.
 
 ## 5. IPC protocol
 
@@ -145,7 +156,8 @@ Unix socket, newline-delimited JSON frames, request/response + server events.
 ← {"v":1,"id":"r1","ok":true,"result":{"lease":{ ...Lease... }}}
 ← {"v":1,"id":"r1","ok":false,
    "error":{"code":"CAPACITY_QUEUED","queuePosition":2,
-            "message":"2 leases ahead of you (capacity 3/3 active)",
+            "reason":"simulator_slot","resourceClass":"simulator_slot",
+            "message":"2 leases ahead of you (capacity 3/3 active) [simulator_slot]",
             "fix":"simurgh status --queue   # or pass wait:true"}}
 ```
 
@@ -223,7 +235,7 @@ Tools (names stable, results mirror IPC):
 | `lease_renew` | lease_id, ttl? | new expiry |
 | `lease_release` | lease_id | confirmation + cleanup summary |
 | `lease_status` | lease_id? (default: caller's newest) | lease detail |
-| `pool_status` | — | capacity, active/queued leases, sims, pressure |
+| `pool_status` | — | global capacity, optional per-spec/provisioning caps, active/queued leases, pressure |
 
 Tool descriptions are written for agent consumption: they state *when* to call
 (`"Call lease_acquire before any simulator interaction. Never pick a UDID

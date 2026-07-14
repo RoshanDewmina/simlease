@@ -5,13 +5,19 @@ during live dogfood / pressure / daemon work on macOS.
 
 ## Acquire hangs, or returns `CAPACITY_QUEUED`
 
-Not always a bug. Grants are gated by pool capacity **and** host pressure
-(M4.1: RAM free+inactive floor, thermal, disk free).
+Not always a bug. Grants are gated by **host-global** pool capacity (optional
+per-spec and provisioning caps) **and** host pressure (M4.1: RAM free+inactive
+floor, thermal, disk free).
 
 - With `--wait` / MCP `wait: true`, acquire blocks until a grant is possible
   (or until you interrupt). Under real RAM pressure this can look like a hang.
-- Without `--wait`, acquire may return `CAPACITY_QUEUED` (live example:
-  `reason: "ram"` when free+inactive RAM was below the floor).
+- Without `--wait`, acquire may return `CAPACITY_QUEUED` with machine-readable
+  `reason` / `resourceClass`: `simulator_slot`, `provisioning_slot`,
+  `per_spec_slot`, or `pressure` (detail may still appear in `message`).
+
+`SIMURGH_CAPACITY` is the host-global ACTIVE+PROVISIONING cap (migrated from
+the old per-DeviceSpec meaning). Optional `SIMURGH_PER_SPEC_CAPACITY` and
+`SIMURGH_MAX_PROVISIONING` tighten further.
 
 Check:
 
@@ -19,9 +25,10 @@ Check:
 simurgh status --json
 ```
 
-Inspect the `pressure` block (OK flag + per-signal RAM/thermal/disk detail) and
-active/queued lease counts from `pool.status`. Free memory, cool thermal state,
-or release unused leases, then retry with `--wait`.
+Inspect `capacity` / `perSpecCapacity` / `maxProvisioningOperations`, the
+`pressure` block, and active/queued lease counts from `pool.status`. Free
+memory, cool thermal state, or release unused leases, then retry with
+`--wait`.
 
 ## `--wait` acquire returns `ACQUIRE_CANCELLED`
 
@@ -65,7 +72,11 @@ Notes:
 - `doctor` and `daemon status` dial the socket **without** auto-start — they
   report reality, they never spawn a daemon as a side effect.
 - Most other client commands use `ipc.Dial`, which auto-starts
-  `simurgh daemon run` once if the socket is missing or refused.
+  `simurgh daemon run` once if the socket is missing or refused. Auto-start
+  detaches the child (new session, stdin from `/dev/null`); the daemon
+  ignores `SIGHUP` so it survives the parent shell exiting. Prefer a long-
+  lived `daemon run` or LaunchAgent for production, but Dial auto-start must
+  not die with the calling shell.
 - `daemon status` exits `4` when unreachable.
 
 There is no `daemon stop` / `daemon install` yet — stop with `kill` / Ctrl-C.

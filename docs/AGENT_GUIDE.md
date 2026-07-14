@@ -112,6 +112,15 @@ Emitted `xcodebuildFlags` (also on the lease / MCP acquire result):
 is no PATH shim yet (v0.1) — bare `xcodebuild` without `exec` or explicit flags
 will use shared defaults and defeat isolation.
 
+## Capacity (host-global)
+
+`SIMURGH_CAPACITY` caps ACTIVE+PROVISIONING leases for the whole host — it no
+longer multiplies per DeviceSpec. Optional `SIMURGH_PER_SPEC_CAPACITY` and
+`SIMURGH_MAX_PROVISIONING` add tighter limits. When acquire queues,
+`CAPACITY_QUEUED` includes `reason` / `resourceClass`
+(`simulator_slot` | `provisioning_slot` | `per_spec_slot` | `pressure`).
+Call `pool_status` / `simurgh status --json` before blaming hangs on a bug.
+
 ## Release discipline
 
 Always `lease_release` / `simurgh release` when done.

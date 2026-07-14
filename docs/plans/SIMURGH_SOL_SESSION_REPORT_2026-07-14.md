@@ -3,7 +3,7 @@
 **Report time:** 2026-07-14 17:16 UTC (America/Toronto 13:16 EDT)
 **Orchestrator session:** Cursor Sol (Phase A close → Phase B R-WP0…R-WP6)
 **Stop trigger:** owner directive to stop during R-WP6 (coder pause handoff)
-**This report’s worktree tip at authoring:** `feat/r-wp6-xcodebuildmcp` @ `bec8670f24feb9da6e4043c7fdc707f41e336f0d`
+**Branch state after report review:** `feat/r-wp6-xcodebuildmcp` contains report commit `c534a79` plus this correction commit; use `git log -1 --oneline` for the resulting docs tip. The last implementation/code tip remains `bec8670f24feb9da6e4043c7fdc707f41e336f0d`.
 **Master (unchanged):** `4447e3c267a25d09ea20c3779c400dfa71330bef` — **nothing from this session is merged or pushed**
 
 > **Hard claims (binding):** R-WP6 is **not** complete and **not** reviewed. Phase A is **STOPPED/BLOCKED**, not passed. Benchmarks must not restart without a new owner authorization. Master remains `4447e3c`.
@@ -20,7 +20,7 @@ This Sol session:
 4. Started **R-WP6** (XcodeBuildMCP adapter; R-WP5 intentionally skipped/gated), committed adapter code at `bec8670`, then **paused** on owner stop with an **untracked, unverified** `runtime_live_test.go`.
 5. Contained a Cursor API credential leak earlier on the Phase A branch (`182fdfa` / `87be7f8`), with a remaining **unreachable-object** cleanup caveat and **no push**.
 
-**Current safe stop point:** R-WP6 paused at `bec8670` in `.worktrees/r-wp6-xcodebuildmcp`. Stacked feature branches exist locally and are **not** on `master` / **not** pushed.
+**Current safe stop point:** R-WP6 implementation is paused at code tip `bec8670` in `.worktrees/r-wp6-xcodebuildmcp`; the branch also contains docs commit `c534a79` and this correction commit. Stacked feature branches exist locally and are **not** on `master` / **not** pushed.
 
 ---
 
@@ -121,22 +121,24 @@ Also unmet: P1-6 B5 dual-window cell (pattern code `b1026ed`). P1-7 warm-DD on L
 
 ## 5. Roadmap stacked branches / worktrees (R-WP0 → R-WP6)
 
-Stack ancestry (each tip’s merge-base with prior tip equals that prior tip; `master` is an ancestor of the stack):
+Implementation/package ancestry (each listed code tip’s merge-base with the prior tip equals that prior tip; `master` is an ancestor of the stack):
 
 `master (4447e3c)` → … → `593a051` → `0757144` → `e948d26` → `23c2dce` → `b811736` → `f395061` → `bec8670`
 
-| Package | Branch | Worktree | Base | Head | Status | Review | Gates |
-|---|---|---|---|---|---|---|---|
-| Phase A stop | `claude/benchmark-blockers-2026-07-13-37773c` | `.claude/worktrees/benchmark-blockers-2026-07-13-37773c` | (pre-handoff `1bdeafd`) | `593a051` | STOPPED/BLOCKED | n/a (docs handoff) | docs + blocked evidence |
-| **R-WP0** | `feat/r-wp0-baseline` | `.worktrees/r-wp0-baseline` | `593a051` | `0757144` | **complete** | docs-only | build/vet/race + darwin_sim live |
-| **R-WP1** | `feat/r-wp1-reuse-liveness` | `.worktrees/r-wp1-reuse-liveness` | `0757144` | `e948d26` | **complete** | review-fix + final arbitration | package race + live reuse |
-| **R-WP2** | `feat/r-wp2-global-capacity` | `.worktrees/r-wp2-global-capacity` | `e948d26` | `23c2dce` | **complete** | bounded review-fix | capacity + 30s detach + live reuse |
-| **R-WP3** | `feat/r-wp3-session-jobs` | `.worktrees/r-wp3-session-jobs` | `23c2dce` | `b811736` | **complete** | review-fix + escalated resolution | controlplane race proofs + regressions |
-| **R-WP4** | `feat/r-wp4-readiness-cache` | `.worktrees/r-wp4-readiness-cache` | `b811736` | `f395061` | **implementation-complete / benchmark-deferred** | bounded review-fix closed | impl gates green; **no** timed bench |
-| **R-WP5** | — | — | — | — | **not started** (gated) | — | awaiting R-WP6 reassessment |
-| **R-WP6** | `feat/r-wp6-xcodebuildmcp` | `.worktrees/r-wp6-xcodebuildmcp` | `f395061` | `bec8670` | **PAUSED** (not complete) | **not reviewed** | unit/CLI/full race verified at `bec8670`; live runtime **not** run |
+On R-WP6, docs commit `c534a79` and this correction commit follow `bec8670`; they do not change the implementation ancestry above.
 
-**Merge/push:** every row above is **NOT merged into `master`** and the R-WP tips are **unpushed** relative to `origin/master` (`4447e3c`). Counts of commits on tip not in `origin/master`: R-WP0=21 … R-WP6=61; Phase A branch=20.
+| Package | Branch | Worktree | Base | Code/package tip | Branch docs tip | Status | Review | Gates |
+|---|---|---|---|---|---|---|---|---|
+| Phase A stop | `claude/benchmark-blockers-2026-07-13-37773c` | `.claude/worktrees/benchmark-blockers-2026-07-13-37773c` | (pre-handoff `1bdeafd`) | `593a051` | `593a051` | STOPPED/BLOCKED | n/a (docs handoff) | docs + blocked evidence |
+| **R-WP0** | `feat/r-wp0-baseline` | `.worktrees/r-wp0-baseline` | `593a051` | `0757144` | `0757144` | **complete** | docs-only | build/vet/race + darwin_sim live |
+| **R-WP1** | `feat/r-wp1-reuse-liveness` | `.worktrees/r-wp1-reuse-liveness` | `0757144` | `e948d26` | `e948d26` | **complete** | review-fix + final arbitration | package race + live reuse |
+| **R-WP2** | `feat/r-wp2-global-capacity` | `.worktrees/r-wp2-global-capacity` | `e948d26` | `23c2dce` | `23c2dce` | **complete** | bounded review-fix | capacity + 30s detach + live reuse |
+| **R-WP3** | `feat/r-wp3-session-jobs` | `.worktrees/r-wp3-session-jobs` | `23c2dce` | `b811736` | `b811736` | **complete** | review-fix + escalated resolution | controlplane race proofs + regressions |
+| **R-WP4** | `feat/r-wp4-readiness-cache` | `.worktrees/r-wp4-readiness-cache` | `b811736` | `4e500f1` | `f395061` | **implementation-complete / benchmark-deferred** | bounded review-fix closed | impl gates green; **no** timed bench |
+| **R-WP5** | — | — | — | — | — | **not started** (gated) | — | awaiting R-WP6 reassessment |
+| **R-WP6** | `feat/r-wp6-xcodebuildmcp` | `.worktrees/r-wp6-xcodebuildmcp` | `f395061` | `bec8670` | `c534a79` + this correction commit (discover via `git log -1`) | **PAUSED** (not complete) | **not reviewed** | pause-worker handoff reports unit/CLI/full race at `bec8670`; live runtime **not** run |
+
+**Merge/push:** every row above is **NOT merged into `master`** and the stacked tips are **unpushed** relative to `origin/master` (`4447e3c`). This was measured at report ref `c534a79`; this correction adds one docs-only local commit, so use `git rev-list --count origin/master..HEAD` for the current count rather than relying on a frozen number.
 
 ---
 
@@ -172,9 +174,9 @@ Stack ancestry (each tip’s merge-base with prior tip equals that prior tip; `m
 - Review-fix commits: `25f2926`, `0d07d60`, `0b47e3d`, `42174fc`, `4e500f1`; status tip `f395061`.
 - **Explicitly deferred:** all timed B1/B2/B4/B5/B6 / XcodeBuildMCP composition / new `bench/evidence` / latency claims.
 
-### R-WP6 — XcodeBuildMCP adapter (**PAUSED** at `bec8670`)
+### R-WP6 — XcodeBuildMCP adapter (**PAUSED**; code tip `bec8670`)
 
-**Committed (`bec8670` only commit on tip beyond R-WP4):**
+**Committed:** `bec8670` is the **sole implementation commit beyond R-WP4**. It is followed on the branch by docs commit `c534a79` and this docs correction commit.
 
 - New package `internal/integrations/xcodebuildmcp` (adapter/bindings/config/version/doc + unit tests)
 - CLI `cmd/simurgh/integration.go` + tests; `main.go` wiring
@@ -199,7 +201,7 @@ Stack ancestry (each tip’s merge-base with prior tip equals that prior tip; `m
 
 ### Last verified gates for R-WP6 (`bec8670`, before untracked runtime test)
 
-From the R-WP6 pause handoff (coder transcript):
+The following results are **reported by the R-WP6 pause-worker handoff** (coder transcript). They were not independently reproduced for this report and are not sourced from a committed repository gate log:
 
 | Gate | Result |
 |---|---|
@@ -250,11 +252,12 @@ See `docs/plans/MASTER_BUILD_STATUS.md` on `feat/r-wp4-readiness-cache`: warm-se
 |---|---|
 | Active R-WP6 worktree | `/Users/roshansilva/Documents/simurgh/.worktrees/r-wp6-xcodebuildmcp` |
 | Branch | `feat/r-wp6-xcodebuildmcp` |
-| HEAD | `bec8670f24feb9da6e4043c7fdc707f41e336f0d` |
+| Branch docs tip | `c534a79` + this correction commit; discover the resulting tip with `git log -1 --oneline` |
+| Last implementation/code tip | `bec8670f24feb9da6e4043c7fdc707f41e336f0d` |
 | Dirty tracked | none (at pause) |
 | Untracked | `internal/integrations/xcodebuildmcp/runtime_live_test.go` only |
 | `master` checkout | `/Users/roshansilva/Documents/simurgh` @ `4447e3c` tracking `origin/master` |
-| Remote | `origin` → `https://github.com/RoshanDewmina/simurgh.git` |
+| Remote | `origin` exists → `https://github.com/RoshanDewmina/simurgh.git` |
 | Stacked R-WP merges to master | **none** |
 | Stacked R-WP pushes | **none** (tips ahead of `origin/master` locally only) |
 
@@ -278,7 +281,7 @@ At report authoring, unrelated `npx xcodebuildmcp@latest mcp` processes were obs
 2. **Local stacked worktrees are the only carriers** of Phase B work; losing a worktree without push loses that tip unless another clone has the objects.
 3. **Security rewrite** on the Phase A branch remains local-policy: do not push until owner reviews.
 4. **GitHub issues #1–#3** still open — closing them is a separate process decision even though stacked code addresses the bugs.
-5. **R-WP6 is mid-package** — merging `bec8670` without review/runtime validation would violate package gates.
+5. **R-WP6 is mid-package** — merging the R-WP6 branch (whose last code tip is `bec8670`) without review/runtime validation would violate package gates.
 
 ---
 
@@ -295,7 +298,7 @@ At report authoring, unrelated `npx xcodebuildmcp@latest mcp` processes were obs
 | R-WP6 untracked live test | Unverified; needs review before run |
 | R-WP6 not reviewed | Blocking for any “complete” claim |
 | Open GitHub #1–#3 | Still OPEN |
-| No private-remote / PR path historically noted | Remote now exists as `origin`; stacked branches still unpushed |
+| Historical “no remote” state text | Superseded: `origin` exists; stacked tips remain unpushed; rewritten Phase A history must not be pushed until owner review |
 
 ---
 
@@ -304,7 +307,7 @@ At report authoring, unrelated `npx xcodebuildmcp@latest mcp` processes were obs
 | Layer | State |
 |---|---|
 | Committed behavior | Adapter + CLI + unit/CLI attribution tests at `bec8670` |
-| Verified gates | Listed in §7 (against `bec8670` only) |
+| Reported gates | Listed in §7; attributed to the pause-worker handoff against `bec8670`, not a repository gate log |
 | Untracked | `runtime_live_test.go` preserved; **unverified** |
 | Review | **Not started / not approved** |
 | Runtime two-clone validation | **Not run** |
@@ -318,11 +321,15 @@ At report authoring, unrelated `npx xcodebuildmcp@latest mcp` processes were obs
 Do **not** resume Phase A benchmarks. Resume only R-WP6 (or stop after docs).
 
 ```bash
-# 0) Enter the paused worktree and confirm tip + untracked test
+# 0) Enter the paused worktree and confirm branch, ancestry, and untracked test
 cd /Users/roshansilva/Documents/simurgh/.worktrees/r-wp6-xcodebuildmcp
 git status --short --branch
-git rev-parse HEAD   # expect bec8670f24feb9da6e4043c7fdc707f41e336f0d
+git log -1 --oneline
+git merge-base --is-ancestor bec8670 HEAD
+# exit 0 means the last implementation tip is present beneath the docs tip
 git status --porcelain internal/integrations/xcodebuildmcp/runtime_live_test.go
+shasum -a 256 internal/integrations/xcodebuildmcp/runtime_live_test.go
+# expect 9582650a420aa69976fe03a15a81a799d136eadfb8f71796fca7ce0dda13f5f3
 
 # 1) Inspect untracked live test without modifying it until reviewed
 git diff -- internal/integrations/xcodebuildmcp/runtime_live_test.go
@@ -363,7 +370,7 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 
 A **safe next boundary** is one of:
 
-1. **Docs/process only** (this report / status updates) with HEAD remaining `bec8670` and the untracked live test untouched; **or**
+1. **Docs/process only** (this report / status updates), with `bec8670` remaining an ancestor of the current docs tip and the untracked live test untouched; **or**
 2. **Resume R-WP6 only** in `.worktrees/r-wp6-xcodebuildmcp` on `feat/r-wp6-xcodebuildmcp`, without starting R-WP5, without merging/pushing, and without restarting Phase A timed cells.
 
 Crossing into R-WP5, R-WP7+, merge-to-master, push, or benchmark restart is **out of bound** until the corresponding owner gate is satisfied.
@@ -377,7 +384,8 @@ Crossing into R-WP5, R-WP7+, merge-to-master, push, or benchmark restart is **ou
 | Master tip | `4447e3c267a25d09ea20c3779c400dfa71330bef` (`git rev-parse master` / `origin/master`) |
 | Phase A STOPPED handoff | `593a051ac36539d8f76483246e3b17baf3d3f7d5` — `docs/plans/orchestrator-state.md`, `bench/RESULTS.md`, `bench/LAUNCH_NUMBERS.md`, `bench/evidence/blocked-b2-2026-07-14T14:16:20Z.json` |
 | R-WP0…R-WP4 tips | `0757144`, `e948d26`, `23c2dce`, `b811736`, `f395061` (full SHAs in §5) |
-| R-WP6 commit | `bec8670f24feb9da6e4043c7fdc707f41e336f0d` |
+| R-WP6 implementation/code tip | `bec8670f24feb9da6e4043c7fdc707f41e336f0d` |
+| R-WP6 report/docs tip | `c534a79` plus this correction commit; obtain the actual tip with `git log -1 --oneline` |
 | R-WP6 pause handoff | coder transcript `5f62f0e5-b533-4ae5-a29d-2f3d2fe19a13` (owner stop → handoff text) |
 | Stacked status docs | `docs/plans/MASTER_BUILD_STATUS.md`, `docs/plans/orchestrator-state.md` at each tip (read on this worktree + `git show <tip>:…`) |
 | Security | `182fdfa`, `5fda230`, `87be7f8`; pre-rewrite cite `40a245a` |

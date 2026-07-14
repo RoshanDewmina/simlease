@@ -5,8 +5,9 @@
 **Orchestrator:** Cursor Sol session paused during **R-WP6** (XcodeBuildMCP
 adapter). Phase A remains **STOPPED/BLOCKED by explicit owner directive**
 (not a pass) — Phase B continues only by that override recorded at `593a051`.
-R-WP0…R-WP4 complete on stacked branches; **R-WP6 PAUSED** at `bec8670`
-(**not** complete, **not** reviewed).
+R-WP0…R-WP4 complete on stacked branches; **R-WP6 PAUSED** with last
+implementation/code tip `bec8670` and branch docs tip `c534a79` plus the
+current correction commit (**not** complete, **not** reviewed).
 **Repository:** `/Users/roshansilva/Documents/simurgh`
 **Active worktree:** `.worktrees/r-wp6-xcodebuildmcp` on `feat/r-wp6-xcodebuildmcp`
 **Current phase:** Phase A STOPPED/BLOCKED (owner override) →
@@ -20,7 +21,10 @@ correction #3). Timed benchmark cells remain deferred. **Master remains
 - `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and `docs/COMPETITOR_NOTES.md` are the living source of truth, in that order.
 - Phase order M0 → M1 → M2 → M3 → M4 is binding. No post-v0 work may enter v0.
 - Git module owner is inferred from the authenticated GitHub account: `github.com/RoshanDewmina/simurgh`.
-- The repository is local-only and has no remote. Do not push publicly. Until Roshan supplies a private remote, reviewed branches merge locally and GitHub PR / `claude-code-action` stages are recorded as unavailable rather than fabricated.
+- `origin` exists at `https://github.com/RoshanDewmina/simurgh.git`; stacked
+  feature tips remain unpushed. Do not push rewritten Phase A history until
+  owner review, and do not push/merge package branches without explicit owner
+  authorization.
 - Routine implementation uses Cursor CLI `cursor-agent`; the shell command `agent` is a different, unauthenticated Grok CLI and must not be used for Cursor work.
 - Low-risk scaffolding/mechanical work routes to `composer-2.5`; routine implementation routes to `grok-4.5-high`; sensitive fallback/review routes to `claude-sonnet-5-high`.
 - Destructive and socket/LaunchAgent paths remain owner-visible `sensitive` work and require full-diff Sonnet-or-orchestrator review.
@@ -1522,21 +1526,27 @@ time-to-green numbers, new bench/evidence — **unpublished / not run**.
 - **Status:** **PAUSED** (not complete, not reviewed). Owner directed stop
   during R-WP6; coder pause handoff preserved untracked live test
   byte-for-byte and performed owned-resource cleanup only.
-- **Worktree / branch / HEAD:** `.worktrees/r-wp6-xcodebuildmcp` on
-  `feat/r-wp6-xcodebuildmcp` @ `bec8670f24feb9da6e4043c7fdc707f41e336f0d`
-  (base `f395061`).
-- **Committed:** `bec8670 feat(integrations): add bounded XcodeBuildMCP
+- **Worktree / branch:** `.worktrees/r-wp6-xcodebuildmcp` on
+  `feat/r-wp6-xcodebuildmcp` (base `f395061`). Last implementation/code tip is
+  `bec8670f24feb9da6e4043c7fdc707f41e336f0d`; branch docs tip is `c534a79`
+  plus this correction commit (discover the resulting tip with
+  `git log -1 --oneline`).
+- **Committed implementation:** `bec8670 feat(integrations): add bounded XcodeBuildMCP
   session adapter` — `simurgh integration xcodebuildmcp start|stop|status`,
   lease-scoped bindings/config/PID lifecycle, unit+CLI attribution tests.
+- **Commit topology:** `bec8670` is the sole implementation commit beyond
+  R-WP4; docs commit `c534a79` and this correction commit follow it.
 - **Untracked (preserved, unverified):**
   `internal/integrations/xcodebuildmcp/runtime_live_test.go`
   (SHA-256 `9582650a420aa69976fe03a15a81a799d136eadfb8f71796fca7ce0dda13f5f3`).
   Not formatted, compiled, or run.
-- **Last verified gates at `bec8670` (before untracked live test):** package
-  focused 7 tests PASS `6.722s`; CLI focused PASS `31.208s`; `go build` /
-  `go vet` PASS; `go test -race ./...` PASS 18 packages; capacity PASS
-  `1.814s`; detach PASS PID `66767` `35.990s`; live reuse PASS test
-  `13.25s` / package `14.484s`.
+- **Pause-worker handoff gate report for `bec8670` (before untracked live
+  test):** package focused 7 tests PASS `6.722s`; CLI focused PASS `31.208s`;
+  `go build` / `go vet` PASS; `go test -race ./...` PASS 18 packages;
+  capacity PASS `1.814s`; detach PASS PID `66767` `35.990s`; live reuse PASS
+  test `13.25s` / package `14.484s`. These results are attributed to the
+  pause-worker handoff, not independently reproduced here or sourced from a
+  committed repository gate log.
 - **Cleanup (pause handoff):** no R-WP6 runtime validation started; probe
   lease `lease-163` cancelled; removed `/tmp/r-wp6-runtime` and
   `/tmp/xcodebuildmcp-2.6.2.tgz`; no owned XcodeBuildMCP children remain;
@@ -1549,5 +1559,7 @@ time-to-green numbers, new bench/evidence — **unpublished / not run**.
   rewritten history without owner review.
 - **Safe next boundary:** resume R-WP6 only in this worktree, or stop after
   docs. Do not start R-WP5 / R-WP7+ / merge / push / Phase A drivers from
-  this pause alone.
+  this pause alone. Restart invariant: `git merge-base --is-ancestor bec8670
+  HEAD` must exit 0; do not require exact `HEAD == bec8670` because docs
+  commits follow the code tip.
 

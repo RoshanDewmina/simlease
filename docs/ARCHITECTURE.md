@@ -150,6 +150,9 @@ Independent of simulator capacity, the daemon hosts an in-memory control plane
 `SIMURGH_BUILD_SLOTS` (default 2). Build grants use resource class `build_slot`
 and never alter `lease.acquire` error shapes. `pool.status` / MCP `pool_status`
 additively expose `buildSlots`, `activeBuilds`, and `queuedBuilds`.
+Only `Wait:true` creates a FIFO build waiter counted by `queuedBuilds`.
+`Wait:false` returns structured `BUILD_QUEUED` / `build_slot` retry metadata
+without leaving a waiter and can never consume a later-freed slot.
 
 Session / Job / Worker / Workspace / Artifact / Event types and the job FSM
 (`queued` → … → `succeeded`, plus `failed` / `cancelled` / `orphaned` /
@@ -157,6 +160,14 @@ Session / Job / Worker / Workspace / Artifact / Event types and the job FSM
 (no SQLite). Existing lease CLI/MCP/IPC methods remain the public compatibility
 adapter; no new public session/job RPCs in R-WP3. Simulator leases are held
 only during device phases (`waiting_for_device` … `testing`).
+Worker and Artifact are intentionally domain types only in R-WP3; lifecycle
+and persistence arrive in their roadmap packages rather than speculative APIs.
+
+Job state/resource mutations use a private generation check. Device acquisition
+commits state and timings atomically under the control-plane lock; if cancel,
+fail, or another transition wins while acquisition is unlocked, only the newly
+acquired lease is released and winner state/timings remain unchanged. Retry
+edges are exactly `failed → retrying → queued`.
 
 `pool.status` exposes `capacity`, `perSpecCapacity`,
 `maxProvisioningOperations`, `buildSlots`, `activeBuilds`, and `queuedBuilds`

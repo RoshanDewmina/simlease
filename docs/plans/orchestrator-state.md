@@ -1,6 +1,6 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 15:57 UTC
+**Updated:** 2026-07-14 16:01 UTC
 **Owner:** Roshan  
 **Orchestrator:** Cursor coder subagent for **R-WP3** (session/job + build slots);
 Phase A remains **STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B
@@ -1330,4 +1330,50 @@ passed: mcp 1.263s; daemon 1.260s; ipc 1.214s; broker 1.221s; cmd 1.237s.
 | broker deny order / `lease.acquire` | unchanged — no build_slot on device path |
 
 - Next: **R-WP4** only — no merge/push of R-WP3 from this entry alone.
+
+### 2026-07-14 16:01 UTC — single bounded R-WP3 review-fix loop complete
+
+- **Transition commit-or-cleanup:** state/timings commit only after exact
+  state+generation revalidation. Cancel-during-blocked-acquire deterministically
+  proves the losing transition releases its newly acquired lease, restores
+  capacity, and cannot change winner timings.
+- **Terminal ownership:** Fail/Cancel release snapshot-owned resources unlocked,
+  then revalidate generation. Concurrent Fail-vs-Cancel/Succeed preserves the
+  first terminal winner; Failed→Cancelled is rejected without mutation.
+- **FSM:** retry is only Failed→Retrying→Queued; exhaustive all-state-pairs test
+  rejects every other retry edge.
+- **Build queue:** Wait=false returns structured `BUILD_QUEUED` / `build_slot`
+  metadata but creates no waiter, does not increment `queuedBuilds`, and cannot
+  consume a future slot. Only Wait=true FIFO waiters promote. Dead
+  `buildWaiter.canceled` was removed.
+- **Config:** `BuildSlotsFromEnv` tests empty/default, invalid, zero, positive.
+- **Type-only nit:** Worker/Artifact lifecycle remains intentionally deferred;
+  no speculative APIs added.
+- **Fix commit:** `4050a5e`.
+
+#### Review-fix gates
+
+| Command | Result |
+|---|---|
+| original named controlplane regex | **PASS** 1.289s |
+| 6 new race/FSM/Wait=false/env tests | **PASS** 1.160s |
+| race proof subset `-count=50` | **PASS** 1.323s |
+| `go build ./...` / `go vet ./...` | **PASS** exit 0 |
+| `go test -race ./...` | **PASS** 17 packages |
+| package regressions broker/ipc/daemon/mcp/cmd | **PASS** |
+| R-WP2 capacity regex | **PASS** 8 tests, 1.137s |
+| `TestDialDaemonSurvivesParentExit` | **PASS** PID **15735**, 32.58s |
+| `TestReuseIfExistsLive` | **PASS** test 2.37s, package 3.515s |
+
+#### Changed symbols / dependents
+
+| Symbol / behavior | Dependents inspected |
+|---|---|
+| `ControlPlane.TransitionJob` generation commit | controlplane device-phase and race tests |
+| `ControlPlane.FailJob` / `CancelJob` terminal outcomes | retry test, cancel ownership, terminal race tests |
+| `CanTransition` | transition API + exhaustive 14×14 matrix |
+| `buildScheduler.acquire/releaseOwned` | `AcquireBuildSlot`, `ReleaseBuildSlot`, cancellation paths |
+| `BuildSlotsFromEnv` | `cmd/simurgh` daemon startup |
+
+- No R-WP4, merge, push, or review dispatch occurred.
 

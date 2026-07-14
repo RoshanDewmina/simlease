@@ -1,6 +1,6 @@
 # Simurgh Master Build Status
 
-**Updated:** 2026-07-14 15:57 UTC (America/Toronto 11:57 EDT)
+**Updated:** 2026-07-14 16:01 UTC (America/Toronto 12:01 EDT)
 **Roadmap naming:** Phase B packages use `R-WP*` (not Phase A `P0-*` / harness `WP*`).
 
 ## Baseline
@@ -23,6 +23,7 @@
 
 ```bash
 go test -race ./internal/controlplane/... -run 'TestBuildProceedsWhileSimulatorFull|TestDeviceHeldOnlyDuringDevicePhase|TestCancelReleasesOnlyOwnedResources|TestJobStateTransitionsRejectInvalid|TestBuildSlotQueueMetadata|TestJobRetryClassification|TestPhaseAndQueueTimings' -count=1 -v
+go test -race ./internal/controlplane/... -run 'TestTransitionCancelDuringDeviceAcquireCleansLease|TestFailCancelAndSucceedRacesPreserveTerminalWinner|TestCancelFailedJobIsRejectedWithoutMutation|TestJobStateTransitionMatrixExhaustive|TestWaitFalseBuildQueueDoesNotConsumeFutureSlot|TestBuildSlotsFromEnv' -count=1 -v
 go build ./...
 go vet ./...
 go test -race ./...
@@ -36,14 +37,15 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 
 | Gate | Result |
 |---|---|
-| controlplane named tests (7) | **PASS** exit 0 — package 1.226s |
+| controlplane named tests (7), post-fix | **PASS** exit 0 — package 1.289s |
+| review race/FSM/Wait=false/env tests (6) | **PASS** exit 0 — package 1.160s |
 | `go build ./...` | **PASS** exit 0 |
 | `go vet ./...` | **PASS** exit 0 |
-| `go test -race ./...` | **PASS** exit 0 (**17** packages; ipc 36.494s) |
-| package race (broker/ipc/daemon/mcp/cmd) | **PASS** exit 0 — broker 1.579s, ipc 36.517s, daemon 1.544s, mcp 1.479s, cmd 1.181s |
+| `go test -race ./...` | **PASS** exit 0 (**17** packages) |
+| package race (broker/ipc/daemon/mcp/cmd) | **PASS** exit 0 |
 | capacity named tests | **PASS** exit 0 — all 8 matching tests |
-| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.50s**; daemon **PID 6472** stable ≥30s |
-| `TestReuseIfExistsLive` (`darwin_sim`) | **PASS** exit 0 — test 2.48s, package 3.741s |
+| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.58s**; daemon **PID 15735** stable ≥30s |
+| `TestReuseIfExistsLive` (`darwin_sim`) | **PASS** exit 0 — test 2.37s, package 3.515s |
 
 ### Behavioral proof (R-WP3)
 
@@ -51,7 +53,7 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 2. **Device hold window:** `TestDeviceHeldOnlyDuringDevicePhase` holds a lease only for `waiting_for_device`…`testing`; released before `collecting`.
 3. **Cancel ownership:** `TestCancelReleasesOnlyOwnedResources` cancels one job's build+device resources without touching a peer job's build grant.
 4. **FSM:** `TestJobStateTransitionsRejectInvalid` rejects skips/backwards/terminal escapes; `CanTransition` table covers illegal pairs.
-5. **Build queue metadata:** `TestBuildSlotQueueMetadata` returns `BUILD_QUEUED` with `resourceClass=build_slot` and `queuedBuilds=1`.
+5. **Build queue metadata:** `TestBuildSlotQueueMetadata` returns `BUILD_QUEUED` with `resourceClass=build_slot`; Wait=false leaves `queuedBuilds=0`.
 6. **Retry class:** `TestJobRetryClassification` maps infrastructure→safe, source/cancel→unsafe.
 7. **Timings:** `TestPhaseAndQueueTimings` records queue wait and phase start/end/duration.
 
@@ -61,7 +63,9 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 |---|---|
 | `bc86479` | feat(controlplane): session/job model and independent build slots |
 | `d1c789f` | feat(daemon): surface build slot status on pool.status |
-| *(status tip)* | docs: R-WP3 architecture/status + orchestrator handoff |
+| `0f28d7a` | docs: record R-WP3 build slots and session/job handoff |
+| `4050a5e` | fix(controlplane): make job transitions race-safe |
+| *(status tip)* | docs: record bounded R-WP3 review-fix gates |
 
 ### Model notes (R-WP3)
 
@@ -70,6 +74,34 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 - `pool.status` / MCP additively expose `buildSlots`, `activeBuilds`, `queuedBuilds`.
 - Session/job state is **in-memory / non-durable** (documented); no SQLite.
 - No new public session/job CLI/RPC; lease.* remains the compatibility adapter and never returns build queue errors.
+- Worker/Artifact remain intentional domain types only; no speculative lifecycle.
+
+### Single bounded R-WP3 review-fix loop
+
+All blocking/major/minor findings were addressed with failing tests first:
+
+1. `TransitionJob` now captures state+generation, performs device work unlocked,
+   and commits state/timings only after exact revalidation. A lost race releases
+   only the lease acquired by that transition.
+2. `FailJob`/`CancelJob` revalidate exact prior generation and preserve a
+   concurrent terminal winner. Failed→Cancelled is rejected; repeated terminal
+   results are explicit.
+3. Retry edges are exactly Failed→Retrying→Queued; exhaustive matrix test covers
+   every state pair.
+4. Wait=false build contention returns `BUILD_QUEUED`/`build_slot` without a
+   durable waiter. Only Wait=true FIFO waiters count in `queuedBuilds` and may
+   be promoted.
+5. Dead `buildWaiter.canceled` state was removed.
+6. `BuildSlotsFromEnv` covers empty, invalid, zero, and positive values.
+
+Race proof:
+
+```text
+go test -race ./internal/controlplane -run \
+  'TestTransitionCancelDuringDeviceAcquireCleansLease|TestFailCancelAndSucceedRacesPreserveTerminalWinner|TestWaitFalseBuildQueueDoesNotConsumeFutureSlot|TestCancelFailedJobIsRejectedWithoutMutation' \
+  -count=50
+PASS — package 1.323s
+```
 
 ### Approved R-WP2 minor debt (logged, untouched)
 
@@ -93,7 +125,7 @@ Paths not modified in R-WP3; residual items remain accepted:
 ## Open failures/risks
 
 1. Control-plane Session/Job state is non-durable — daemon restart drops jobs/build queue; device leases remain on the broker journal.
-2. Build-slot Wait=false still enqueues for metadata (like broker QUEUED); auto-promote on release can grant without a second client round-trip — callers should re-read job/`BuildStatus` after waits.
+2. Worker and Artifact are type-only in this bounded package; lifecycle and persistence remain later roadmap work.
 3. No public session/job CLI yet — agents continue on lease tools until a later WP exposes session RPCs.
 
 ### Phase A carry-forward

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
+	"github.com/RoshanDewmina/simurgh/internal/controlplane"
 	"github.com/RoshanDewmina/simurgh/internal/daemon"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
 	"github.com/RoshanDewmina/simurgh/internal/logrotate"
@@ -185,6 +186,19 @@ func runDaemon() int {
 		fmt.Fprintf(os.Stderr, "simurgh daemon run: rehydrate: %v\n", err)
 		return 1
 	}
+	buildSlots, err := controlplane.BuildSlotsFromEnv()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "simurgh daemon run: %v\n", err)
+		return 1
+	}
+	cp, err := controlplane.New(controlplane.Options{
+		BuildSlots: buildSlots,
+		Broker:     brk,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "simurgh daemon run: controlplane: %v\n", err)
+		return 1
+	}
 	safetyClient := &simctlSafetyClient{}
 	rp := reaper.New(reaper.ReaperOptions{
 		LeasesRoot: leasesRoot,
@@ -197,6 +211,7 @@ func runDaemon() int {
 		Broker:        brk,
 		Reaper:        rp,
 		Provisioner:   prov,
+		ControlPlane:  cp,
 		LeasesRoot:    leasesRoot,
 		DeviceLister:  safetyClient,
 		DeviceDeleter: safetyClient,

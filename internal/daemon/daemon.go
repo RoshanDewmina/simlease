@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
+	"github.com/RoshanDewmina/simurgh/internal/controlplane"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
 	"github.com/RoshanDewmina/simurgh/internal/isolator"
 	"github.com/RoshanDewmina/simurgh/internal/pressure"
@@ -27,6 +28,7 @@ type Deps struct {
 	Broker        *broker.Broker
 	Reaper        *reaper.Reaper
 	Provisioner   *provisioner.Provisioner
+	ControlPlane  *controlplane.ControlPlane // optional; surfaces build-slot status
 	LeasesRoot    string
 	DeviceLister  safety.DeviceLister  // warm.remove → DeleteSimulatorClone
 	DeviceDeleter safety.DeviceDeleter // warm.remove → DeleteSimulatorClone
@@ -266,6 +268,8 @@ func (h *handlers) wait(ctx context.Context, req ipc.Request) (json.RawMessage, 
 }
 
 // poolStatus returns capacity plus lease counts grouped by State.
+// Additive R-WP3 fields buildSlots/activeBuilds/queuedBuilds come from the
+// control-plane build scheduler when configured; they never alter lease.acquire.
 func (h *handlers) poolStatus(_ context.Context, _ ipc.Request) (json.RawMessage, *ipc.Error) {
 	leases := h.deps.Broker.List(broker.ListFilter{})
 	counts := map[string]int{
@@ -296,10 +300,17 @@ func (h *handlers) poolStatus(_ context.Context, _ ipc.Request) (json.RawMessage
 			counts["reclaimed"]++
 		}
 	}
+	build := controlplane.BuildStatus{BuildSlots: controlplane.DefaultBuildSlots}
+	if h.deps.ControlPlane != nil {
+		build = h.deps.ControlPlane.BuildStatus()
+	}
 	raw, err := json.Marshal(map[string]any{
 		"capacity":                  h.deps.Broker.Capacity(),
 		"perSpecCapacity":           h.deps.Broker.PerSpecCapacity(),
 		"maxProvisioningOperations": h.deps.Broker.MaxProvisioningOperations(),
+		"buildSlots":                build.BuildSlots,
+		"activeBuilds":              build.ActiveBuilds,
+		"queuedBuilds":              build.QueuedBuilds,
 		"leases":                    counts,
 		"pressure":                  pressure.Check(h.deps.LeasesRoot),
 	})

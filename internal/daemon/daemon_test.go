@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
+	"github.com/RoshanDewmina/simurgh/internal/controlplane"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
 	"github.com/RoshanDewmina/simurgh/internal/provisioner"
 	"github.com/RoshanDewmina/simurgh/internal/reaper"
@@ -724,7 +725,11 @@ func TestPoolStatusCountsByState(t *testing.T) {
 		Clock:                     time.Now,
 		PressureOK:                func() (bool, string) { return true, "" },
 	})
-	deps := Deps{Broker: b, LeasesRoot: t.TempDir()}
+	cp, err := controlplane.New(controlplane.Options{BuildSlots: 3, Broker: b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps := Deps{Broker: b, ControlPlane: cp, LeasesRoot: t.TempDir()}
 	h := newHandlers(deps)
 
 	lease, err := b.Acquire(context.Background(), broker.AcquireRequest{
@@ -757,6 +762,9 @@ func TestPoolStatusCountsByState(t *testing.T) {
 		Capacity                  int            `json:"capacity"`
 		PerSpecCapacity           int            `json:"perSpecCapacity"`
 		MaxProvisioningOperations int            `json:"maxProvisioningOperations"`
+		BuildSlots                int            `json:"buildSlots"`
+		ActiveBuilds              int            `json:"activeBuilds"`
+		QueuedBuilds              int            `json:"queuedBuilds"`
 		Leases                    map[string]int `json:"leases"`
 	}
 	if err := json.Unmarshal(resp.Result, &got); err != nil {
@@ -770,6 +778,12 @@ func TestPoolStatusCountsByState(t *testing.T) {
 	}
 	if got.MaxProvisioningOperations != 1 {
 		t.Fatalf("maxProvisioningOperations = %d want 1", got.MaxProvisioningOperations)
+	}
+	if got.BuildSlots != 3 {
+		t.Fatalf("buildSlots = %d want 3", got.BuildSlots)
+	}
+	if got.ActiveBuilds != 0 || got.QueuedBuilds != 0 {
+		t.Fatalf("builds active=%d queued=%d", got.ActiveBuilds, got.QueuedBuilds)
 	}
 	if got.Leases["active"] != 1 {
 		t.Fatalf("active = %d want 1; leases=%v", got.Leases["active"], got.Leases)

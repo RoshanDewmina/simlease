@@ -478,6 +478,9 @@ func TestPoolStatusMapsResult(t *testing.T) {
 				"capacity": 4,
 				"perSpecCapacity": 2,
 				"maxProvisioningOperations": 1,
+				"buildSlots": 3,
+				"activeBuilds": 1,
+				"queuedBuilds": 2,
 				"leases": {"active": 1, "queued": 0, "released": 2},
 				"pressure": {
 					"ok": true,
@@ -508,6 +511,15 @@ func TestPoolStatusMapsResult(t *testing.T) {
 	}
 	if out.MaxProvisioningOperations != 1 {
 		t.Fatalf("maxProvisioningOperations = %v want 1", out.MaxProvisioningOperations)
+	}
+	if out.BuildSlots != 3 {
+		t.Fatalf("buildSlots = %v want 3", out.BuildSlots)
+	}
+	if out.ActiveBuilds != 1 {
+		t.Fatalf("activeBuilds = %v want 1", out.ActiveBuilds)
+	}
+	if out.QueuedBuilds != 2 {
+		t.Fatalf("queuedBuilds = %v want 2", out.QueuedBuilds)
 	}
 	if out.Leases["active"] != 1 || out.Leases["queued"] != 0 {
 		t.Fatalf("leases = %#v", out.Leases)

@@ -85,6 +85,7 @@ func newServer(cfg serverConfig) *mcpsdk.Server {
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name: "pool_status",
 		Description: "Report pool capacity and how many leases are active, queued, or otherwise. " +
+			"Also reports independent buildSlots/activeBuilds/queuedBuilds (SIMURGH_BUILD_SLOTS). " +
 			"Call before lease_acquire when you need to know whether the pool is under pressure, or after acquire/release to confirm pool accounting. " +
 			"Do not use this to pick a device or UDID — always go through lease_acquire for that.",
 	}, s.handlePoolStatus)
@@ -287,6 +288,9 @@ type poolStatusResult struct {
 	Capacity                  int                    `json:"capacity" jsonschema:"host-global active plus provisioning simulator capacity"`
 	PerSpecCapacity           int                    `json:"perSpecCapacity" jsonschema:"optional per-device-spec capacity; zero means unlimited"`
 	MaxProvisioningOperations int                    `json:"maxProvisioningOperations" jsonschema:"optional host-global provisioning-operation limit; zero means unlimited"`
+	BuildSlots                int                    `json:"buildSlots" jsonschema:"configured independent build slots (SIMURGH_BUILD_SLOTS)"`
+	ActiveBuilds              int                    `json:"activeBuilds" jsonschema:"build slots currently granted"`
+	QueuedBuilds              int                    `json:"queuedBuilds" jsonschema:"jobs waiting for a build slot"`
 	Leases                    map[string]int         `json:"leases" jsonschema:"lease counts by state (active, queued, ...)"`
 	Pressure                  poolStatusPressureView `json:"pressure" jsonschema:"host RAM/thermal/disk pressure before grant"`
 }

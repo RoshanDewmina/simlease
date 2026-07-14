@@ -2,7 +2,6 @@ package provisioner
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -79,10 +78,6 @@ func (p *Provisioner) Provision(ctx context.Context, req broker.ProvisionRequest
 	bootCtx, cancel := context.WithTimeout(ctx, bootWaitTimeout)
 	defer cancel()
 	if err := p.client.WaitBooted(bootCtx, cloneUDID); err != nil {
-		var rt *ReadinessTimeoutError
-		if errors.As(err, &rt) || bootCtx.Err() != nil {
-			return broker.Device{}, bootTimeout(cloneUDID)
-		}
 		return broker.Device{}, bootTimeout(cloneUDID)
 	}
 

@@ -1,7 +1,10 @@
 package provisioner
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 )
 
 func TestParseDeviceTypesJSON(t *testing.T) {
@@ -21,6 +24,37 @@ func TestParseDeviceTypesJSON(t *testing.T) {
 	if types[0].Name != "iPhone 17 Pro" || types[0].Identifier == "" {
 		t.Fatalf("got %+v", types[0])
 	}
+}
+
+func TestWaitBootedPollReadinessMappings(t *testing.T) {
+	t.Run("timeout classified", func(t *testing.T) {
+		client := &execSimctlClient{
+			listDevices: func(context.Context) ([]SimDevice, error) {
+				return []SimDevice{{UDID: "U1", State: "Booting"}}, nil
+			},
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		err := client.WaitBooted(ctx, "U1")
+		var timeout *ReadinessTimeoutError
+		if !errors.As(err, &timeout) {
+			t.Fatalf("err=%T %v; want ReadinessTimeoutError", err, err)
+		}
+	})
+
+	t.Run("caller cancellation retained", func(t *testing.T) {
+		client := &execSimctlClient{
+			listDevices: func(context.Context) ([]SimDevice, error) {
+				return []SimDevice{{UDID: "U1", State: "Booting"}}, nil
+			},
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		err := client.WaitBooted(ctx, "U1")
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("err=%T %v; want context.Canceled", err, err)
+		}
+	})
 }
 
 func TestParseRuntimesJSON(t *testing.T) {

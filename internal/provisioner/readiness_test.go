@@ -2,6 +2,7 @@ package provisioner
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -88,4 +89,52 @@ func asReadinessTimeout(err error, target **ReadinessTimeoutError) bool {
 		return true
 	}
 	return false
+}
+
+func TestReadinessBlockingFallbackIsBounded(t *testing.T) {
+	start := time.Now()
+	err := PollReadiness(context.Background(), ReadinessPollOptions{
+		Timeout:         20 * time.Millisecond,
+		Interval:        2 * time.Millisecond,
+		FallbackTimeout: 30 * time.Millisecond,
+		Probe: func(context.Context) (bool, error) {
+			return false, nil
+		},
+		Fallback: func(context.Context) (bool, error) {
+			select {} // deliberately ignores context
+		},
+		Subject: "blocked-fallback",
+	})
+	if time.Since(start) > 300*time.Millisecond {
+		t.Fatalf("blocking fallback exceeded bound: %v", time.Since(start))
+	}
+	var timeout *ReadinessTimeoutError
+	if !errors.As(err, &timeout) {
+		t.Fatalf("err=%T %v; want ReadinessTimeoutError", err, err)
+	}
+}
+
+func TestReadinessCallerCancellationDistinguishable(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(15 * time.Millisecond)
+		cancel()
+	}()
+	err := PollReadiness(ctx, ReadinessPollOptions{
+		Timeout:  time.Second,
+		Interval: 2 * time.Millisecond,
+		Probe: func(context.Context) (bool, error) {
+			return false, nil
+		},
+		Fallback: func(context.Context) (bool, error) {
+			return false, nil
+		},
+	})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err=%T %v; want context.Canceled", err, err)
+	}
+	var timeout *ReadinessTimeoutError
+	if errors.As(err, &timeout) {
+		t.Fatalf("caller cancellation misclassified as readiness timeout: %v", err)
+	}
 }

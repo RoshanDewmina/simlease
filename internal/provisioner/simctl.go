@@ -51,7 +51,9 @@ type SimctlClient interface {
 
 // execSimctlClient runs xcrun simctl via exec.CommandContext.
 // This is the ONLY place in this package that shells out.
-type execSimctlClient struct{}
+type execSimctlClient struct {
+	listDevices func(context.Context) ([]SimDevice, error)
+}
 
 // NewExecClient returns the real simctl-backed client.
 func NewExecClient() SimctlClient {
@@ -75,6 +77,9 @@ func (c *execSimctlClient) ListRuntimes(ctx context.Context) ([]Runtime, error) 
 }
 
 func (c *execSimctlClient) ListDevices(ctx context.Context) ([]SimDevice, error) {
+	if c.listDevices != nil {
+		return c.listDevices(ctx)
+	}
 	out, err := c.run(ctx, "list", "devices", "-j")
 	if err != nil {
 		return nil, err

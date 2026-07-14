@@ -360,6 +360,7 @@ func (cp *ControlPlane) TransitionJob(ctx context.Context, jobID string, to JobS
 		pt.StartedAt = now
 	}
 	j.Timings.Phases[string(to)] = pt
+	cp.recordInstrumentedAliasLocked(j, to, pt)
 	out := cloneJob(j)
 	cp.mu.Unlock()
 	return out, nil
@@ -510,7 +511,18 @@ func (cp *ControlPlane) endPhaseLocked(j *Job, phase JobState, now time.Time) {
 		pt.EndedAt = now
 		pt.Duration = now.Sub(pt.StartedAt)
 		j.Timings.Phases[string(phase)] = pt
+		cp.recordInstrumentedAliasLocked(j, phase, pt)
 	}
+}
+
+// recordInstrumentedAliasLocked mirrors a JobState timing under the R-WP4
+// acquire/build/install/launch/test/capture alias when one applies.
+func (cp *ControlPlane) recordInstrumentedAliasLocked(j *Job, phase JobState, pt PhaseTiming) {
+	alias, ok := instrumentedAlias[phase]
+	if !ok || alias == "" {
+		return
+	}
+	j.Timings.Phases[alias] = pt
 }
 
 func cloneSession(s *Session) Session {

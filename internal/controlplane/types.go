@@ -138,6 +138,37 @@ type PhaseTiming struct {
 	Duration  time.Duration
 }
 
+// Instrumented phase aliases (R-WP4). Recorded additively alongside JobState
+// keys using the same real clock samples — never fabricated.
+const (
+	PhaseAcquire = "acquire"
+	PhaseBuild   = "build"
+	PhaseInstall = "install"
+	PhaseLaunch  = "launch"
+	PhaseTest    = "test"
+	PhaseCapture = "capture"
+)
+
+// InstrumentedPhases is the required R-WP4 coverage set.
+var InstrumentedPhases = []string{
+	PhaseAcquire,
+	PhaseBuild,
+	PhaseInstall,
+	PhaseLaunch,
+	PhaseTest,
+	PhaseCapture,
+}
+
+// instrumentedAlias maps job states onto the acquire/build/install/launch/test/capture vocabulary.
+var instrumentedAlias = map[JobState]string{
+	JobWaitingForDevice: PhaseAcquire,
+	JobBuilding:         PhaseBuild,
+	JobInstalling:       PhaseInstall,
+	JobLaunching:        PhaseLaunch,
+	JobTesting:          PhaseTest,
+	JobCollecting:       PhaseCapture,
+}
+
 // JobTimings holds queue wait and per-phase timings.
 type JobTimings struct {
 	QueuedAt   time.Time

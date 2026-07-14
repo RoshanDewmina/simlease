@@ -1057,3 +1057,75 @@ func TestPhaseAndQueueTimings(t *testing.T) {
 		t.Fatalf("building duration=%v", buildPhase.Duration)
 	}
 }
+
+func TestPhaseInstrumentationCoverage(t *testing.T) {
+	clock := time.Date(2026, 7, 14, 15, 0, 0, 0, time.UTC)
+	var mu sync.Mutex
+	now := clock
+	cp, err := New(Options{
+		BuildSlots: 1,
+		Broker:     testBroker(t, 2),
+		Clock: func() time.Time {
+			mu.Lock()
+			defer mu.Unlock()
+			return now
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	advance := func(d time.Duration) {
+		mu.Lock()
+		now = now.Add(d)
+		mu.Unlock()
+	}
+
+	ctx := context.Background()
+	s, err := cp.CreateSession(CreateSessionRequest{Project: "p", Agent: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	j, err := cp.StartJob(s.ID, JobKindTest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cp.AcquireBuildSlot(ctx, BuildSlotRequest{JobID: j.ID, Wait: false}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Happy-path progress covering acquire/build/install/launch/test/capture.
+	sequence := []JobState{
+		JobSyncing, JobPreparing, JobBuilding,
+		JobWaitingForDevice, JobInstalling, JobLaunching, JobTesting, JobCollecting, JobSucceeded,
+	}
+	for _, next := range sequence {
+		advance(100 * time.Millisecond)
+		if _, err := cp.TransitionJob(ctx, j.ID, next); err != nil {
+			t.Fatalf("transition %s: %v", next, err)
+		}
+	}
+
+	got, err := cp.GetJob(j.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range InstrumentedPhases {
+		pt, ok := got.Timings.Phases[name]
+		if !ok {
+			t.Fatalf("missing instrumented phase %q in %#v", name, got.Timings.Phases)
+		}
+		if pt.StartedAt.IsZero() {
+			t.Fatalf("phase %q missing StartedAt: %+v", name, pt)
+		}
+		if pt.EndedAt.IsZero() || pt.Duration <= 0 {
+			t.Fatalf("phase %q missing closed timing: %+v", name, pt)
+		}
+	}
+	// Additive: JobState keys remain present alongside aliases.
+	if _, ok := got.Timings.Phases[string(JobBuilding)]; !ok {
+		t.Fatal("expected JobState building timing to remain alongside build alias")
+	}
+	if got.Timings.Phases[PhaseBuild].StartedAt != got.Timings.Phases[string(JobBuilding)].StartedAt {
+		t.Fatal("build alias must share real StartedAt with building state timing")
+	}
+}

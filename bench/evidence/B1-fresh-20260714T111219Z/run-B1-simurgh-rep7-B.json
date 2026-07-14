@@ -1,0 +1,79 @@
+{
+  "scenario": "B1",
+  "arm": "simurgh",
+  "agent": "B",
+  "rep": 7,
+  "udid": "FB141BA1-84F3-4EEA-81C6-CF8913DEB7E1",
+  "timestamp": "2026-07-14T12:07:52Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 33010889869833,
+      "end_ns": 33048240122583,
+      "duration_ns": 37350252750,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "ampleApp-own-target-headers.hmap' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp-project-headers.hmap' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyMetadataFileList' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyStaticMetadataFileList' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.app-Simulated.xcent' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.app-Simulated.xcent.der' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.hmap' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/ssu/root.ssu.yaml' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/PkgInfo' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/_CodeSignature' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.swiftmodule/arm64-apple-ios-simulator.abi.json' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.swiftmodule/arm64-apple-ios-simulator.swiftdoc' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-146/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.swiftmodule/arm64-apple-ios-simulator.swiftmodule' is located outside of the allowed root paths.\n\n** BUILD SUCCEEDED ** [20.035 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 33055797060625,
+      "end_ns": 33084930719583,
+      "duration_ns": 29133658958,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for simurgh-clone[lease-147:iPhone 17 Pro:27.0] (FB141BA1-84F3-4EEA-81C6-CF8913DEB7E1).\n[2026-07-14 12:06:05 +0000] Status=2, isTerminal=NO, Elapsed=00:48.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)\n\t\tMigration Elapsed:00:42 seconds\n\n[2026-07-14 12:06:05 +0000] Status=2, isTerminal=NO, Elapsed=00:48.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)\n\t\tMigration Elapsed:00:43 seconds\n\n[2026-07-14 12:06:06 +0000] Status=2, isTerminal=NO, Elapsed=00:49.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)\n\t\tMigration Elapsed:00:44 seconds\n\n[2026-07-14 12:06:06 +0000] Status=2, isTerminal=NO, Elapsed=00:49.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.message.AccountsMigrator (MessageAccountsMigrator.migrator)\n\t\tMigration Elapsed:00:45 seconds\n\n[2026-07-14 12:06:07 +0000] Status=2, isTerminal=NO, Elapsed=00:50.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.message.AccountsMigrator (MessageAccountsMigrator.migrator)\n\t\tMigration Elapsed:00:46 seconds\n\n[2026-07-14 12:06:09 +0000] Status=2, isTerminal=NO, Elapsed=00:52.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.message.AccountsMigrator (MessageAccountsMigrator.migrator)\n\t\tMigration Elapsed:00:47 seconds\n\n[2026-07-14 12:06:10 +0000] Status=2, isTerminal=NO, Elapsed=00:53.\n\tWaiting on Data Migration\n\t\tReason:Running plugin com.apple.message.AccountsMigrator (MessageAccountsMigrator.migrator)\n\t\tMigration Elapsed:00:48 seconds\n\n[2026-07-14 12:06:32 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:15.\n\tFinished"
+    },
+    {
+      "step": "install",
+      "start_ns": 33085747854000,
+      "end_ns": 33139421806083,
+      "duration_ns": 53673952083,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 33142585495375,
+      "end_ns": 33147784309083,
+      "duration_ns": 5198813708,
+      "exit_code": 0,
+      "incidents": [],
+      "time_to_badge_ns": 2789007208,
+      "health_window_s": 5,
+      "log": "AGENT_BADGE=B\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 33147935255166,
+      "end_ns": 33160337243666,
+      "duration_ns": 12401988500,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 21307FA6-B2F5-4B0F-AC9A-838A1A6F8E08 (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/20260714T111219Z/run-B1-simurgh-rep7-B.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 33162747451541,
+      "end_ns": 33164312918416,
+      "duration_ns": 1565466875,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "B",
+    "actual": "B",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "59795077b9a9eae59a697b5a3a07c42c9e5bc08fd7bec0b6d870f6286cc98e9c",
+    "hash_before_terminate": "59795077b9a9eae59a697b5a3a07c42c9e5bc08fd7bec0b6d870f6286cc98e9c",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 139324132874,
+  "success": true
+}

@@ -1,0 +1,93 @@
+{
+  "scenario": "B1",
+  "arm": "naive",
+  "agent": "B",
+  "rep": 3,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "timestamp": "2026-07-14T11:15:06Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 29987570652500,
+      "end_ns": 29990251051583,
+      "duration_ns": 2680399083,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "leApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/Objects-normal/arm64/SampleApp_dependency_info.dat --stringsdata-file /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/Objects-normal/arm64/ExtractedAppShortcutsMetadata.stringsdata --source-file-list /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/Objects-normal/arm64/SampleApp.SwiftFileList --metadata-file-list /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyMetadataFileList --static-metadata-file-list /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyStaticMetadataFileList --swift-const-vals-list /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/Objects-normal/arm64/SampleApp.SwiftConstValuesFileList --compile-time-extraction --deployment-aware-processing --validate-assistant-intents --no-app-shortcuts-localization\n2026-07-14 07:14:57.722 appintentsmetadataprocessor[47739:906883] Starting appintentsmetadataprocessor export\n2026-07-14 07:14:57.723 appintentsmetadataprocessor[47739:906883] warning: Metadata extraction skipped, no AppIntents.framework dependency found\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [1.594 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 29992079381666,
+      "end_ns": 29992280427833,
+      "duration_ns": 201046167,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for iPhone 17 Pro (095F8B3A-FEA3-4031-A2A5-561755740730).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 29992418719166,
+      "end_ns": 29993008331541,
+      "duration_ns": 589612375,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 29993469347416,
+      "end_ns": 29998760807541,
+      "duration_ns": 5291460125,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "no AGENT_BADGE print observed within 5s healthy window"
+        }
+      ],
+      "time_to_badge_ns": null,
+      "health_window_s": 5,
+      "log": "dev.simurgh.fixtures.sampleapp: 48096"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [],
+      "log": "skipped: app not healthy"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 29999033698875,
+      "end_ns": 29999251135583,
+      "duration_ns": 217436708,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "B",
+    "actual": "none",
+    "match": false
+  },
+  "install_clobber": {
+    "hash_after_install": "705a592686cea69de3495861ad92ddb7728a60cc89f36e4ff09178ccfe65deb9",
+    "hash_before_terminate": "705a592686cea69de3495861ad92ddb7728a60cc89f36e4ff09178ccfe65deb9",
+    "clobbered": false
+  },
+  "incidents": [
+    {
+      "type": "launch_destination_failure",
+      "evidence": "no AGENT_BADGE print observed within 5s healthy window"
+    },
+    {
+      "type": "wrong_variant",
+      "evidence": "expected agent-badge-B, observed none"
+    }
+  ],
+  "total_duration_ns": 8979954458,
+  "success": false
+}

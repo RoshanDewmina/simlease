@@ -1,0 +1,89 @@
+{
+  "scenario": "B1",
+  "arm": "naive",
+  "agent": "A",
+  "rep": 10,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "timestamp": "2026-07-14T11:19:04Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 30222956403583,
+      "end_ns": 30225913885500,
+      "duration_ns": 2957481917,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "7773c/test/fixtures/SampleApp\n    builtin-swiftStdLibTool --copy --verbose --sign - --scan-executable /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/Frameworks --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/PlugIns --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/SystemExtensions --scan-folder /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/Extensions --platform iphonesimulator --toolchain /var/run/com.apple.security.cryptexd/mnt/com.apple.MobileAsset.MetalToolchain-v27.1.5194.15.4iCH3S/Metal.xctoolchain --toolchain /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain --destination /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/Frameworks --strip-bitcode --strip-bitcode-tool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/bitcode_strip --emit-dependency-info /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SwiftStdLibToolInputDependencies.dep --filter-for-swift-os\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [1.823 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 30227885099416,
+      "end_ns": 30228102394916,
+      "duration_ns": 217295500,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for iPhone 17 Pro (095F8B3A-FEA3-4031-A2A5-561755740730).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 30228239543958,
+      "end_ns": 30229225393333,
+      "duration_ns": 985849375,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 30229697040166,
+      "end_ns": 30234795242208,
+      "duration_ns": 5098202042,
+      "exit_code": 0,
+      "incidents": [],
+      "time_to_badge_ns": 832099959,
+      "health_window_s": 5,
+      "log": "AGENT_BADGE=A\r\ndev.simurgh.fixtures.sampleapp: 64846"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 30234842961416,
+      "end_ns": 30235541044833,
+      "duration_ns": 698083417,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 37761AA6-DC98-44E8-AA52-4093DDB85E3E (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/20260714T111219Z/run-B1-naive-rep10-A.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 30236021777166,
+      "end_ns": 30236323179458,
+      "duration_ns": 301402292,
+      "exit_code": 3,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "Simulator device failed to terminate dev.simurgh.fixtures.sampleapp."
+        }
+      ],
+      "log": "An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):\nSimulator device failed to terminate dev.simurgh.fixtures.sampleapp.\nfound nothing to terminate\nUnderlying error (domain=NSPOSIXErrorDomain, code=3):\n\tThe request to terminate \"dev.simurgh.fixtures.sampleapp\" failed. found nothing to terminate\n\tfound nothing to terminate"
+    }
+  ],
+  "badge": {
+    "expected": "A",
+    "actual": "A",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "705a592686cea69de3495861ad92ddb7728a60cc89f36e4ff09178ccfe65deb9",
+    "hash_before_terminate": "705a592686cea69de3495861ad92ddb7728a60cc89f36e4ff09178ccfe65deb9",
+    "clobbered": false
+  },
+  "incidents": [
+    {
+      "type": "launch_destination_failure",
+      "evidence": "Simulator device failed to terminate dev.simurgh.fixtures.sampleapp."
+    }
+  ],
+  "total_duration_ns": 10258314543,
+  "success": true
+}

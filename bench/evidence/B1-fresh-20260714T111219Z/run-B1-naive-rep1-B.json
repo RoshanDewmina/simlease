@@ -1,0 +1,93 @@
+{
+  "scenario": "B1",
+  "arm": "naive",
+  "agent": "B",
+  "rep": 1,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "timestamp": "2026-07-14T11:13:32Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 29839416146166,
+      "end_ns": 29868400089541,
+      "duration_ns": 28983943375,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "7-14 07:12:55.657 appintentsnltrainingprocessor[42622:890814] No AppShortcuts found - Skipping.\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib\n\nCodeSign /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nRegisterExecutionPolicyException /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    builtin-RegisterExecutionPolicyException /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    /usr/bin/touch -c /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [26.264 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 29873701538166,
+      "end_ns": 29874354704958,
+      "duration_ns": 653166792,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for iPhone 17 Pro (095F8B3A-FEA3-4031-A2A5-561755740730).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 29874710577041,
+      "end_ns": 29896166463208,
+      "duration_ns": 21455886167,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 29897180718333,
+      "end_ns": 29902573708583,
+      "duration_ns": 5392990250,
+      "exit_code": 0,
+      "incidents": [],
+      "time_to_badge_ns": 1495092833,
+      "health_window_s": 5,
+      "log": "AGENT_BADGE=A\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 29902674471958,
+      "end_ns": 29903602507750,
+      "duration_ns": 928035792,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 37761AA6-DC98-44E8-AA52-4093DDB85E3E (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/20260714T111219Z/run-B1-naive-rep1-B.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 29904412012291,
+      "end_ns": 29904798009166,
+      "duration_ns": 385996875,
+      "exit_code": 3,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "Simulator device failed to terminate dev.simurgh.fixtures.sampleapp."
+        }
+      ],
+      "log": "An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):\nSimulator device failed to terminate dev.simurgh.fixtures.sampleapp.\nfound nothing to terminate\nUnderlying error (domain=NSPOSIXErrorDomain, code=3):\n\tThe request to terminate \"dev.simurgh.fixtures.sampleapp\" failed. found nothing to terminate\n\tfound nothing to terminate"
+    }
+  ],
+  "badge": {
+    "expected": "B",
+    "actual": "A",
+    "match": false
+  },
+  "install_clobber": {
+    "hash_after_install": "705a592686cea69de3495861ad92ddb7728a60cc89f36e4ff09178ccfe65deb9",
+    "hash_before_terminate": "705a592686cea69de3495861ad92ddb7728a60cc89f36e4ff09178ccfe65deb9",
+    "clobbered": false
+  },
+  "incidents": [
+    {
+      "type": "launch_destination_failure",
+      "evidence": "Simulator device failed to terminate dev.simurgh.fixtures.sampleapp."
+    },
+    {
+      "type": "wrong_variant",
+      "evidence": "expected agent-badge-B, observed A"
+    }
+  ],
+  "total_duration_ns": 57800019251,
+  "success": false
+}

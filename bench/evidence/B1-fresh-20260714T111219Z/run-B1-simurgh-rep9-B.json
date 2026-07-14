@@ -1,0 +1,93 @@
+{
+  "scenario": "B1",
+  "arm": "simurgh",
+  "agent": "B",
+  "rep": 9,
+  "udid": "2144385C-EE93-4A0D-8A11-87AFCCA31A08",
+  "timestamp": "2026-07-14T12:44:04Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 34437286307333,
+      "end_ns": 34939497847250,
+      "duration_ns": 502211539917,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "mpleApp-own-target-headers.hmap' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp-project-headers.hmap' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyMetadataFileList' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.DependencyStaticMetadataFileList' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.app-Simulated.xcent' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.app-Simulated.xcent.der' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/SampleApp.hmap' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Intermediates.noindex/SampleApp.build/Debug-iphonesimulator/SampleApp.build/ssu/root.ssu.yaml' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/Info.plist' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/PkgInfo' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/SampleApp.debug.dylib' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/_CodeSignature' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.swiftmodule/Project/arm64-apple-ios-simulator.swiftsourceinfo' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.swiftmodule/arm64-apple-ios-simulator.abi.json' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.swiftmodule/arm64-apple-ios-simulator.swiftdoc' is located outside of the allowed root paths.\n\nwarning: Stale file '/Users/OWNER/.simurgh/leases/lease-154/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.swiftmodule/arm64-apple-ios-simulator.swiftmodule' is located outside of the allowed root paths.\n\n** BUILD SUCCEEDED ** [307.691 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 35030635408958,
+      "end_ns": 35048996698375,
+      "duration_ns": 18361289417,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for simurgh-clone[lease-155:iPhone 17 Pro:27.0] (2144385C-EE93-4A0D-8A11-87AFCCA31A08).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 35055830283541,
+      "end_ns": 35267476747916,
+      "duration_ns": 211646464375,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 35268523876250,
+      "end_ns": 35328593495208,
+      "duration_ns": 60069618958,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "no AGENT_BADGE print observed within 5s healthy window"
+        }
+      ],
+      "time_to_badge_ns": null,
+      "health_window_s": 5,
+      "log": ""
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [],
+      "log": "skipped: app not healthy"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 35330203560708,
+      "end_ns": 35335839079000,
+      "duration_ns": 5635518292,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "B",
+    "actual": "none",
+    "match": false
+  },
+  "install_clobber": {
+    "hash_after_install": "42cb2e0f739438a35211702c5a5105145a3ab3a758a98b7619c4861c320e0e29",
+    "hash_before_terminate": "42cb2e0f739438a35211702c5a5105145a3ab3a758a98b7619c4861c320e0e29",
+    "clobbered": false
+  },
+  "incidents": [
+    {
+      "type": "launch_destination_failure",
+      "evidence": "no AGENT_BADGE print observed within 5s healthy window"
+    },
+    {
+      "type": "wrong_variant",
+      "evidence": "expected agent-badge-B, observed none"
+    }
+  ],
+  "total_duration_ns": 797924430959,
+  "success": false
+}

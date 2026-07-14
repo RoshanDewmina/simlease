@@ -1,0 +1,79 @@
+{
+  "scenario": "B1",
+  "arm": "diy",
+  "agent": "A",
+  "rep": 1,
+  "udid": "372EB473-FBAE-4E8B-8FF9-D62BF17B4996",
+  "timestamp": "2026-07-14T11:22:14Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 30327265992666,
+      "end_ns": 30384262790791,
+      "duration_ns": 56996798125,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "simulator/SampleApp.app/SampleApp.debug.dylib\n\nCodeSign /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app/__preview.dylib\n\nCodeSign /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    \n    Signing Identity:     \"Sign to Run Locally\"\n    \n    /usr/bin/codesign --force --sign - --timestamp\\=none --generate-entitlement-der /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nRegisterExecutionPolicyException /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    builtin-RegisterExecutionPolicyException /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nValidate /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    builtin-validationUtility /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app -shallow-bundle -infoplist-subpath Info.plist\n\nTouch /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app (in target 'SampleApp' from project 'SampleApp')\n    cd /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/test/fixtures/SampleApp\n    /usr/bin/touch -c /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Products/Debug-iphonesimulator/SampleApp.app\n\nPruneExplicitPrecompiledModules /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/.scratch/diy/A-B1-20260714T111219Z/DerivedData/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD SUCCEEDED ** [46.763 sec]"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 30396996658583,
+      "end_ns": 30398000016791,
+      "duration_ns": 1003358208,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for bench-diy-A-B1-20260714T111219Z (372EB473-FBAE-4E8B-8FF9-D62BF17B4996).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 30398517695416,
+      "end_ns": 30415417392916,
+      "duration_ns": 16899697500,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 30416616275625,
+      "end_ns": 30422015253708,
+      "duration_ns": 5398978083,
+      "exit_code": 0,
+      "incidents": [],
+      "time_to_badge_ns": 1503949333,
+      "health_window_s": 5,
+      "log": "AGENT_BADGE=A\r"
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 30422123973791,
+      "end_ns": 30424480161083,
+      "duration_ns": 2356187292,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Detected file type from extension: PNG\nNote: No display specified. Defaulting to display: 4AB16C3A-BB16-49A7-8310-EC8DE08074CD (screenID: 1, name: LCD)\nWrote screenshot to: /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/results/20260714T111219Z/run-B1-diy-rep1-A.png"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 30425823967833,
+      "end_ns": 30426926482500,
+      "duration_ns": 1102514667,
+      "exit_code": 0,
+      "incidents": [],
+      "log": ""
+    }
+  ],
+  "badge": {
+    "expected": "A",
+    "actual": "A",
+    "match": true
+  },
+  "install_clobber": {
+    "hash_after_install": "6b8b19a1d72211e43c5f50b26ee7475d2507c5ad2299e7293d46f8709183a6bc",
+    "hash_before_terminate": "6b8b19a1d72211e43c5f50b26ee7475d2507c5ad2299e7293d46f8709183a6bc",
+    "clobbered": false
+  },
+  "incidents": [],
+  "total_duration_ns": 83757533875,
+  "success": true
+}

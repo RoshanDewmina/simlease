@@ -1,0 +1,120 @@
+{
+  "scenario": "B1",
+  "arm": "naive",
+  "agent": "A",
+  "rep": 1,
+  "udid": "095F8B3A-FEA3-4031-A2A5-561755740730",
+  "timestamp": "2026-07-14T11:12:55Z",
+  "steps": [
+    {
+      "step": "build",
+      "start_ns": 29855376012875,
+      "end_ns": 29864949072250,
+      "duration_ns": 9573059375,
+      "exit_code": 65,
+      "incidents": [
+        {
+          "type": "dd_contention",
+          "evidence": "error: unable to attach DB: error: accessing build database \"/Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/XCBuildData/build.db\": database is locked Possibly there are two concurrent builds running in the same filesystem location."
+        }
+      ],
+      "log": "Command line invocation:\n    /Applications/Xcode-beta.app/Contents/Developer/usr/bin/xcodebuild build -project /Users/OWNER/Documents/simurgh/.claude/worktrees/benchmark-blockers-2026-07-13-37773c/bench/../test/fixtures/SampleApp/SampleApp.xcodeproj -scheme SampleApp -configuration Debug -destination \"platform=iOS Simulator,name=iPhone 17 Pro\" OTHER_SWIFT_FLAGS=-DAGENT_A\n\nBuild settings from command line:\n    OTHER_SWIFT_FLAGS = -DAGENT_A\n\nBuild Preparation\nBuild task concurrency set to 6 via user default IDEBuildOperationMaxNumberOfConcurrentCompileTasks\n\nComputePackagePrebuildTargetDependencyGraph\n\nPrepare packages\n\nCreateBuildRequest\n\nSendProjectDescription\n\nCreateBuildOperation\n\nComputeTargetDependencyGraph\nnote: Building targets in dependency order\nnote: Target dependency graph (1 target)\n    Target 'SampleApp' in project 'SampleApp' (no dependencies)\n\nGatherProvisioningInputs\n\nCreateBuildDescription\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode-beta.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator27.0.sdk -x c -c /dev/null\n\nExecuteExternalTool /Applications/Xcode-beta.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details\n\nBuild description signature: 7fc02e250c746445e79db30ca78144c0\nBuild description path: /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/XCBuildData/7fc02e250c746445e79db30ca78144c0.xcbuilddata\nerror: unable to attach DB: error: accessing build database \"/Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/XCBuildData/build.db\": database is locked Possibly there are two concurrent builds running in the same filesystem location.\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/ExplicitPrecompiledModules\n\nPruneExplicitPrecompiledModules /Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/SwiftExplicitPrecompiledModules\n\n** BUILD FAILED **\n\n\nThe following build commands failed:\n\tBuilding project SampleApp with scheme SampleApp and configuration Debug\n(1 failure)"
+    },
+    {
+      "step": "boot_wait",
+      "start_ns": 29865467808500,
+      "end_ns": 29865928310250,
+      "duration_ns": 460501750,
+      "exit_code": 0,
+      "incidents": [],
+      "log": "Monitoring boot status for iPhone 17 Pro (095F8B3A-FEA3-4031-A2A5-561755740730).\nDevice already booted, nothing to do."
+    },
+    {
+      "step": "install",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "build failed or app bundle not found, install skipped"
+        }
+      ],
+      "log": ""
+    },
+    {
+      "step": "launch",
+      "start_ns": 29866236135750,
+      "end_ns": 29866307322875,
+      "duration_ns": 71187125,
+      "exit_code": 1,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "install failed, launch skipped"
+        }
+      ],
+      "time_to_badge_ns": null,
+      "health_window_s": 5,
+      "log": ""
+    },
+    {
+      "step": "screenshot",
+      "start_ns": 0,
+      "end_ns": 0,
+      "duration_ns": 0,
+      "exit_code": 1,
+      "incidents": [],
+      "log": "skipped: app not healthy"
+    },
+    {
+      "step": "terminate",
+      "start_ns": 29866442281458,
+      "end_ns": 29866928186375,
+      "duration_ns": 485904917,
+      "exit_code": 3,
+      "incidents": [
+        {
+          "type": "launch_destination_failure",
+          "evidence": "Simulator device failed to terminate dev.simurgh.fixtures.sampleapp."
+        }
+      ],
+      "log": "An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):\nSimulator device failed to terminate dev.simurgh.fixtures.sampleapp.\nfound nothing to terminate\nUnderlying error (domain=NSPOSIXErrorDomain, code=3):\n\tThe request to terminate \"dev.simurgh.fixtures.sampleapp\" failed. found nothing to terminate\n\tfound nothing to terminate"
+    }
+  ],
+  "badge": {
+    "expected": "A",
+    "actual": "none",
+    "match": false
+  },
+  "install_clobber": {
+    "hash_after_install": "",
+    "hash_before_terminate": "",
+    "clobbered": false
+  },
+  "incidents": [
+    {
+      "type": "dd_contention",
+      "evidence": "error: unable to attach DB: error: accessing build database \"/Users/OWNER/Library/Developer/Xcode/DerivedData/SampleApp-clghpdntderefogmohxqgwwfdoip/Build/Intermediates.noindex/XCBuildData/build.db\": database is locked Possibly there are two concurrent builds running in the same filesystem location."
+    },
+    {
+      "type": "launch_destination_failure",
+      "evidence": "build failed or app bundle not found, install skipped"
+    },
+    {
+      "type": "launch_destination_failure",
+      "evidence": "install failed, launch skipped"
+    },
+    {
+      "type": "launch_destination_failure",
+      "evidence": "Simulator device failed to terminate dev.simurgh.fixtures.sampleapp."
+    },
+    {
+      "type": "wrong_variant",
+      "evidence": "expected agent-badge-A, observed none"
+    }
+  ],
+  "total_duration_ns": 10590653167,
+  "success": false
+}

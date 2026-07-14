@@ -10,6 +10,7 @@ full-screen agent badge).
 | Cell in RESULTS.md | Directory here |
 |---|---|
 | B1 (2 agents, N/D/S, 10 reps — clean re-run) | `B1-20260713T154936Z/` |
+| B1 fresh rerun (N/D/S, retries=3, 2026-07-14) | `B1-fresh-20260714T111219Z/` |
 | B2 (4 agents, N/D/S, 5 reps) | `B2-20260713T171721Z/` |
 | B3 (solo overhead, N/S, 10 reps) | `B3-20260713T175107Z/` |
 | B4 (crash cleanup, N/D/S, 5 reps) | `B4-20260713T180241Z/` (see `b4-residue-log.jsonl`) |

@@ -1,0 +1,23 @@
+{
+  "arm": "diy",
+  "provision_steps": [
+    {
+      "step": "simctl_create",
+      "start_ns": 30720092409500,
+      "end_ns": 30720572718541,
+      "duration_ns": 480309041
+    },
+    {
+      "step": "simctl_boot",
+      "start_ns": 30720622721125,
+      "end_ns": 30721652793416,
+      "duration_ns": 1030072291
+    },
+    {
+      "step": "simctl_bootstatus",
+      "start_ns": 30721741118666,
+      "end_ns": 30802973431958,
+      "duration_ns": 81232313292
+    }
+  ]
+}

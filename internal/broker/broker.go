@@ -145,6 +145,10 @@ func min3(a, b, c int) int {
 // Acquire creates a lease and either provisions immediately, queues with
 // CAPACITY_QUEUED, or (Wait=true) blocks until the lease reaches ACTIVE/FAILED/
 // CANCELLED/RELEASED or ctx is done.
+//
+// When ReuseIfExists is true, a compatible ACTIVE lease is renewed in place
+// (same ID/UDID/paths); a compatible in-flight PROVISIONING lease is waited
+// on so concurrent duplicates share one resource. See reuse.go for the match key.
 func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error) {
 	if b.provisioner == nil {
 		return Lease{}, fmt.Errorf("broker: Provisioner is required")
@@ -154,6 +158,28 @@ func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error)
 	if ttl <= 0 {
 		ttl = defaultTTL
 	}
+
+	if req.ReuseIfExists {
+		b.mu.Lock()
+		if existing := b.findReusableLocked(req); existing != nil {
+			switch existing.State {
+			case LeaseActive:
+				b.renewInPlaceLocked(existing, req, ttl)
+				out := cloneLease(existing)
+				b.persistLocked()
+				b.mu.Unlock()
+				return out, nil
+			case LeaseProvisioning:
+				ch := b.addWaiterLocked(existing.ID)
+				id := existing.ID
+				b.persistLocked()
+				b.mu.Unlock()
+				return b.waitForLease(ctx, id, ch, false)
+			}
+		}
+		b.mu.Unlock()
+	}
+
 	now := b.clock()
 	id := b.newID()
 
@@ -171,6 +197,28 @@ func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error)
 	}
 
 	b.mu.Lock()
+	// Re-check reuse under the create lock so a concurrent duplicate that
+	// began provisioning between the unlocked scan and here is attached
+	// instead of allocating a second resource.
+	if req.ReuseIfExists {
+		if existing := b.findReusableLocked(req); existing != nil {
+			switch existing.State {
+			case LeaseActive:
+				b.renewInPlaceLocked(existing, req, ttl)
+				out := cloneLease(existing)
+				b.persistLocked()
+				b.mu.Unlock()
+				return out, nil
+			case LeaseProvisioning:
+				ch := b.addWaiterLocked(existing.ID)
+				id := existing.ID
+				b.persistLocked()
+				b.mu.Unlock()
+				return b.waitForLease(ctx, id, ch, false)
+			}
+		}
+	}
+
 	b.leases[id] = lease
 
 	key := SpecKey(req.Spec)
@@ -201,7 +249,7 @@ func (b *Broker) Acquire(ctx context.Context, req AcquireRequest) (Lease, error)
 	b.persistLocked()
 	b.mu.Unlock()
 
-	return b.waitForLease(ctx, id, ch)
+	return b.waitForLease(ctx, id, ch, true)
 }
 
 // Renew extends an ACTIVE lease's expiry and bumps HeartbeatAt.
@@ -349,7 +397,7 @@ func (b *Broker) Wait(ctx context.Context, leaseID string) (Lease, error) {
 	}
 	ch := b.addWaiterLocked(leaseID)
 	b.mu.Unlock()
-	return b.waitForLease(ctx, leaseID, ch)
+	return b.waitForLease(ctx, leaseID, ch, false)
 }
 
 func (b *Broker) newID() string {
@@ -526,14 +574,11 @@ func (b *Broker) waiterCount(leaseID string) int {
 	return len(b.waiters[leaseID])
 }
 
-func (b *Broker) waitForLease(ctx context.Context, leaseID string, ch chan struct{}) (Lease, error) {
+func (b *Broker) waitForLease(ctx context.Context, leaseID string, ch chan struct{}, cancelQueuedOnDone bool) (Lease, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			b.mu.Lock()
-			b.removeWaiterLocked(leaseID, ch)
-			b.mu.Unlock()
-			return Lease{}, ctx.Err()
+			return b.cancelWaiter(leaseID, ch, ctx.Err(), cancelQueuedOnDone)
 		case <-ch:
 			b.mu.Lock()
 			lease, ok := b.leases[leaseID]
@@ -557,6 +602,29 @@ func (b *Broker) waitForLease(ctx context.Context, leaseID string, ch chan struc
 			return out, nil
 		}
 	}
+}
+
+// cancelWaiter drops the waiter registration. When cancelQueuedOnDone is true
+// and the lease is still QUEUED (Acquire --wait owner), it is CANCELLED so
+// capacity is not stranded. Wait RPC / reuse-attach paths pass false.
+func (b *Broker) cancelWaiter(leaseID string, ch chan struct{}, cause error, cancelQueuedOnDone bool) (Lease, error) {
+	b.mu.Lock()
+	b.removeWaiterLocked(leaseID, ch)
+	lease, ok := b.leases[leaseID]
+	freedQueued := false
+	var out Lease
+	if ok {
+		if cancelQueuedOnDone && lease.State == LeaseQueued {
+			b.queueForLocked(SpecKey(lease.Spec)).remove(leaseID)
+			lease.State = LeaseCancelled
+			b.notifyWaitersLocked(leaseID)
+			b.persistLocked()
+			freedQueued = true
+		}
+		out = cloneLease(lease)
+	}
+	b.mu.Unlock()
+	return out, acquireCancelled(leaseID, cause, freedQueued)
 }
 
 func isWaitTerminal(state LeaseState) bool {

@@ -540,8 +540,12 @@ func TestWaitCancelRemovesWaiter(t *testing.T) {
 	cancel()
 	select {
 	case err := <-errCh:
+		var ac *AcquireCancelledError
+		if !errors.As(err, &ac) {
+			t.Fatalf("wait err=%v want AcquireCancelledError", err)
+		}
 		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("wait err=%v want context.Canceled", err)
+			t.Fatalf("wait err=%v want errors.Is context.Canceled", err)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Wait did not return after cancel")
@@ -549,6 +553,12 @@ func TestWaitCancelRemovesWaiter(t *testing.T) {
 
 	if n := b.waiterCount(queued.ID); n != 0 {
 		t.Fatalf("waiterCount(%s)=%d want 0 after cancel", queued.ID, n)
+	}
+
+	// Wait RPC cancel must not cancel someone else's QUEUED lease.
+	got, ok := b.Get(queued.ID)
+	if !ok || got.State != LeaseQueued {
+		t.Fatalf("queued lease state=%v ok=%v want still queued", got.State, ok)
 	}
 
 	// Keep first active so the queued lease never reaches a terminal state

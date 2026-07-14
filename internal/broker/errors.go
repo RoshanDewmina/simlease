@@ -18,23 +18,26 @@ type Error struct {
 }
 
 const (
-	CodeCapacityQueued  = "CAPACITY_QUEUED"
-	CodeLeaseNotFound   = "LEASE_NOT_FOUND"
-	CodeInvalidState    = "INVALID_STATE"
-	CodeProvisionFailed = "PROVISION_FAILED"
+	CodeCapacityQueued    = "CAPACITY_QUEUED"
+	CodeLeaseNotFound     = "LEASE_NOT_FOUND"
+	CodeInvalidState      = "INVALID_STATE"
+	CodeProvisionFailed   = "PROVISION_FAILED"
+	CodeAcquireCancelled  = "ACQUIRE_CANCELLED"
 
-	FixCapacityQueued  = "simurgh status --queue   # or pass wait:true"
-	FixLeaseNotFound   = "simurgh list"
-	FixInvalidState    = "simurgh status"
-	FixProvisionFailed = "simurgh acquire   # retry after fixing the provisioner error"
+	FixCapacityQueued   = "simurgh status --queue   # or pass wait:true"
+	FixLeaseNotFound    = "simurgh list"
+	FixInvalidState     = "simurgh status"
+	FixProvisionFailed  = "simurgh acquire   # retry after fixing the provisioner error"
+	FixAcquireCancelled = "simurgh list   # waiter cancelled; QUEUED capacity is freed"
 )
 
 var (
-	errLeaseNotFound   = errors.New("broker: lease not found")
-	errInvalidState    = errors.New("broker: invalid lease state")
-	errCapacityQueued  = errors.New("broker: capacity queued")
-	errProvisionFailed = errors.New("broker: provision failed")
-	errInvalidError    = errors.New("broker: error requires code, message, and fix")
+	errLeaseNotFound     = errors.New("broker: lease not found")
+	errInvalidState      = errors.New("broker: invalid lease state")
+	errCapacityQueued    = errors.New("broker: capacity queued")
+	errProvisionFailed   = errors.New("broker: provision failed")
+	errAcquireCancelled  = errors.New("broker: acquire cancelled")
+	errInvalidError      = errors.New("broker: error requires code, message, and fix")
 )
 
 // NewError constructs a validated error triple.
@@ -164,4 +167,43 @@ func provisionFailed(cause error) error {
 		return &ProvisionFailedError{Cause: cause}
 	}
 	return &ProvisionFailedError{Cause: cause, ErrorEnvelope: env}
+}
+
+// AcquireCancelledError is returned when a Wait acquire/waiter is cancelled
+// (client disconnect, ctx cancel, or daemon shutdown of the request). When the
+// lease was still QUEUED it is transitioned to CANCELLED so capacity is not
+// stranded; the envelope is always actionable (never bare context.Canceled).
+type AcquireCancelledError struct {
+	LeaseID       string
+	Cause         error
+	ErrorEnvelope *Error
+}
+
+func (e *AcquireCancelledError) Error() string {
+	if e == nil || e.ErrorEnvelope == nil {
+		return errAcquireCancelled.Error()
+	}
+	return fmt.Sprintf("broker: %s: %s", e.ErrorEnvelope.Code, e.ErrorEnvelope.Message)
+}
+
+func (e *AcquireCancelledError) Unwrap() error {
+	if e != nil && e.Cause != nil {
+		return e.Cause
+	}
+	return errAcquireCancelled
+}
+
+func acquireCancelled(leaseID string, cause error, freedQueued bool) error {
+	msg := fmt.Sprintf("acquire waiter for lease %q cancelled", leaseID)
+	if freedQueued {
+		msg = fmt.Sprintf("%s; QUEUED lease cancelled so capacity is not stranded", msg)
+	}
+	if cause != nil {
+		msg = fmt.Sprintf("%s (%v)", msg, cause)
+	}
+	env, err := NewError(CodeAcquireCancelled, msg, FixAcquireCancelled)
+	if err != nil {
+		return &AcquireCancelledError{LeaseID: leaseID, Cause: cause}
+	}
+	return &AcquireCancelledError{LeaseID: leaseID, Cause: cause, ErrorEnvelope: env}
 }

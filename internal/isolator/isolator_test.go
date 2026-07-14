@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,6 +103,49 @@ func TestBuildEnvGoldenFields(t *testing.T) {
 	wantSnippet := `eval "$(simurgh env lease-86dd)"`
 	if env.ShellSnippet != wantSnippet {
 		t.Fatalf("ShellSnippet = %q want %q", env.ShellSnippet, wantSnippet)
+	}
+}
+
+func TestWritableCachesStayUnderLeaseRoot(t *testing.T) {
+	root := t.TempDir()
+	dirs, err := EnsureLeaseDir(root, "lease-cache")
+	if err != nil {
+		t.Fatalf("EnsureLeaseDir: %v", err)
+	}
+	if err := ValidateWritableCachesUnderLeaseRoot(dirs); err != nil {
+		t.Fatalf("ValidateWritableCachesUnderLeaseRoot: %v", err)
+	}
+
+	env := BuildEnv(dirs, "lease-cache", "UDID-CACHE")
+	paths := []string{
+		env.Env["SIMURGH_DERIVED_DATA"],
+		env.Env["CLANG_MODULE_CACHE_PATH"],
+		env.Env["SIMURGH_SWIFTPM_DIR"],
+		env.Env["SIMURGH_RESULT_BUNDLE_DIR"],
+		dirs.Tmp,
+	}
+	for _, p := range paths {
+		rel, err := filepath.Rel(dirs.Root, p)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			t.Fatalf("writable path %q escapes lease root %q", p, dirs.Root)
+		}
+		if home := os.Getenv("HOME"); home != "" {
+			banned := filepath.Join(home, "Library", "Developer", "Xcode", "DerivedData")
+			if p == banned || strings.HasPrefix(p, banned+string(os.PathSeparator)) {
+				t.Fatalf("path %q uses default Xcode DerivedData", p)
+			}
+		}
+	}
+	// Flags must point at the same lease-scoped DerivedData/SwiftPM.
+	if got := env.XcodebuildFlags; len(got) < 4 || got[1] != dirs.DerivedData || got[3] != dirs.SwiftPM {
+		t.Fatalf("xcodebuild flags not lease-scoped: %#v", env.XcodebuildFlags)
+	}
+
+	// Escaping path must be rejected.
+	bad := dirs
+	bad.DerivedData = filepath.Join(root, "..", "escape-dd")
+	if err := ValidateWritableCachesUnderLeaseRoot(bad); err == nil {
+		t.Fatal("expected escape rejection")
 	}
 }
 

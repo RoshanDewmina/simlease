@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
@@ -19,6 +20,13 @@ type LeaseDirs struct {
 	SwiftPM     string
 	Results     string
 	Tmp         string
+}
+
+// defaultXcodeWritableMarkers are host path suffixes Simurgh must never emit
+// as writable caches (R-WP4 private writable-cache isolation).
+var defaultXcodeWritableMarkers = []string{
+	filepath.Join("Library", "Developer", "Xcode", "DerivedData"),
+	filepath.Join("Library", "Caches", "org.swift.swiftpm"),
 }
 
 // EnsureLeaseDir creates the five isolation subdirectories under
@@ -39,7 +47,71 @@ func EnsureLeaseDir(leasesRoot, leaseID string) (LeaseDirs, error) {
 			return LeaseDirs{}, fmt.Errorf("isolator: mkdir %s: %w", d, err)
 		}
 	}
+	if err := ValidateWritableCachesUnderLeaseRoot(dirs); err != nil {
+		return LeaseDirs{}, err
+	}
 	return dirs, nil
+}
+
+// ValidateWritableCachesUnderLeaseRoot asserts DerivedData/ModuleCache/SwiftPM/
+// Results/tmp are strictly under dirs.Root and never equal a default Xcode path.
+func ValidateWritableCachesUnderLeaseRoot(dirs LeaseDirs) error {
+	if dirs.Root == "" {
+		return fmt.Errorf("isolator: lease root is required")
+	}
+	root := filepath.Clean(dirs.Root)
+	writable := map[string]string{
+		"DerivedData": dirs.DerivedData,
+		"ModuleCache": dirs.ModuleCache,
+		"SwiftPM":     dirs.SwiftPM,
+		"Results":     dirs.Results,
+		"tmp":         dirs.Tmp,
+	}
+	for name, path := range writable {
+		if path == "" {
+			return fmt.Errorf("isolator: %s path is empty", name)
+		}
+		clean := filepath.Clean(path)
+		if clean == root {
+			return fmt.Errorf("isolator: %s path %q must be a subdirectory of lease root %q", name, clean, root)
+		}
+		rel, err := filepath.Rel(root, clean)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+			return fmt.Errorf("isolator: %s path %q escapes lease root %q", name, clean, root)
+		}
+		if touchesDefaultXcodeWritablePath(clean) {
+			return fmt.Errorf("isolator: %s path %q must not use default Xcode writable caches", name, clean)
+		}
+	}
+	return nil
+}
+
+func touchesDefaultXcodeWritablePath(path string) bool {
+	clean := filepath.Clean(path)
+	for _, marker := range defaultXcodeWritableMarkers {
+		if clean == marker || strings.HasSuffix(clean, string(os.PathSeparator)+marker) {
+			return true
+		}
+		if idx := strings.Index(clean, string(os.PathSeparator)+marker+string(os.PathSeparator)); idx >= 0 {
+			return true
+		}
+		if strings.HasSuffix(clean, string(os.PathSeparator)+marker) {
+			return true
+		}
+	}
+	if home := os.Getenv("HOME"); home != "" {
+		banned := []string{
+			filepath.Join(home, "Library", "Developer", "Xcode", "DerivedData"),
+			filepath.Join(home, "Library", "Caches", "org.swift.swiftpm"),
+		}
+		for _, b := range banned {
+			b = filepath.Clean(b)
+			if clean == b || strings.HasPrefix(clean, b+string(os.PathSeparator)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // BuildEnv is pure: computes IsolationEnv from dirs + lease identity.
@@ -48,6 +120,9 @@ func EnsureLeaseDir(leasesRoot, leaseID string) (LeaseDirs, error) {
 // (repo: VibeChard, license: Apache-2.0). Field names match ARCHITECTURE §7
 // byte-for-byte. Does not emit -resultBundlePath (that is per-exec, via
 // AllocateResultBundlePath). PATH shim is v0.1 — not built here.
+//
+// Panics are avoided: callers that need a hard guarantee should call
+// ValidateWritableCachesUnderLeaseRoot first (EnsureLeaseDir already does).
 func BuildEnv(dirs LeaseDirs, leaseID, udid string) broker.IsolationEnv {
 	return broker.IsolationEnv{
 		Env: map[string]string{

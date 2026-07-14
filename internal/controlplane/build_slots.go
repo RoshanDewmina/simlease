@@ -17,21 +17,26 @@ type buildScheduler struct {
 	active map[string]*BuildGrant // grantID → grant
 	byJob  map[string]string      // jobID → grantID
 	queue  []buildWaiter
-	idSeq  atomic.Uint64
+	// promoted retains ownership between FIFO removal and acquire's ready
+	// branch. Context cancellation can therefore release the exact grant.
+	promoted map[string]buildWaiter // jobID → promoted waiter
+	idSeq    atomic.Uint64
 }
 
 type buildWaiter struct {
 	jobID    string
 	enqueued time.Time
 	ch       chan BuildGrant
+	grantID  string
 }
 
 func newBuildScheduler(slots int, clock func() time.Time) *buildScheduler {
 	return &buildScheduler{
-		slots:  slots,
-		clock:  clock,
-		active: make(map[string]*BuildGrant),
-		byJob:  make(map[string]string),
+		slots:    slots,
+		clock:    clock,
+		active:   make(map[string]*BuildGrant),
+		byJob:    make(map[string]string),
+		promoted: make(map[string]buildWaiter),
 	}
 }
 
@@ -98,8 +103,22 @@ func (s *buildScheduler) acquire(ctx context.Context, jobID string, wait bool) (
 		if g.ID == "" {
 			return BuildGrant{}, waiter.enqueued, time.Time{}, 0, context.Canceled
 		}
+		if !s.takePromoted(jobID, g.ID) {
+			return BuildGrant{}, waiter.enqueued, time.Time{}, 0, context.Canceled
+		}
 		return g, waiter.enqueued, g.GrantedAt, g.GrantedAt.Sub(waiter.enqueued), nil
 	}
+}
+
+func (s *buildScheduler) takePromoted(jobID, grantID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	w, ok := s.promoted[jobID]
+	if !ok || w.grantID != grantID {
+		return false
+	}
+	delete(s.promoted, jobID)
+	return true
 }
 
 func (s *buildScheduler) grantLocked(jobID string) BuildGrant {
@@ -126,6 +145,7 @@ func (s *buildScheduler) releaseOwned(jobID, grantID string) error {
 		}
 		delete(s.active, current)
 		delete(s.byJob, jobID)
+		delete(s.promoted, jobID)
 	}
 	if grantID == "" {
 		s.removeWaiterLocked(jobID, true)
@@ -142,6 +162,8 @@ func (s *buildScheduler) promoteLocked() {
 		w := s.queue[0]
 		s.queue = s.queue[1:]
 		g := s.grantLocked(w.jobID)
+		w.grantID = g.ID
+		s.promoted[w.jobID] = w
 		w.ch <- g
 	}
 }
@@ -149,13 +171,28 @@ func (s *buildScheduler) promoteLocked() {
 func (s *buildScheduler) cancelWaiter(jobID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.removeWaiterLocked(jobID, true)
+	if s.removeWaiterLocked(jobID, true) {
+		s.promoteLocked()
+		return
+	}
+	w, ok := s.promoted[jobID]
+	if !ok {
+		return
+	}
+	delete(s.promoted, jobID)
+	if current, active := s.byJob[jobID]; active && current == w.grantID {
+		delete(s.active, current)
+		delete(s.byJob, jobID)
+	}
+	s.promoteLocked()
 }
 
-func (s *buildScheduler) removeWaiterLocked(jobID string, notify bool) {
+func (s *buildScheduler) removeWaiterLocked(jobID string, notify bool) bool {
 	out := s.queue[:0]
+	removed := false
 	for _, w := range s.queue {
 		if w.jobID == jobID {
+			removed = true
 			if notify {
 				w.ch <- BuildGrant{}
 			}
@@ -164,4 +201,5 @@ func (s *buildScheduler) removeWaiterLocked(jobID string, notify bool) {
 		out = append(out, w)
 	}
 	s.queue = out
+	return removed
 }

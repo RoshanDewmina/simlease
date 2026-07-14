@@ -44,6 +44,28 @@ type blockingProvisioner struct {
 	resume  chan struct{}
 }
 
+type stagedProvisioner struct {
+	mu      sync.Mutex
+	calls   int
+	blocked chan broker.ProvisionRequest
+	resume  chan struct{}
+}
+
+func (f *stagedProvisioner) Provision(_ context.Context, req broker.ProvisionRequest) (broker.Device, error) {
+	f.mu.Lock()
+	f.calls++
+	call := f.calls
+	f.mu.Unlock()
+	if call > 1 {
+		f.blocked <- req
+		<-f.resume
+	}
+	return broker.Device{
+		UDID: "UDID-" + req.LeaseID, Name: "simurgh-clone[test]",
+		Runtime: req.Spec.Runtime, Booted: true,
+	}, nil
+}
+
 func (f *blockingProvisioner) Provision(_ context.Context, req broker.ProvisionRequest) (broker.Device, error) {
 	f.started <- req
 	<-f.resume
@@ -656,6 +678,237 @@ func TestCancelFailedJobIsRejectedWithoutMutation(t *testing.T) {
 	got, _ := cp.GetJob(j.ID)
 	if !reflect.DeepEqual(got, failed) {
 		t.Fatalf("cancel mutated failed job:\n got=%+v\nwant=%+v", got, failed)
+	}
+}
+
+func TestTerminalClaimBeatsInstallingToLaunching(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		terminal JobState
+	}{
+		{name: "cancel", terminal: JobCancelled},
+		{name: "fail", terminal: JobFailed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			prov := &stagedProvisioner{
+				blocked: make(chan broker.ProvisionRequest, 1),
+				resume:  make(chan struct{}),
+			}
+			resumed := false
+			defer func() {
+				if !resumed {
+					close(prov.resume)
+				}
+			}()
+			b := broker.New(broker.BrokerOptions{
+				Capacity: 1, Provisioner: prov, Clock: time.Now,
+				PressureOK: func() (bool, string) { return true, "" },
+			})
+			cp, err := New(Options{BuildSlots: 1, Broker: b})
+			if err != nil {
+				t.Fatal(err)
+			}
+			s, _ := cp.CreateSession(CreateSessionRequest{Project: "p", Agent: "a"})
+			j, _ := cp.StartJob(s.ID, JobKindTest)
+			for _, state := range []JobState{
+				JobSyncing, JobPreparing, JobBuilding,
+				JobWaitingForDevice, JobInstalling,
+			} {
+				if _, err := cp.TransitionJob(context.Background(), j.ID, state); err != nil {
+					t.Fatal(err)
+				}
+			}
+			before, _ := cp.GetJob(j.ID)
+			ownedLeaseID := before.DeviceLeaseID
+
+			// Queue a second lease so terminal cleanup blocks while broker
+			// promotes/provisions it. The terminal state must already be visible.
+			_, queueErr := b.Acquire(context.Background(), broker.AcquireRequest{
+				Spec: cp.deviceSpec, Wait: false, Owner: broker.Owner{PID: 99},
+			})
+			var cq *broker.CapacityQueuedError
+			if !errors.As(queueErr, &cq) {
+				t.Fatalf("expected queued follower: %v", queueErr)
+			}
+
+			done := make(chan error, 1)
+			go func() {
+				if tc.terminal == JobCancelled {
+					_, err := cp.CancelJob(context.Background(), j.ID)
+					done <- err
+					return
+				}
+				_, err := cp.FailJob(context.Background(), j.ID, FailureSource, "compile")
+				done <- err
+			}()
+			<-prov.blocked
+
+			claimed, _ := cp.GetJob(j.ID)
+			if claimed.State != tc.terminal {
+				t.Fatalf("terminal not claimed before cleanup: %s", claimed.State)
+			}
+			if claimed.DeviceLeaseID != ownedLeaseID {
+				t.Fatalf("cleanup ownership cleared early: got %q want %q", claimed.DeviceLeaseID, ownedLeaseID)
+			}
+			if _, err := cp.TransitionJob(context.Background(), j.ID, JobLaunching); err == nil {
+				t.Fatal("installing→launching won after terminal claim")
+			}
+			close(prov.resume)
+			resumed = true
+			if err := <-done; err != nil {
+				t.Fatalf("terminal cleanup: %v", err)
+			}
+
+			got, _ := cp.GetJob(j.ID)
+			if got.State != tc.terminal || got.DeviceLeaseID != "" || got.BuildGrantID != "" {
+				t.Fatalf("incoherent terminal job: %+v", got)
+			}
+			ownedLease, ok := b.Get(ownedLeaseID)
+			if !ok || ownedLease.State != broker.LeaseReleased {
+				t.Fatalf("owned lease=%+v ok=%v", ownedLease, ok)
+			}
+			for _, l := range b.List(broker.ListFilter{}) {
+				if l.State == broker.LeaseActive {
+					_, _ = b.Release(context.Background(), l.ID)
+				}
+			}
+			fresh, err := b.Acquire(context.Background(), broker.AcquireRequest{
+				Spec: cp.deviceSpec, Wait: false, Owner: broker.Owner{PID: 100},
+			})
+			if err != nil || fresh.State != broker.LeaseActive {
+				t.Fatalf("capacity incoherent: lease=%+v err=%v", fresh, err)
+			}
+		})
+	}
+}
+
+func TestIdempotentTerminalCallRetriesRetainedCleanup(t *testing.T) {
+	prov := &blockingProvisioner{
+		started: make(chan broker.ProvisionRequest, 1),
+		resume:  make(chan struct{}),
+	}
+	b := broker.New(broker.BrokerOptions{
+		Capacity: 1, Provisioner: prov, Clock: time.Now,
+		PressureOK: func() (bool, string) { return true, "" },
+	})
+	cp, err := New(Options{BuildSlots: 1, Broker: b})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, _ := cp.CreateSession(CreateSessionRequest{Project: "p", Agent: "a"})
+	j, _ := cp.StartJob(s.ID, JobKindBuild)
+	if _, err := cp.TransitionJob(context.Background(), j.ID, JobSyncing); err != nil {
+		t.Fatal(err)
+	}
+
+	acquired := make(chan error, 1)
+	go func() {
+		_, err := b.Acquire(context.Background(), broker.AcquireRequest{
+			Spec: cp.deviceSpec, Wait: true, Owner: broker.Owner{PID: 7},
+		})
+		acquired <- err
+	}()
+	req := <-prov.started // lease is PROVISIONING; Release must fail
+	cp.mu.Lock()
+	cp.jobs[j.ID].DeviceLeaseID = req.LeaseID
+	cp.jobs[j.ID].generation++
+	cp.mu.Unlock()
+
+	first, err := cp.CancelJob(context.Background(), j.ID)
+	if err == nil {
+		t.Fatal("expected cleanup error while lease is provisioning")
+	}
+	if first.State != JobCancelled || first.DeviceLeaseID != req.LeaseID {
+		t.Fatalf("cleanup ownership not retained: %+v", first)
+	}
+
+	close(prov.resume)
+	if err := <-acquired; err != nil {
+		t.Fatal(err)
+	}
+	second, err := cp.CancelJob(context.Background(), j.ID)
+	if err != nil {
+		t.Fatalf("idempotent cleanup retry: %v", err)
+	}
+	if second.State != JobCancelled || second.DeviceLeaseID != "" {
+		t.Fatalf("cleanup retry did not clear ownership: %+v", second)
+	}
+	lease, _ := b.Get(req.LeaseID)
+	if lease.State != broker.LeaseReleased {
+		t.Fatalf("lease state=%s want RELEASED", lease.State)
+	}
+}
+
+func TestPromotedBuildWaiterCancellationReleasesGrantAndPromotesNext(t *testing.T) {
+	s := newBuildScheduler(1, time.Now)
+	holder := s.grantLocked("holder")
+	w1 := buildWaiter{jobID: "waiter-1", enqueued: time.Now(), ch: make(chan BuildGrant, 1)}
+	w2 := buildWaiter{jobID: "waiter-2", enqueued: time.Now(), ch: make(chan BuildGrant, 1)}
+	s.queue = append(s.queue, w1, w2)
+
+	if err := s.releaseOwned("holder", holder.ID); err != nil {
+		t.Fatal(err)
+	}
+	promoted := <-w1.ch // ready is selectable
+	if promoted.ID == "" {
+		t.Fatal("first waiter was not promoted")
+	}
+	s.cancelWaiter("waiter-1") // deterministic ctx-wins branch after promotion
+
+	select {
+	case next := <-w2.ch:
+		if next.ID == "" || next.JobID != "waiter-2" {
+			t.Fatalf("next grant=%+v", next)
+		}
+		if _, ok := s.lookup(promoted.ID); ok {
+			t.Fatalf("cancelled promoted grant %s stranded active", promoted.ID)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("next waiter not promoted after promoted waiter cancellation")
+	}
+}
+
+func TestBuildWaiterPromotionCancelRaceDoesNotStrandSlot(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		s := newBuildScheduler(1, time.Now)
+		holder := s.grantLocked("holder")
+		ctx, cancel := context.WithCancel(context.Background())
+		result := make(chan error, 1)
+		go func() {
+			_, _, _, _, err := s.acquire(ctx, "waiter", true)
+			result <- err
+		}()
+		for deadline := time.Now().Add(time.Second); s.status().QueuedBuilds != 1; {
+			if time.Now().After(deadline) {
+				t.Fatal("waiter did not queue")
+			}
+		}
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			_ = s.releaseOwned("holder", holder.ID)
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			cancel()
+		}()
+		close(start)
+		wg.Wait()
+		err := <-result
+		if err != nil && !errors.Is(err, context.Canceled) {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+		if err != nil {
+			if got := s.status().ActiveBuilds; got != 0 {
+				t.Fatalf("iteration %d: cancelled waiter stranded %d active build", i, got)
+			}
+		} else {
+			_ = s.release("waiter")
+		}
 	}
 }
 

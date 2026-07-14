@@ -2,6 +2,7 @@ package controlplane
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -373,6 +374,12 @@ func (cp *ControlPlane) FailJob(ctx context.Context, jobID string, class Failure
 		return Job{}, &NotFoundError{Kind: "job", ID: jobID}
 	}
 	from := j.State
+	if from == JobFailed {
+		generation := j.generation
+		leaseID, buildGrantID := j.DeviceLeaseID, j.BuildGrantID
+		cp.mu.Unlock()
+		return cp.cleanupTerminal(ctx, jobID, JobFailed, generation, buildGrantID, leaseID)
+	}
 	if terminalStates[from] {
 		out := cloneJob(j)
 		cp.mu.Unlock()
@@ -382,45 +389,24 @@ func (cp *ControlPlane) FailJob(ctx context.Context, jobID string, class Failure
 		cp.mu.Unlock()
 		return Job{}, &InvalidJobStateError{JobID: jobID, From: from, To: JobFailed, Op: "fail"}
 	}
-	retry := ClassifyRetry(class)
-	leaseID := j.DeviceLeaseID
-	buildGrantID := j.BuildGrantID
-	generation := j.generation
-	cp.mu.Unlock()
-
-	cp.builds.cancelWaiter(jobID)
-	_ = cp.builds.releaseOwned(jobID, buildGrantID)
-	if leaseID != "" {
-		_, _ = cp.broker.Release(ctx, leaseID)
-	}
-
-	cp.mu.Lock()
-	defer cp.mu.Unlock()
-	j, ok = cp.jobs[jobID]
-	if !ok {
-		return Job{}, &NotFoundError{Kind: "job", ID: jobID}
-	}
-	if j.State != from || j.generation != generation {
-		if terminalStates[j.State] {
-			return cloneJob(j), nil
-		}
-		return Job{}, &InvalidJobStateError{JobID: jobID, From: j.State, To: JobFailed, Op: "fail (raced)"}
-	}
 	now := cp.clock()
 	cp.endPhaseLocked(j, from, now)
 	j.State = JobFailed
 	j.FailureClass = class
-	j.RetryClass = retry
+	j.RetryClass = ClassifyRetry(class)
 	j.FailureDetail = detail
-	j.DeviceLeaseID = ""
-	j.BuildGrantID = ""
 	j.UpdatedAt = now
 	j.generation++
 	pt := j.Timings.Phases[string(JobFailed)]
 	pt.StartedAt = now
 	pt.EndedAt = now
 	j.Timings.Phases[string(JobFailed)] = pt
-	return cloneJob(j), nil
+	terminalGeneration := j.generation
+	leaseID := j.DeviceLeaseID
+	buildGrantID := j.BuildGrantID
+	cp.mu.Unlock()
+
+	return cp.cleanupTerminal(ctx, jobID, JobFailed, terminalGeneration, buildGrantID, leaseID)
 }
 
 // CancelJob cancels a job and releases only resources owned by that job.
@@ -433,48 +419,86 @@ func (cp *ControlPlane) CancelJob(ctx context.Context, jobID string) (Job, error
 		return Job{}, &NotFoundError{Kind: "job", ID: jobID}
 	}
 	if j.State == JobCancelled {
-		out := cloneJob(j)
+		generation := j.generation
+		leaseID, buildGrantID := j.DeviceLeaseID, j.BuildGrantID
 		cp.mu.Unlock()
-		return out, nil
+		return cp.cleanupTerminal(ctx, jobID, JobCancelled, generation, buildGrantID, leaseID)
 	}
 	if !CanTransition(j.State, JobCancelled) {
 		cp.mu.Unlock()
 		return Job{}, &InvalidJobStateError{JobID: jobID, From: j.State, To: JobCancelled, Op: "cancel"}
 	}
 	from := j.State
-	generation := j.generation
-	leaseID := j.DeviceLeaseID
-	buildGrantID := j.BuildGrantID
-	cp.mu.Unlock()
-
-	cp.builds.cancelWaiter(jobID)
-	_ = cp.builds.releaseOwned(jobID, buildGrantID)
-	if leaseID != "" {
-		_, _ = cp.broker.Release(ctx, leaseID)
-	}
-
-	cp.mu.Lock()
-	defer cp.mu.Unlock()
-	j, ok = cp.jobs[jobID]
-	if !ok {
-		return Job{}, &NotFoundError{Kind: "job", ID: jobID}
-	}
-	if j.State == JobCancelled {
-		return cloneJob(j), nil
-	}
-	if j.State != from || j.generation != generation {
-		return Job{}, &InvalidJobStateError{JobID: jobID, From: j.State, To: JobCancelled, Op: "cancel (raced)"}
-	}
 	now := cp.clock()
 	cp.endPhaseLocked(j, from, now)
 	j.State = JobCancelled
 	j.FailureClass = FailureCancelled
 	j.RetryClass = RetryUnsafe
-	j.DeviceLeaseID = ""
-	j.BuildGrantID = ""
 	j.UpdatedAt = now
 	j.generation++
-	return cloneJob(j), nil
+	pt := j.Timings.Phases[string(JobCancelled)]
+	pt.StartedAt = now
+	pt.EndedAt = now
+	j.Timings.Phases[string(JobCancelled)] = pt
+	terminalGeneration := j.generation
+	leaseID := j.DeviceLeaseID
+	buildGrantID := j.BuildGrantID
+	cp.mu.Unlock()
+
+	return cp.cleanupTerminal(ctx, jobID, JobCancelled, terminalGeneration, buildGrantID, leaseID)
+}
+
+// cleanupTerminal releases only resources snapshotted by the terminal claim.
+// IDs remain on the Job until their exact release succeeds, allowing an
+// idempotent terminal call to retry retained cleanup ownership.
+func (cp *ControlPlane) cleanupTerminal(
+	ctx context.Context,
+	jobID string,
+	terminal JobState,
+	terminalGeneration uint64,
+	buildGrantID, leaseID string,
+) (Job, error) {
+	cp.builds.cancelWaiter(jobID)
+	buildReleased := buildGrantID == ""
+	var cleanupErrs []error
+	if buildGrantID != "" {
+		if err := cp.builds.releaseOwned(jobID, buildGrantID); err != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("release build grant %q: %w", buildGrantID, err))
+		} else {
+			buildReleased = true
+		}
+	}
+	deviceReleased := leaseID == ""
+	if leaseID != "" {
+		if _, err := cp.broker.Release(ctx, leaseID); err != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("release device lease %q: %w", leaseID, err))
+		} else {
+			deviceReleased = true
+		}
+	}
+
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+	j, ok := cp.jobs[jobID]
+	if !ok {
+		return Job{}, &NotFoundError{Kind: "job", ID: jobID}
+	}
+	if j.State == terminal && j.generation == terminalGeneration {
+		cleared := false
+		if buildReleased && buildGrantID != "" && j.BuildGrantID == buildGrantID {
+			j.BuildGrantID = ""
+			cleared = true
+		}
+		if deviceReleased && leaseID != "" && j.DeviceLeaseID == leaseID {
+			j.DeviceLeaseID = ""
+			cleared = true
+		}
+		if cleared {
+			j.UpdatedAt = cp.clock()
+			j.generation++
+		}
+	}
+	return cloneJob(j), errors.Join(cleanupErrs...)
 }
 
 func (cp *ControlPlane) endPhaseLocked(j *Job, phase JobState, now time.Time) {

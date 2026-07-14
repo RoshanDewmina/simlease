@@ -126,20 +126,25 @@ func startDetachedDaemon(bin, logPath string) error {
 	}
 	defer devNull.Close()
 
-	cmd := exec.Command(bin, "daemon", "run")
-	cmd.Stdin = devNull
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
-	// New session + detached stdin: parent-shell exit / SIGHUP must not kill the
-	// daemon. Setsid alone was insufficient (bench evidence); stdin=/dev/null
-	// plus daemon-side signal.Ignore(SIGHUP) complete the detach.
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd := detachedDaemonCommand(bin, devNull, logFile)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
 	// Detached: do not Wait. Release process handle.
 	_ = cmd.Process.Release()
 	return nil
+}
+
+func detachedDaemonCommand(bin string, stdin, output *os.File) *exec.Cmd {
+	cmd := exec.Command(bin, "daemon", "run")
+	cmd.Stdin = stdin
+	cmd.Stdout = output
+	cmd.Stderr = output
+	// New session + detached stdin: parent-shell exit / SIGHUP must not kill the
+	// daemon. Setsid alone was insufficient (bench evidence); stdin=/dev/null
+	// plus daemon-side signal.Ignore(SIGHUP) complete the detach.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	return cmd
 }
 
 func daemonNotRunning(cause error) error {

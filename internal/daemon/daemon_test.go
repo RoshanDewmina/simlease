@@ -18,6 +18,7 @@ import (
 	"github.com/RoshanDewmina/simurgh/internal/provisioner"
 	"github.com/RoshanDewmina/simurgh/internal/reaper"
 	"github.com/RoshanDewmina/simurgh/internal/safety"
+	"github.com/RoshanDewmina/simurgh/internal/store"
 	"github.com/RoshanDewmina/simurgh/internal/watcher"
 )
 
@@ -565,10 +566,12 @@ func containsSub(s, sub string) bool {
 func TestBrokerErrorToIPCMappings(t *testing.T) {
 	pos := 2
 	cases := []struct {
-		name string
-		err  error
-		code string
-		qp   *int
+		name          string
+		err           error
+		code          string
+		qp            *int
+		reason        string
+		resourceClass string
 	}{
 		{
 			name: "not found",
@@ -593,13 +596,22 @@ func TestBrokerErrorToIPCMappings(t *testing.T) {
 		{
 			name: "capacity",
 			err: &broker.CapacityQueuedError{
-				Position: 2,
+				Position:      2,
+				Reason:        broker.QueueReasonProvisioningSlot,
+				ResourceClass: broker.QueueReasonProvisioningSlot,
 				ErrorEnvelope: &broker.Error{
-					Code: broker.CodeCapacityQueued, Message: "full", Fix: "wait", QueuePosition: &pos,
+					Code:          broker.CodeCapacityQueued,
+					Message:       "full",
+					Fix:           "wait",
+					QueuePosition: &pos,
+					Reason:        broker.QueueReasonProvisioningSlot,
+					ResourceClass: broker.QueueReasonProvisioningSlot,
 				},
 			},
-			code: broker.CodeCapacityQueued,
-			qp:   &pos,
+			code:          broker.CodeCapacityQueued,
+			qp:            &pos,
+			reason:        broker.QueueReasonProvisioningSlot,
+			resourceClass: broker.QueueReasonProvisioningSlot,
 		},
 		{
 			name: "provision",
@@ -627,6 +639,12 @@ func TestBrokerErrorToIPCMappings(t *testing.T) {
 				if got.QueuePosition == nil || *got.QueuePosition != *tc.qp {
 					t.Fatalf("queuePosition = %v want %d", got.QueuePosition, *tc.qp)
 				}
+			}
+			if got.Reason != tc.reason {
+				t.Fatalf("reason = %q want %q", got.Reason, tc.reason)
+			}
+			if got.ResourceClass != tc.resourceClass {
+				t.Fatalf("resourceClass = %q want %q", got.ResourceClass, tc.resourceClass)
 			}
 			if got.Fix == "" || got.Message == "" {
 				t.Fatalf("incomplete triple: %+v", got)
@@ -698,7 +716,15 @@ func TestRegisterLeaseHandlersWiresMethods(t *testing.T) {
 }
 
 func TestPoolStatusCountsByState(t *testing.T) {
-	deps, b, _ := newTestDeps(t, 3)
+	b := broker.New(broker.BrokerOptions{
+		Capacity:                  3,
+		PerSpecCapacity:           2,
+		MaxProvisioningOperations: 1,
+		Provisioner:               &fakeProvisioner{},
+		Clock:                     time.Now,
+		PressureOK:                func() (bool, string) { return true, "" },
+	})
+	deps := Deps{Broker: b, LeasesRoot: t.TempDir()}
 	h := newHandlers(deps)
 
 	lease, err := b.Acquire(context.Background(), broker.AcquireRequest{
@@ -728,14 +754,22 @@ func TestPoolStatusCountsByState(t *testing.T) {
 		t.Fatalf("pool.status: %+v", resp.Error)
 	}
 	var got struct {
-		Capacity int            `json:"capacity"`
-		Leases   map[string]int `json:"leases"`
+		Capacity                  int            `json:"capacity"`
+		PerSpecCapacity           int            `json:"perSpecCapacity"`
+		MaxProvisioningOperations int            `json:"maxProvisioningOperations"`
+		Leases                    map[string]int `json:"leases"`
 	}
 	if err := json.Unmarshal(resp.Result, &got); err != nil {
 		t.Fatalf("unmarshal: %v raw=%s", err, resp.Result)
 	}
 	if got.Capacity != 3 {
 		t.Fatalf("capacity = %d want 3", got.Capacity)
+	}
+	if got.PerSpecCapacity != 2 {
+		t.Fatalf("perSpecCapacity = %d want 2", got.PerSpecCapacity)
+	}
+	if got.MaxProvisioningOperations != 1 {
+		t.Fatalf("maxProvisioningOperations = %d want 1", got.MaxProvisioningOperations)
 	}
 	if got.Leases["active"] != 1 {
 		t.Fatalf("active = %d want 1; leases=%v", got.Leases["active"], got.Leases)
@@ -747,6 +781,90 @@ func TestPoolStatusCountsByState(t *testing.T) {
 		if _, ok := got.Leases[key]; !ok {
 			t.Fatalf("missing lease count key %q in %v", key, got.Leases)
 		}
+	}
+}
+
+func TestStartupRehydrateAdvancesCompetingSpecImmediately(t *testing.T) {
+	journal := filepath.Join(t.TempDir(), "state.json")
+	st := store.New(journal)
+	specA := testSpec()
+	specB := broker.DeviceSpec{
+		Platform: "iOS",
+		Model:    "iPhone 16",
+		Runtime:  "27.0",
+	}
+	seed := map[string]*broker.Lease{
+		"lease-1": {
+			ID:         "lease-1",
+			State:      broker.LeaseProvisioning,
+			Spec:       specA,
+			Owner:      broker.Owner{PID: 1},
+			Connection: broker.Connection{Transport: "local"},
+			TTL:        time.Minute,
+			AcquiredAt: time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC),
+		},
+		"lease-2": {
+			ID:         "lease-2",
+			State:      broker.LeaseQueued,
+			Spec:       specB,
+			Owner:      broker.Owner{PID: 2},
+			Connection: broker.Connection{Transport: "local"},
+			TTL:        time.Minute,
+			AcquiredAt: time.Date(2026, 7, 14, 12, 1, 0, 0, time.UTC),
+		},
+	}
+	raw, err := json.Marshal(seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Save(store.State{SchemaVersion: store.SchemaVersion, Leases: raw}); err != nil {
+		t.Fatal(err)
+	}
+
+	prov := &fakeProvisioner{}
+	b := broker.New(broker.BrokerOptions{
+		Capacity:    1,
+		Provisioner: prov,
+		Store:       st,
+		PressureOK:  func() (bool, string) { return true, "" },
+	})
+	if err := b.Rehydrate(); err != nil {
+		t.Fatalf("Rehydrate: %v", err)
+	}
+	failed, _ := b.Get("lease-1")
+	queued, _ := b.Get("lease-2")
+	if failed.State != broker.LeaseFailed || queued.State != broker.LeaseQueued {
+		t.Fatalf("post-rehydrate states: failed=%s queued=%s", failed.State, queued.State)
+	}
+	if prov.n.Load() != 0 {
+		t.Fatalf("provisioned before daemon dependencies ready: %d calls", prov.n.Load())
+	}
+
+	// Missing daemon dependencies must not start provisioning.
+	if err := AdvanceRehydratedQueues(context.Background(), Deps{Broker: b}); err == nil {
+		t.Fatal("AdvanceRehydratedQueues succeeded before dependencies were ready")
+	}
+	if prov.n.Load() != 0 {
+		t.Fatalf("provisioned during not-ready startup: %d calls", prov.n.Load())
+	}
+
+	deps := Deps{
+		Broker:      b,
+		Reaper:      new(reaper.Reaper),
+		Provisioner: new(provisioner.Provisioner),
+	}
+	if err := AdvanceRehydratedQueues(context.Background(), deps); err != nil {
+		t.Fatalf("AdvanceRehydratedQueues: %v", err)
+	}
+	promoted, _ := b.Get("lease-2")
+	if promoted.State != broker.LeaseActive {
+		t.Fatalf("competing spec state=%s want active", promoted.State)
+	}
+	if promoted.Device == nil || promoted.Device.UDID == "" {
+		t.Fatalf("promoted lease missing device: %+v", promoted)
+	}
+	if prov.n.Load() != 1 {
+		t.Fatalf("provision calls=%d want 1 immediate retry", prov.n.Load())
 	}
 }
 

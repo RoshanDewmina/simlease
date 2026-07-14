@@ -51,6 +51,25 @@ func RegisterLeaseHandlers(server *ipc.Server, deps Deps) {
 	server.RegisterHandler("prune.apply", h.pruneApply)
 }
 
+// AdvanceRehydratedQueues performs the one immediate post-rehydrate global
+// queue retry required at daemon startup. It refuses to provision until the
+// broker, reaper, and daemon-facing provisioner dependencies are all ready;
+// cmd/simurgh calls it after constructing Deps and registering handlers, before
+// starting the periodic reclaim loop or accepting clients.
+func AdvanceRehydratedQueues(ctx context.Context, deps Deps) error {
+	if deps.Broker == nil {
+		return errors.New("daemon: broker not ready for rehydrated queue advance")
+	}
+	if deps.Reaper == nil {
+		return errors.New("daemon: reaper not ready for rehydrated queue advance")
+	}
+	if deps.Provisioner == nil {
+		return errors.New("daemon: provisioner not ready for rehydrated queue advance")
+	}
+	deps.Broker.RetryQueues(ctx)
+	return nil
+}
+
 type handlers struct {
 	deps Deps
 }

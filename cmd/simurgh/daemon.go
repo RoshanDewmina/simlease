@@ -202,6 +202,14 @@ func runDaemon() int {
 		DeviceDeleter: safetyClient,
 	}
 	daemon.RegisterLeaseHandlers(srv, deps)
+	// Rehydrate may have converted a crashed PROVISIONING lease to FAILED,
+	// freeing a global slot while other specs remain QUEUED. Advance once now,
+	// after all daemon dependencies and handlers are ready, instead of waiting
+	// for the first 5s periodic reclaim tick.
+	if err := daemon.AdvanceRehydratedQueues(ctx, deps); err != nil {
+		fmt.Fprintf(os.Stderr, "simurgh daemon run: advance rehydrated queues: %v\n", err)
+		return 1
+	}
 
 	// Default reclaim intervals (not yet configurable via config.yaml):
 	// watch every 5s; orphan scan every 5m (log-only; auto-reclaim deferred).

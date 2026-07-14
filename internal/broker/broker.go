@@ -57,14 +57,14 @@ type BrokerOptions struct {
 // persistence via internal/store (M1.6). When Store is configured, call
 // Rehydrate once after New and before accepting client traffic.
 type Broker struct {
-	capacity       int
-	perSpecCap     int
+	capacity        int
+	perSpecCap      int
 	maxProvisioning int
-	provisioner    Provisioner
-	clock          func() time.Time
-	pressureOK     func() (bool, string)
-	store          *store.Store
-	logger         func(format string, args ...any)
+	provisioner     Provisioner
+	clock           func() time.Time
+	pressureOK      func() (bool, string)
+	store           *store.Store
+	logger          func(format string, args ...any)
 
 	mu         sync.Mutex
 	leases     map[string]*Lease
@@ -331,8 +331,9 @@ func (b *Broker) CancelQueued(leaseID string) (Lease, error) {
 }
 
 // Reclaim transitions ACTIVE → RECLAIMED, frees capacity, and advances the
-// per-spec FIFO queue. Unlike Release, QUEUED leases cannot be reclaimed
-// (use Release to cancel). Non-ACTIVE leases return InvalidStateError.
+// deterministic host-global queue, which may promote a competing DeviceSpec.
+// Unlike Release, QUEUED leases cannot be reclaimed (use Release to cancel).
+// Non-ACTIVE leases return InvalidStateError.
 //
 // This only mutates broker state. Actual device/lease-dir teardown is the
 // reaper's job via internal/safety.
@@ -524,8 +525,8 @@ func (b *Broker) beginProvisionLocked(lease *Lease) {
 // AcquiredAt then ID (deterministic cross-spec fairness proxy).
 func (b *Broker) globalQueuePositionLocked(leaseID string) int {
 	type item struct {
-		id   string
-		at   time.Time
+		id string
+		at time.Time
 	}
 	var queued []item
 	for _, lease := range b.leases {

@@ -217,19 +217,34 @@ func readFileBestEffort(path string) string {
 	return string(b)
 }
 
-// TestStartDetachedDaemonStdinIsDevNull is a fast unit check that the spawn
-// wiring opens /dev/null for stdin (complement to the 30s OS survival proof).
-func TestStartDetachedDaemonStdinIsDevNull(t *testing.T) {
+// TestDetachedDaemonCommandUsesDevNullAndSetsid directly asserts command
+// construction. The real 30s survival proof remains
+// TestDialDaemonSurvivesParentExit.
+func TestDetachedDaemonCommandUsesDevNullAndSetsid(t *testing.T) {
 	dir := shortTempDir(t)
 	logPath := filepath.Join(dir, "daemon.log")
-	// A no-op binary that exits immediately still exercises OpenFile(/dev/null).
-	bin := buildFakeDaemon(t)
-	t.Setenv("SIMURGH_HOME", dir)
-	t.Setenv("FAKE_DAEMON_HANG", "1")
-	if err := startDetachedDaemon(bin, logPath); err != nil {
-		t.Fatalf("startDetachedDaemon: %v", err)
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Give the child a moment; cleanup by killing anything still running is
-	// best-effort — hang mode sleeps 5s then exits.
-	time.Sleep(50 * time.Millisecond)
+	defer logFile.Close()
+	devNull, err := os.OpenFile(os.DevNull, os.O_RDONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer devNull.Close()
+
+	cmd := detachedDaemonCommand("/tmp/simurgh-test", devNull, logFile)
+	if cmd.Stdin != devNull {
+		t.Fatalf("stdin = %v want opened %s", cmd.Stdin, os.DevNull)
+	}
+	if cmd.Stdout != logFile || cmd.Stderr != logFile {
+		t.Fatalf("stdout/stderr not attached to daemon log")
+	}
+	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setsid {
+		t.Fatalf("SysProcAttr = %+v want Setsid", cmd.SysProcAttr)
+	}
+	if len(cmd.Args) != 3 || cmd.Args[1] != "daemon" || cmd.Args[2] != "run" {
+		t.Fatalf("args = %q", cmd.Args)
+	}
 }

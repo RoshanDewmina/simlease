@@ -1111,3 +1111,120 @@ func TestPruneApply_ReclaimsHeldAndDeletesOrphans_NeverTouchesActive(t *testing.
 		t.Fatalf("active lease must remain ACTIVE, got ok=%v state=%v", ok, still.State)
 	}
 }
+
+func TestReclaimLoopCancelsDeadQueuedOwner(t *testing.T) {
+	deps, b, _ := newTestDeps(t, 1)
+	first, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), TTL: time.Hour, Owner: broker.Owner{PID: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), TTL: time.Hour, Wait: false, Owner: broker.Owner{PID: 424242},
+	})
+	if !errors.As(err, new(*broker.CapacityQueuedError)) {
+		t.Fatalf("want CAPACITY_QUEUED, got %v", err)
+	}
+	if queued.State != broker.LeaseQueued {
+		t.Fatalf("state=%s want queued", queued.State)
+	}
+
+	loop := &ReclaimLoop{
+		Deps:           deps,
+		Logger:         func(string, ...any) {},
+		IsProcessAlive: func(pid int) bool { return pid != 424242 },
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		loop.Run(ctx, 20*time.Millisecond, time.Hour)
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got, ok := b.Get(queued.ID)
+		if ok && got.State == broker.LeaseCancelled {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	got, ok := b.Get(queued.ID)
+	if !ok || got.State != broker.LeaseCancelled {
+		t.Fatalf("queued lease state=%v ok=%v want cancelled", got.State, ok)
+	}
+	// Holding ACTIVE lease must remain untouched.
+	if active, ok := b.Get(first.ID); !ok || active.State != broker.LeaseActive {
+		t.Fatalf("active lease disturbed: %+v ok=%v", active, ok)
+	}
+}
+
+func TestAcquireCancelledMapsToActionableIPCError(t *testing.T) {
+	deps, b, _ := newTestDeps(t, 1)
+	h := newHandlers(deps)
+
+	first, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), TTL: time.Hour, Owner: broker.Owner{PID: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = first
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan *ipc.Error, 1)
+	go func() {
+		params, _ := json.Marshal(map[string]any{
+			"spec":  map[string]string{"platform": "iOS", "model": "iPhone 17 Pro", "runtime": "27.0"},
+			"ttl":   "1h",
+			"wait":  true,
+			"owner": map[string]any{"pid": 2, "agent": "test"},
+		})
+		_, herr := h.acquire(ctx, ipc.Request{
+			V: ipc.ProtocolVersion, ID: "cancel-wait", Method: "lease.acquire", Params: params,
+		})
+		errCh <- herr
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		var queued bool
+		for _, l := range b.List(broker.ListFilter{}) {
+			if l.State == broker.LeaseQueued {
+				queued = true
+				break
+			}
+		}
+		if queued {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+
+	select {
+	case herr := <-errCh:
+		if herr == nil || herr.Code != broker.CodeAcquireCancelled {
+			t.Fatalf("error=%+v want %s", herr, broker.CodeAcquireCancelled)
+		}
+		if herr.Message == "" || herr.Fix == "" {
+			t.Fatalf("non-actionable error: %+v", herr)
+		}
+		if herr.Code == "INTERNAL" {
+			t.Fatalf("want actionable ACQUIRE_CANCELLED, got INTERNAL %+v", herr)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("acquire did not return after cancel")
+	}
+
+	for _, l := range b.List(broker.ListFilter{}) {
+		if l.State == broker.LeaseQueued {
+			t.Fatalf("QUEUED lease stranded: %+v", l)
+		}
+	}
+}

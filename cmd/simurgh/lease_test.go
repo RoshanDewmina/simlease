@@ -49,6 +49,7 @@ func TestExitCodeForIPCError(t *testing.T) {
 		{"capacity", &rpcError{e: &ipc.Error{Code: "CAPACITY_QUEUED", Message: "q", Fix: "f"}}, 2},
 		{"not found", &rpcError{e: &ipc.Error{Code: "LEASE_NOT_FOUND", Message: "m", Fix: "f"}}, 3},
 		{"invalid state", &rpcError{e: &ipc.Error{Code: "INVALID_STATE", Message: "m", Fix: "f"}}, 3},
+		{"acquire cancelled", &rpcError{e: &ipc.Error{Code: "ACQUIRE_CANCELLED", Message: "m", Fix: "f"}}, 3},
 		{"provision", &rpcError{e: &ipc.Error{Code: "PROVISION_FAILED", Message: "m", Fix: "f"}}, 4},
 		{"daemon code", &rpcError{e: &ipc.Error{Code: "DAEMON_NOT_RUNNING", Message: "m", Fix: "f"}}, 4},
 		{"daemon typed", &ipc.DaemonNotRunningError{ErrorEnvelope: &ipc.Error{Code: "DAEMON_NOT_RUNNING", Message: "m", Fix: "f"}}, 4},

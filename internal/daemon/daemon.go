@@ -383,6 +383,10 @@ func brokerErrorToIPC(err error) *ipc.Error {
 	if errors.As(err, &pf) {
 		return copyBrokerEnvelope(pf.ErrorEnvelope)
 	}
+	var ac *broker.AcquireCancelledError
+	if errors.As(err, &ac) {
+		return copyBrokerEnvelope(ac.ErrorEnvelope)
+	}
 
 	env, e := ipc.NewError("INTERNAL", err.Error(), "simurgh doctor")
 	if e != nil {
@@ -745,14 +749,30 @@ func (l *ReclaimLoop) runQueueRetry(ctx context.Context, interval time.Duration)
 
 func (l *ReclaimLoop) applyDecisions(ctx context.Context, decisions []watcher.ReclaimDecision, logger func(string, ...any)) {
 	for _, d := range decisions {
-		lease, err := l.Deps.Broker.Reclaim(ctx, d.LeaseID)
-		if err != nil {
-			logger("simurgh reclaim: broker.Reclaim(%s) reason=%q: %v", d.LeaseID, d.Reason, err)
+		cur, ok := l.Deps.Broker.Get(d.LeaseID)
+		if !ok {
+			logger("simurgh reclaim: lease %s gone before apply reason=%q", d.LeaseID, d.Reason)
 			continue
 		}
-		if err := l.Deps.Reaper.Reclaim(ctx, lease); err != nil {
-			logger("simurgh reclaim: reaper.Reclaim(%s) reason=%q: %v", d.LeaseID, d.Reason, err)
-			// Continue — next decision / next tick still runs.
+		switch cur.State {
+		case broker.LeaseQueued:
+			// Dead queued owner / stranded waiter: CANCELLED via Release, no device teardown.
+			lease, err := l.Deps.Broker.Release(ctx, d.LeaseID)
+			if err != nil {
+				logger("simurgh reclaim: broker.Release(%s) reason=%q: %v", d.LeaseID, d.Reason, err)
+				continue
+			}
+			logger("simurgh reclaim: cancelled QUEUED lease %s reason=%q state=%s", lease.ID, d.Reason, lease.State)
+		default:
+			lease, err := l.Deps.Broker.Reclaim(ctx, d.LeaseID)
+			if err != nil {
+				logger("simurgh reclaim: broker.Reclaim(%s) reason=%q: %v", d.LeaseID, d.Reason, err)
+				continue
+			}
+			if err := l.Deps.Reaper.Reclaim(ctx, lease); err != nil {
+				logger("simurgh reclaim: reaper.Reclaim(%s) reason=%q: %v", d.LeaseID, d.Reason, err)
+				// Continue — next decision / next tick still runs.
+			}
 		}
 	}
 }

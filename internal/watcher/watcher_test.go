@@ -211,14 +211,14 @@ func TestTick_RoadmapSIGKILLOwnerReclaimedInOneTick(t *testing.T) {
 	}
 }
 
-func TestTick_IgnoresNonActive(t *testing.T) {
+func TestTick_IgnoresNonActiveNonQueued(t *testing.T) {
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	fb := &fakeBroker{}
-	fb.set(broker.Lease{
-		ID:    "lease-q",
-		State: broker.LeaseQueued,
-		Owner: broker.Owner{PID: 1},
-	})
+	fb.set(
+		broker.Lease{ID: "lease-released", State: broker.LeaseReleased, Owner: broker.Owner{PID: 1}},
+		broker.Lease{ID: "lease-failed", State: broker.LeaseFailed, Owner: broker.Owner{PID: 2}},
+		broker.Lease{ID: "lease-cancelled", State: broker.LeaseCancelled, Owner: broker.Owner{PID: 3}},
+	)
 
 	w := New(WatcherOptions{
 		Broker:         fb,
@@ -288,5 +288,52 @@ func TestRun_InvokesCallbackOnTick(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run never invoked callback with a decision")
+	}
+}
+
+func TestTick_QueuedOwnerDead_CancelledRegardlessOfReleaseOnPIDExit(t *testing.T) {
+	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	lease := broker.Lease{
+		ID:               "lease-queued-dead",
+		State:            broker.LeaseQueued,
+		Owner:            broker.Owner{PID: 55},
+		ReleaseOnPIDExit: false,
+		AcquiredAt:       now,
+	}
+	fb := &fakeBroker{}
+	fb.set(lease)
+
+	w := New(WatcherOptions{
+		Broker:         fb,
+		Now:            func() time.Time { return now },
+		IsProcessAlive: func(pid int) bool { return false },
+	})
+
+	got := w.Tick(context.Background())
+	if len(got) != 1 || got[0].LeaseID != "lease-queued-dead" || got[0].Reason != "queued owner process exited" {
+		t.Fatalf("got %+v", got)
+	}
+}
+
+func TestTick_QueuedOwnerAlive_NoDecision(t *testing.T) {
+	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	lease := broker.Lease{
+		ID:         "lease-queued-alive",
+		State:      broker.LeaseQueued,
+		Owner:      broker.Owner{PID: 56},
+		AcquiredAt: now,
+	}
+	fb := &fakeBroker{}
+	fb.set(lease)
+
+	w := New(WatcherOptions{
+		Broker:         fb,
+		Now:            func() time.Time { return now },
+		IsProcessAlive: func(pid int) bool { return pid == 56 },
+	})
+
+	got := w.Tick(context.Background())
+	if len(got) != 0 {
+		t.Fatalf("want 0 decisions, got %+v", got)
 	}
 }

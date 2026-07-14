@@ -29,7 +29,7 @@ type WatcherOptions struct {
 	DefaultHardCap    time.Duration
 }
 
-// Watcher scans ACTIVE leases and decides which should be reclaimed.
+// Watcher scans ACTIVE leases for reclaim and QUEUED leases for dead-owner cancel.
 type Watcher struct {
 	broker            BrokerLister
 	now               func() time.Time
@@ -60,9 +60,16 @@ func New(opts WatcherOptions) *Watcher {
 	}
 }
 
-// Tick scans ACTIVE leases and returns reclaim decisions without side effects.
-// Priority per lease: PID exit (--rm / ReleaseOnPIDExit) → hard → inactivity → TTL.
-// When ReleaseOnPIDExit is false, owner PID liveness is not checked at all.
+// Tick scans ACTIVE and QUEUED leases and returns reclaim/cancel decisions
+// without side effects.
+//
+// ACTIVE priority: PID exit (--rm / ReleaseOnPIDExit) → hard → inactivity → TTL.
+// When ReleaseOnPIDExit is false, ACTIVE owner PID liveness is not checked.
+//
+// QUEUED: owner PID liveness is always checked. A dead queued owner strands
+// capacity (no waiter remains after daemon/client death); those leases are
+// reported with reason "queued owner process exited" so the daemon can
+// Release → CANCELLED (not Reclaim).
 func (w *Watcher) Tick(ctx context.Context) []ReclaimDecision {
 	_ = ctx
 	if w == nil || w.broker == nil {
@@ -72,11 +79,18 @@ func (w *Watcher) Tick(ctx context.Context) []ReclaimDecision {
 	leases := w.broker.List(broker.ListFilter{})
 	var out []ReclaimDecision
 	for _, lease := range leases {
-		if lease.State != broker.LeaseActive {
-			continue
-		}
-		if reason, ok := w.decide(lease, now); ok {
-			out = append(out, ReclaimDecision{LeaseID: lease.ID, Reason: reason})
+		switch lease.State {
+		case broker.LeaseActive:
+			if reason, ok := w.decide(lease, now); ok {
+				out = append(out, ReclaimDecision{LeaseID: lease.ID, Reason: reason})
+			}
+		case broker.LeaseQueued:
+			if lease.Owner.PID > 0 && !w.isProcessAlive(lease.Owner.PID) {
+				out = append(out, ReclaimDecision{
+					LeaseID: lease.ID,
+					Reason:  "queued owner process exited",
+				})
+			}
 		}
 	}
 	return out

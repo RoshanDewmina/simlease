@@ -47,6 +47,7 @@ func exitCodeForIPCError(err error) int {
 		case broker.CodeCapacityQueued:
 			return 2
 		case broker.CodeLeaseNotFound, broker.CodeInvalidState,
+			broker.CodeAcquireCancelled,
 			provisioner.CodeDeviceTypeNotFound, provisioner.CodeRuntimeNotFound,
 			safety.CodeDeviceNotManaged, safety.CodeDeviceNotFound:
 			return 3
@@ -253,9 +254,11 @@ func parseAcquireFlags(args []string) (acquireFlags, error) {
 			}
 			f.Hard = d
 		case "--reuse-if-exists":
-			// Wired end-to-end (CLI → lease.acquire reuseIfExists → broker field),
-			// but internal/broker.Acquire does not currently implement reuse
-			// semantics (M1.1 gap): the flag is stored and ignored server-side.
+			// ReuseIfExists matches an ACTIVE lease with the same Spec, exact
+			// Labels, and Owner.Agent+SessionID (PID excluded). Renews TTL/
+			// heartbeat and returns the same lease ID/UDID/isolation paths.
+			// Encode project/Xcode/scheme trust boundaries in Labels — they
+			// are not first-class AcquireRequest fields.
 			f.ReuseIfExists = true
 		case "--wait":
 			f.Wait = true

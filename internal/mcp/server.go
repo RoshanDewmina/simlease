@@ -232,7 +232,7 @@ type leaseAcquireParams struct {
 	Runtime       string            `json:"runtime,omitempty" jsonschema:"optional iOS runtime version, e.g. 27.0"`
 	Labels        map[string]string `json:"labels,omitempty" jsonschema:"optional key/value labels attached to the lease"`
 	TTL           string            `json:"ttl,omitempty" jsonschema:"optional lease TTL duration string, e.g. 30m"`
-	ReuseIfExists bool              `json:"reuse_if_exists,omitempty" jsonschema:"if true, request reuse of an existing matching lease when supported"`
+	ReuseIfExists bool              `json:"reuse_if_exists,omitempty" jsonschema:"if true, renew and return an existing ACTIVE lease with the same DeviceSpec, exact labels, and Owner.Agent+SessionID (PID ignored); mismatch allocates a new lease. Put project/Xcode/scheme identity in labels — those dimensions are not first-class fields"`
 	Wait          bool              `json:"wait,omitempty" jsonschema:"if true, wait when the pool is at capacity instead of failing immediately"`
 	Detach        bool              `json:"detach,omitempty" jsonschema:"if true, the lease survives this agent session ending; default false means the lease is reclaimed when this session's MCP server process exits"`
 	Inactivity    string            `json:"inactivity_timeout,omitempty" jsonschema:"optional inactivity timeout duration string, e.g. 10m; the lease is reclaimed after this long without activity"`

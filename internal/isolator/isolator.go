@@ -42,6 +42,9 @@ func EnsureLeaseDir(leasesRoot, leaseID string) (LeaseDirs, error) {
 		Results:     filepath.Join(root, "Results"),
 		Tmp:         filepath.Join(root, "tmp"),
 	}
+	if err := ValidateWritableCachesUnderLeaseRoot(dirs); err != nil {
+		return LeaseDirs{}, err
+	}
 	for _, d := range []string{dirs.DerivedData, dirs.ModuleCache, dirs.SwiftPM, dirs.Results, dirs.Tmp} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return LeaseDirs{}, fmt.Errorf("isolator: mkdir %s: %w", d, err)
@@ -59,7 +62,10 @@ func ValidateWritableCachesUnderLeaseRoot(dirs LeaseDirs) error {
 	if dirs.Root == "" {
 		return fmt.Errorf("isolator: lease root is required")
 	}
-	root := filepath.Clean(dirs.Root)
+	root, err := resolvePathAllowMissing(dirs.Root)
+	if err != nil {
+		return fmt.Errorf("isolator: resolve lease root %q: %w", dirs.Root, err)
+	}
 	writable := map[string]string{
 		"DerivedData": dirs.DerivedData,
 		"ModuleCache": dirs.ModuleCache,
@@ -71,7 +77,10 @@ func ValidateWritableCachesUnderLeaseRoot(dirs LeaseDirs) error {
 		if path == "" {
 			return fmt.Errorf("isolator: %s path is empty", name)
 		}
-		clean := filepath.Clean(path)
+		clean, err := resolvePathAllowMissing(path)
+		if err != nil {
+			return fmt.Errorf("isolator: resolve %s path %q: %w", name, path, err)
+		}
 		if clean == root {
 			return fmt.Errorf("isolator: %s path %q must be a subdirectory of lease root %q", name, clean, root)
 		}
@@ -84,6 +93,35 @@ func ValidateWritableCachesUnderLeaseRoot(dirs LeaseDirs) error {
 		}
 	}
 	return nil
+}
+
+// resolvePathAllowMissing resolves symlinks through the nearest existing
+// ancestor, then appends not-yet-created descendants lexically.
+func resolvePathAllowMissing(path string) (string, error) {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	current := filepath.Clean(abs)
+	var missing []string
+	for {
+		resolved, err := filepath.EvalSymlinks(current)
+		if err == nil {
+			for i := len(missing) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, missing[i])
+			}
+			return filepath.Clean(resolved), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return "", err
+		}
+		missing = append(missing, filepath.Base(current))
+		current = parent
+	}
 }
 
 func touchesDefaultXcodeWritablePath(path string) bool {

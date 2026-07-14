@@ -149,6 +149,85 @@ func TestWritableCachesStayUnderLeaseRoot(t *testing.T) {
 	}
 }
 
+func TestWritableCachesRejectDefaultXcodePaths(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "lease")
+	base := LeaseDirs{
+		Root:        root,
+		DerivedData: filepath.Join(root, "DerivedData"),
+		ModuleCache: filepath.Join(root, "ModuleCache"),
+		SwiftPM:     filepath.Join(root, "SwiftPM"),
+		Results:     filepath.Join(root, "Results"),
+		Tmp:         filepath.Join(root, "tmp"),
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	derived := base
+	derived.DerivedData = filepath.Join(home, "Library", "Developer", "Xcode", "DerivedData")
+	if err := ValidateWritableCachesUnderLeaseRoot(derived); err == nil {
+		t.Fatal("default Xcode DerivedData must be rejected")
+	}
+
+	swiftPM := base
+	swiftPM.SwiftPM = filepath.Join(home, "Library", "Caches", "org.swift.swiftpm")
+	if err := ValidateWritableCachesUnderLeaseRoot(swiftPM); err == nil {
+		t.Fatal("default SwiftPM cache must be rejected")
+	}
+}
+
+func TestWritableCachesRejectSymlinkEscape(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "lease")
+	outside := filepath.Join(parent, "outside")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(outside, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	escapeLink := filepath.Join(root, "linked-cache")
+	if err := os.Symlink(outside, escapeLink); err != nil {
+		t.Fatal(err)
+	}
+	dirs := LeaseDirs{
+		Root:        root,
+		DerivedData: filepath.Join(escapeLink, "not-created-yet", "DerivedData"),
+		ModuleCache: filepath.Join(root, "ModuleCache"),
+		SwiftPM:     filepath.Join(root, "SwiftPM"),
+		Results:     filepath.Join(root, "Results"),
+		Tmp:         filepath.Join(root, "tmp"),
+	}
+	if err := ValidateWritableCachesUnderLeaseRoot(dirs); err == nil {
+		t.Fatal("symlink escape through nearest existing parent must be rejected")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "not-created-yet")); !os.IsNotExist(err) {
+		t.Fatalf("validation must not create outside descendants: %v", err)
+	}
+}
+
+func TestWritableCachesResolveSymlinkedRoot(t *testing.T) {
+	parent := t.TempDir()
+	realRoot := filepath.Join(parent, "real-lease")
+	if err := os.MkdirAll(realRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	rootLink := filepath.Join(parent, "lease-link")
+	if err := os.Symlink(realRoot, rootLink); err != nil {
+		t.Fatal(err)
+	}
+	dirs := LeaseDirs{
+		Root:        rootLink,
+		DerivedData: filepath.Join(rootLink, "DerivedData"),
+		ModuleCache: filepath.Join(rootLink, "ModuleCache"),
+		SwiftPM:     filepath.Join(rootLink, "SwiftPM"),
+		Results:     filepath.Join(rootLink, "Results"),
+		Tmp:         filepath.Join(rootLink, "tmp"),
+	}
+	if err := ValidateWritableCachesUnderLeaseRoot(dirs); err != nil {
+		t.Fatalf("symlinked root with confined descendants rejected: %v", err)
+	}
+}
+
 func TestAllocateResultBundlePathAdvances(t *testing.T) {
 	dirs := LeaseDirs{Results: "/tmp/leases/lease-x/Results"}
 	t0 := time.Unix(1_700_000_000, 123)

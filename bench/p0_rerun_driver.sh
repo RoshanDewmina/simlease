@@ -63,6 +63,17 @@ wait_for_quiet() {
         continue
       fi
     fi
+    # Disk floor (added after the Data volume hit 100% mid-session from
+    # non-bench activity): B1's DIY scratch alone accumulates ~5 GB
+    # within one run; starting a cell without headroom just logs broken
+    # reps. 15 GB default; real value recorded in the log either way.
+    local free_gb
+    free_gb="$(df -g /System/Volumes/Data | awk 'NR==2 {print $4}')"
+    if [[ "${free_gb:-0}" -lt "${BENCH_DISK_FLOOR_GB:-15}" ]]; then
+      say "$label: disk too tight (${free_gb}GB free < ${BENCH_DISK_FLOOR_GB:-15}GB) — waiting"
+      sleep 120
+      continue
+    fi
     local idle
     idle="$(idle_s)"
     if [[ "${idle:-0}" -ge "$IDLE_MIN_S" ]]; then

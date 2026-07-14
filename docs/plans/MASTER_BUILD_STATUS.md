@@ -82,7 +82,7 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 | `49bc1b3` | feat(isolator): enforce writable caches stay under lease root |
 | `41aa107` | feat(provisioner): bounded readiness polls with classified timeouts |
 | `1d51667` | feat(controlplane): additive acquire/build/install/launch/test/capture timings |
-| *(status tip)* | docs(plans): record R-WP4 implementation-complete / benchmark-deferred |
+| `36e1943` | docs(plans): record R-WP4 implementation-complete / benchmark-deferred |
 
 ### Public symbols / dependents
 
@@ -111,7 +111,7 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 | **R-WP1** | tip `e948d26` | complete |
 | **R-WP2** | tip `23c2dce` | complete |
 | **R-WP3** | tip `b811736` | complete |
-| **R-WP4** | tip after status commit on `feat/r-wp4-readiness-cache` | **implementation-complete / benchmark-deferred** |
+| **R-WP4** | tip `36e1943` on `feat/r-wp4-readiness-cache` | **implementation-complete / benchmark-deferred** |
 
 ## Open failures/risks
 

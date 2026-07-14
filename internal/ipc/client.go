@@ -120,9 +120,19 @@ func startDetachedDaemon(bin, logPath string) error {
 	}
 	defer logFile.Close()
 
+	devNull, err := os.OpenFile(os.DevNull, os.O_RDONLY, 0)
+	if err != nil {
+		return fmt.Errorf("ipc: open /dev/null: %w", err)
+	}
+	defer devNull.Close()
+
 	cmd := exec.Command(bin, "daemon", "run")
+	cmd.Stdin = devNull
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+	// New session + detached stdin: parent-shell exit / SIGHUP must not kill the
+	// daemon. Setsid alone was insufficient (bench evidence); stdin=/dev/null
+	// plus daemon-side signal.Ignore(SIGHUP) complete the detach.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return err

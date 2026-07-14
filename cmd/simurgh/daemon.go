@@ -90,6 +90,11 @@ func DefaultStatePath() (string, error) {
 }
 
 func runDaemon() int {
+	// Auto-start via ipc.Dial uses Setsid + stdin=/dev/null, but a controlling
+	// terminal can still deliver SIGHUP when the parent shell exits. Ignore it
+	// so the daemon survives parent death; SIGINT/SIGTERM still shut down.
+	signal.Ignore(syscall.SIGHUP)
+
 	socketPath, err := DefaultSocketPath()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "simurgh daemon run: %v\n", err)
@@ -145,11 +150,31 @@ func runDaemon() int {
 		}
 		capacity = n
 	}
+	perSpec := 0
+	if v := os.Getenv("SIMURGH_PER_SPEC_CAPACITY"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			fmt.Fprintf(os.Stderr, "simurgh daemon run: SIMURGH_PER_SPEC_CAPACITY must be a positive integer, got %q\n", v)
+			return 1
+		}
+		perSpec = n
+	}
+	maxProv := 0
+	if v := os.Getenv("SIMURGH_MAX_PROVISIONING"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			fmt.Fprintf(os.Stderr, "simurgh daemon run: SIMURGH_MAX_PROVISIONING must be a positive integer, got %q\n", v)
+			return 1
+		}
+		maxProv = n
+	}
 	brk := broker.New(broker.BrokerOptions{
-		Provisioner: prov,
-		Store:       st,
-		Logger:      printf,
-		Capacity:    capacity,
+		Provisioner:               prov,
+		Store:                     st,
+		Logger:                    printf,
+		Capacity:                  capacity,
+		PerSpecCapacity:           perSpec,
+		MaxProvisioningOperations: maxProv,
 		PressureOK: func() (bool, string) {
 			r := pressure.Check(leasesRoot)
 			return r.OK, r.Reason

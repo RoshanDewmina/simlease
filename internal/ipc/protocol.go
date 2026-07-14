@@ -54,12 +54,14 @@ type Response struct {
 	Error  *Error          `json:"error,omitempty"`
 }
 
-// Error is the stable user-facing error triple plus optional queue position.
+// Error is the stable user-facing error triple plus optional queue metadata.
 type Error struct {
 	Code          string `json:"code"`
 	Message       string `json:"message"`
 	Fix           string `json:"fix"`
 	QueuePosition *int   `json:"queuePosition,omitempty"`
+	Reason        string `json:"reason,omitempty"`
+	ResourceClass string `json:"resourceClass,omitempty"`
 }
 
 // UnsupportedVersionError rejects envelopes whose major version is not ProtocolVersion.

@@ -973,24 +973,21 @@ a continuation of this one.
   invocation), the XcodeBuildMCP composition check inside a live lease, warm-DD measured on a real
   Lancer worktree, and folding those numbers into RESULTS v2 / LAUNCH_NUMBERS.
 
-### 2026-07-14 — SECURITY BLOCKER: credential in unpublished ancestor history
+### 2026-07-14 — SECURITY: credential containment + local history rewrite
 
-- **Working tree contained:** A `crsr_` Cursor API credential was captured into
-  committed warm-DD evidence via `bench/preflight.sh` embedding full `ps aux`
-  command lines for stray `cursor-agent` workers (argv includes `--api-key`).
-- **Containment done (this branch tip, forward commit only):** Working-tree and
-  evidence copies were sanitized in place with explicit
-  `[REDACTED:CURSOR_API_KEY]` markers. Preflight now records PID/count only
-  (no command lines); evidence paths scrub credential-shaped values; focused
-  regression tests added under `internal/redact` and `bench/redact_secrets_test.py`.
-- **Still true / owner-required before any publication:**
-  1. The live key **still exists in unpublished ancestor git history** on this
-     branch (commit that introduced the warm-DD evidence JSON). Sanitizing the
-     tip does **not** remove it from earlier commits.
-  2. **No push is allowed** (local or remote) until the owner explicitly
-     authorizes history rewriting **and** completes key revoke/rotate.
-  3. Owner must **revoke/rotate** the exposed Cursor API credential.
-  4. Owner must **explicitly authorize** any history rewrite (filter-repo /
-     equivalent). Agents must not amend, rebase, reset, or force-push for this.
-- Benchmarks and Phase B remain **paused** — do not resume until the owner
-  clears this blocker.
+- **Incident:** A `crsr_` Cursor API credential was captured into committed
+  warm-DD evidence via `bench/preflight.sh` embedding full `ps aux` command
+  lines for stray `cursor-agent` workers (argv includes `--api-key`).
+- **Forward containment (preserved):** Working-tree and evidence copies use
+  `[REDACTED:CURSOR_API_KEY]` markers. Preflight records PID/count only (no
+  command lines); evidence paths scrub credential-shaped values; regression
+  tests under `internal/redact` and `bench/redact_secrets_test.py`.
+- **Owner actions completed:** Credential revoke/rotate done. Owner authorized
+  a **local unpublished** targeted history rewrite on this branch only
+  (`40a245a` → sanitized equivalent; containment tip rebuilt on that parent).
+- **Reachable history:** Branch tip rewritten and verified — credential-body
+  patterns report zero matches across all commits reachable from `HEAD`.
+- **Still binding:** **No push** (local or remote) until owner review of the
+  rewrite. Unreachable objects may remain in local reflogs / object DB pending
+  separate cleanup (not performed in this step).
+- Benchmarks and Phase B remain **paused** — do not resume.

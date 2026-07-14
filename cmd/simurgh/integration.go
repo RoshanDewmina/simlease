@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/RoshanDewmina/simurgh/internal/broker"
 	xbmcp "github.com/RoshanDewmina/simurgh/internal/integrations/xcodebuildmcp"
 )
 
@@ -85,42 +84,28 @@ func runXBMCPAction(action string, args []string) int {
 		return 3
 	}
 
-	leasesRoot, err := DefaultLeasesRoot()
-	if err != nil {
-		printErrorTriple("INTERNAL", err.Error(), "check SIMURGH_HOME", asJSON)
-		return 5
-	}
-
-	adapter := xbmcp.NewAdapter(leasesRoot, func(ctx context.Context, id string) (broker.Lease, error) {
-		raw, err := dialAndCall(ctx, "lease.get", map[string]any{"id": id})
-		if err != nil {
-			return broker.Lease{}, err
-		}
-		var wrap struct {
-			Lease broker.Lease `json:"lease"`
-		}
-		if err := json.Unmarshal(raw, &wrap); err != nil {
-			return broker.Lease{}, err
-		}
-		return wrap.Lease, nil
-	})
-	if ver, err := xbmcp.RecordVersion(nil); err == nil && ver != "" {
-		adapter.Version = ver
-		adapter.ProbeVersion = func() (string, error) { return ver, nil }
-	}
-
+	// Thin daemon client (R-WP6 review finding B2): Start/Stop/Status now run
+	// daemon-side against the one long-lived Adapter constructed at daemon
+	// startup, reached the same way lease.* calls already are. This is what
+	// makes `start` (one CLI process) followed by a separate `status` CLI
+	// process actually see the running child — a per-CLI-call in-process
+	// Adapter (the pre-fix behavior) lost its stdin-holding pipe the moment
+	// the `start` process exited.
 	ctx := context.Background()
+	raw, err := dialAndCall(ctx, "integration.xcodebuildmcp."+action, map[string]any{"sessionId": sessionID})
+	if err != nil {
+		return printXBMCPErr(err, asJSON)
+	}
+
 	switch action {
-	case "start":
-		st, err := adapter.Start(ctx, sessionID)
-		if err != nil {
-			return printXBMCPErr(err, asJSON)
+	case "start", "status":
+		var st xbmcp.Status
+		if uErr := json.Unmarshal(raw, &st); uErr != nil {
+			printErrorTriple("INTERNAL", uErr.Error(), "simurgh doctor", asJSON)
+			return 5
 		}
 		return printXBMCPStatus(st, asJSON)
 	case "stop":
-		if err := adapter.Stop(ctx, sessionID); err != nil {
-			return printXBMCPErr(err, asJSON)
-		}
 		if asJSON {
 			_ = json.NewEncoder(os.Stdout).Encode(map[string]any{
 				"leaseId": sessionID,
@@ -130,12 +115,6 @@ func runXBMCPAction(action string, args []string) int {
 			fmt.Printf("stopped xcodebuildmcp adapter for %s\n", sessionID)
 		}
 		return 0
-	case "status":
-		st, err := adapter.Status(ctx, sessionID)
-		if err != nil {
-			return printXBMCPErr(err, asJSON)
-		}
-		return printXBMCPStatus(st, asJSON)
 	default:
 		return 3
 	}

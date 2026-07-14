@@ -389,6 +389,64 @@ so a second concurrent session's adapter cannot see or mutate the first's
 resources. `Stop` rejects a foreign PID; ownership is tracked per lease, not
 globally. Implementation: `internal/integrations/xcodebuildmcp`.
 
+**Ownership lives in the daemon, not the CLI process (review finding B2,
+fixed).** `Adapter.Start` spawns the real `npx xcodebuildmcp mcp` child and
+keeps it alive across separate `start`/`stop`/`status` invocations via
+`stdinHolders` — an in-process map holding the write end of the child's
+stdin pipe open, because a stdio-transport MCP server typically exits on
+stdin EOF. Before the fix, `cmd/simurgh/integration.go` constructed a
+brand-new `*xbmcp.Adapter` (empty `stdinHolders`) on every one-shot CLI
+process (`main.go`'s `os.Exit(runIntegration(...))` model). The instant the
+`start` process exited — right after printing its own status — the OS
+closed the stdin fd it held, the child saw EOF, and the adapter typically
+exited with it: the documented "start now, stop/status later as separate
+invocations" contract could not work through the actual public interface.
+Every existing test was blind to this because they all called
+`Start`/`Stop` within one long-lived Go test process, never through
+separate real CLI invocations.
+
+The fix moves `Adapter.Start`/`Stop`/`Status` execution into the **daemon**
+(`internal/daemon`), which already owns leases/capacity for exactly this
+reason — long-lived state reached via IPC from one-shot CLI commands, not
+reconstructed per call:
+
+- `cmd/simurgh`'s `runDaemon()` constructs exactly **one** `*xbmcp.Adapter`
+  at daemon startup (alongside the broker/reaper/control-plane), whose
+  `GetLease` closure calls `broker.Broker.Get` directly in-process (no IPC
+  round-trip needed — the adapter now lives where the broker lives). That
+  single `Adapter`'s `stdinHolders` map persists for the daemon process's
+  actual lifetime, so a child started by one CLI invocation stays owned and
+  alive when a later, separate CLI invocation calls `stop` or `status`.
+- `internal/daemon.RegisterXcodeBuildMCPHandlers` registers
+  `integration.xcodebuildmcp.start|stop|status` on the `*ipc.Server`,
+  following the exact pattern `RegisterLeaseHandlers` already established
+  (a `Deps`-backed `handlers` struct method per method, `ipc.Error` wire
+  triples on failure). `Deps.XBMCPAdapter` carries the one long-lived
+  `*xbmcp.Adapter` in.
+- `cmd/simurgh/integration.go`'s `runXBMCPAction` is now a thin IPC client:
+  it calls `dialAndCall(ctx, "integration.xcodebuildmcp."+action, ...)` —
+  the same helper `lease.*` commands already use — and renders the result
+  with the same `printXBMCPStatus`/`printXBMCPErr`/`printErrorTriple`
+  functions as before. The CLI's flags, JSON shape, and error-triple format
+  are unchanged; only where the `Status`/error value comes from moved.
+
+**B2 regression proof (`TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess`,
+`darwin_sim`-tagged, `cmd/simurgh`):** this is the test that would have
+caught B2 and every future regression of it — it does what no prior test
+did: run `start` as one real subprocess that is allowed to fully exit, then
+run `status` as a genuinely SEPARATE, later subprocess against a real
+daemon and a real ACTIVE lease/device, and assert `Running: true` with the
+same owned PID. It also confirms `stop` (a further separate subprocess)
+still reaches the same daemon-owned adapter and status flips to
+`Running: false` afterward. Two test-only env seams make this practical on
+a shared dev host without weakening the proof: `SIMURGH_XBMCP_TEST_COMMAND`
+substitutes a fake long-lived child for the real `npx xcodebuildmcp mcp`
+server (mirrors the `Adapter.Command` override the live runtime test below
+already uses), and `SIMURGH_TEST_SKIP_PRESSURE` bypasses the host RAM
+pressure gate (`internal/pressure`), which is unrelated to B2 and was
+otherwise the test's bottleneck on a loaded machine. Both are inert unless
+explicitly set and default to unchanged production behavior.
+
 **Live runtime validation (`TestXcodeBuildMCPRuntimeTwoSessionAttribution`,
 `darwin_sim`-tagged, real `xcrun simctl` + real `npx xcodebuildmcp`):** two
 concurrent leases, two adapter instances, two real `xcodebuildmcp simulator

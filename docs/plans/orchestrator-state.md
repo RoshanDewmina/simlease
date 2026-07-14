@@ -1707,3 +1707,115 @@ design direction, not a subagent guessing at it.
 (PATH shims) assumes R-WP6's adapter lifecycle model works end-to-end via real CLI
 invocations, which B2 shows it currently doesn't. Re-affirm or revise the R-WP5
 recommendation once B2 has a chosen fix.
+
+
+### 2026-07-14 (continued) — B2 fixed: XcodeBuildMCP adapter ownership moved to the daemon
+
+Built on `84a0ce7` (B1 fix already on branch, untouched here). Fixes the B2
+finding above: `Adapter.Start`/`Stop`/`Status` execution moved from the
+one-shot CLI process into `internal/daemon`, matching the design direction
+the review verdict called for ("the adapter's child process needs a
+long-lived owner — the existing `simurgh daemon` is the natural
+candidate").
+
+**What changed and why:**
+- `internal/daemon/daemon.go` — added `Deps.XBMCPAdapter *xbmcp.Adapter`
+  (the single long-lived adapter, constructed once by `cmd/simurgh` at
+  daemon startup) and `RegisterXcodeBuildMCPHandlers`, which registers
+  `integration.xcodebuildmcp.start|stop|status` on the `*ipc.Server`
+  following the exact `RegisterLeaseHandlers`/`handlers` pattern already
+  established (context + typed params in, `json.RawMessage`/`*ipc.Error`
+  out). Added `xbmcpErrorToIPC`, which reproduces — verbatim — the
+  message-based code/fix classification `cmd/simurgh`'s old `printXBMCPErr`
+  used to apply client-side, so `exitCodeForIPCError` on the client
+  reproduces the exact same CLI exit codes as before (`INVALID_STATE`→3,
+  `DAEMON_NOT_RUNNING`→4, else→5) despite errors now round-tripping through
+  IPC instead of being raw in-process Go errors.
+- `cmd/simurgh/daemon.go` — `runDaemon()` now constructs exactly one
+  `*xbmcp.Adapter` alongside the broker/reaper/control-plane, with a
+  `GetLease` closure that calls `brk.Get(id)` directly (in-process, no IPC
+  round-trip — the adapter lives where the broker lives now). Version
+  probing (`xbmcp.RecordVersion`) moved from "once per CLI call" to "once
+  at daemon startup" — a strict improvement, same fallback-on-error
+  behavior. Registers the new handlers via
+  `daemon.RegisterXcodeBuildMCPHandlers(srv, deps)` alongside
+  `RegisterLeaseHandlers`. Also added two test-only env seams, both inert
+  unless explicitly set (see regression test below):
+  `SIMURGH_XBMCP_TEST_COMMAND` (override the adapter's child command) and
+  `SIMURGH_TEST_SKIP_PRESSURE` (bypass the RAM pressure gate).
+- `cmd/simurgh/integration.go` — `runXBMCPAction` is now a thin IPC client:
+  flag parsing is unchanged, but instead of constructing an `xbmcp.Adapter`
+  and calling `Start`/`Stop`/`Status` in-process, it calls
+  `dialAndCall(ctx, "integration.xcodebuildmcp."+action, ...)` (the same
+  helper `lease.*` commands already use) and renders the result with
+  `printXBMCPStatus`/`printXBMCPErr`/`printErrorTriple` **unchanged** — CLI
+  flags, JSON shape, and error-triple format are identical to before this
+  change; only where the value comes from moved.
+- `cmd/simurgh/integration_xcodebuildmcp_daemon_test.go` (new,
+  `darwin_sim`-tagged) — the actual B2 regression proof, see below.
+- `docs/ARCHITECTURE.md` §14 — documents the daemon-ownership model.
+
+**Gates (real output, this session, on this branch):**
+- `gofmt -l .` on touched files: empty. (Repo-wide `gofmt -l .` still lists
+  three pre-existing files — `internal/broker/errors.go`,
+  `internal/integrations/xcodebuildmcp/{bindings,config}.go` — none touched
+  by this change; confirmed via `git stash`/re-check that the drift predates
+  this work.)
+- `go build ./...`: clean.
+- `go vet ./...`: clean.
+- `go test -race ./... -count=1`: all 18 packages `ok`.
+- `go test -race ./internal/integrations/xcodebuildmcp/... -count=1 -v`: 8/8
+  PASS (unchanged adapter unit tests, still valid post-refactor since
+  `Adapter`'s own logic was not touched).
+- `go test -race ./internal/daemon/... -count=1 -v`: 22/22 PASS (existing
+  lease/warm/prune handler tests unaffected).
+- `go test -race ./cmd/simurgh -run 'TestXcodeBuildMCP|TestIntegrationXcodeBuildMCP' -count=1 -v`:
+  3/3 PASS.
+- `go test -race -tags darwin_sim ./internal/integrations/xcodebuildmcp -run TestXcodeBuildMCPRuntimeTwoSessionAttribution -count=1 -v`:
+  PASS, re-run after the refactor, 60.77s, same two-session
+  UDID/DerivedData/pid-attribution evidence as the original R-WP6 run
+  (verdict `"composes"`).
+
+**The B2 regression proof —
+`TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess`
+(`cmd/simurgh`, `darwin_sim`-tagged):** builds the real `simurgh` binary,
+runs `acquire --wait` as one subprocess to get a real ACTIVE lease with a
+real `xcrun simctl` device, runs `integration xcodebuildmcp start
+--session <id>` as a SEPARATE subprocess that is allowed to fully exit,
+then — as a further SEPARATE, later subprocess — runs `integration
+xcodebuildmcp status --session <id>` and asserts `Running: true` with the
+same owned PID. This is exactly the sequence B2 broke: before the fix, the
+`start` process exiting would close its held stdin pipe and the child would
+typically die with it, so the later `status` subprocess would see
+`Running: false`. First run of this test (before the two env seams existed)
+hung and hit its context deadline — not a code bug, but this dev host's
+baseline free+inactive RAM (~3.4 GiB under normal daily load: browser/editor
+tabs, unrelated concurrent builds) sitting under the broker's unrelated 4
+GiB pressure-gate default, so `acquire --wait` queued indefinitely. Added
+`SIMURGH_TEST_SKIP_PRESSURE` (daemon-wiring-only, inert unless set) to
+un-couple that host-load gate from this test, and `SIMURGH_XBMCP_TEST_COMMAND`
+to avoid depending on the real `npx xcodebuildmcp mcp` server for a test
+that's proving process-ownership lifetime, not MCP protocol behavior — same
+idea `runtime_live_test.go` already uses via `adapter.Command` override, just
+reachable from a CLI subprocess. After both seams: verified manually first
+(direct binary invocation, separate `start`/`status` processes, real device,
+`running: true` with matching pid in both, `stop` then `status` correctly
+flips to `running: false`), then the actual Go test:
+```
+=== RUN   TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess
+    integration_xcodebuildmcp_daemon_test.go:140: start subprocess exited; owned child pid=69584
+--- PASS: TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess (4.34s)
+PASS
+ok  	github.com/RoshanDewmina/simurgh/cmd/simurgh	5.357s
+```
+B2 is fixed: a separate later CLI process's `status` call sees the child
+started by an already-exited `start` process, still running, same pid.
+
+**Still binding:** no merge/push; `feat/r-wp6-xcodebuildmcp` only; B1 fix
+from `84a0ce7` untouched; `Adapter`'s own type/`Start`/`Stop`/`Status`
+methods and their internal logic (including the B1
+`safety.ValidateLeasePath` calls) untouched — only who constructs the
+adapter and when moved; no `bench/evidence`/`bench/results` mutation; no
+performance/latency claims; R-WP5 still not started. R-WP6 is not yet
+re-reviewed against this fix — the B1+B2 review verdict above remains the
+last independent read until a fresh review covers this commit.

@@ -38,10 +38,13 @@ simurgh status --json
 
 ## `--reuse-if-exists` allocated a new lease
 
-Reuse only matches ACTIVE leases with the same DeviceSpec, **exact** Labels map,
-and Owner.Agent + Owner.SessionID (PID ignored). Different labels/agent/session,
-or a RELEASED/FAILED/RECLAIMED prior lease, allocate a new resource. Encode
-project/Xcode/scheme in Labels if those must bound reuse.
+Reuse renews compatible ACTIVE leases or attaches to compatible PROVISIONING.
+It requires the same DeviceSpec, **exact** Labels map, and non-empty Owner.Agent
++ Owner.SessionID (PID ignored). Missing identity, different labels/agent/session,
+or a RELEASED/FAILED/RECLAIMED prior lease allocates new. CLI/MCP honor
+`SIMURGH_SESSION_ID`; their fallbacks are stable for the calling parent shell
+and MCP server process respectively. Encode project/Xcode/scheme in Labels if
+those must bound reuse. Check top-level `reused` in acquire output.
 
 ## Daemon not running
 

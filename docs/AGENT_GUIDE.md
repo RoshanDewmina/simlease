@@ -60,12 +60,18 @@ simurgh release <lease-id>
 
 ### `--reuse-if-exists` matching (R-WP1)
 
-Compatible ACTIVE leases are renewed in place (same lease ID, UDID, isolation
-paths) when Spec, **exact** Labels, and `Owner.Agent`+`Owner.SessionID` match.
-PID is ignored so a restarted agent process can reclaim its warm lease.
+Compatible ACTIVE leases are renewed in place; compatible PROVISIONING
+requests attach and wait for that same grant. Both require Spec, **exact**
+Labels, and non-empty `Owner.Agent`+`Owner.SessionID` to match. PID is ignored.
+Missing identity is a no-match/new allocation. CLI honors
+`SIMURGH_SESSION_ID`, otherwise uses stable parent-shell identity; MCP honors
+the variable, otherwise uses stable MCP-server-process identity.
 RELEASED / FAILED / RECLAIMED / CANCELLED leases are never reused. Concurrent
 identical reuse requests share one provision. Put project / Xcode / scheme
 identity in Labels — those dimensions are not first-class fields.
+
+Acquire responses include top-level `reused`: `true` for ACTIVE renewal or
+PROVISIONING attach, `false` for a new allocation.
 
 MCP `lease_acquire` with `reuse_if_exists=true` uses the same match key.
 Client commands auto-start the daemon via `ipc.Dial` if the socket is down.

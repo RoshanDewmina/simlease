@@ -149,9 +149,11 @@ Unix socket, newline-delimited JSON frames, request/response + server events.
             "fix":"simurgh status --queue   # or pass wait:true"}}
 ```
 
-`reuseIfExists=true` renews a compatible ACTIVE lease (same Spec, exact Labels,
-Owner.Agent+SessionID; PID ignored) without reprovisioning. Mismatch allocates
-a new resource. Cancelled `--wait` acquires return `ACQUIRE_CANCELLED` and
+`reuseIfExists=true` renews a compatible ACTIVE lease or attaches to compatible
+PROVISIONING. Compatibility requires same Spec, exact Labels, and **non-empty**
+Owner.Agent+SessionID (PID ignored). Missing identity or mismatch allocates a
+new resource. Acquire responses expose top-level `reused` (`true` for renewal
+or attach, `false` for new). Cancelled `--wait` acquires return `ACQUIRE_CANCELLED` and
 CANCEL the still-QUEUED lease so capacity is not stranded.
 
 - Methods: `lease.acquire|renew|release|get|list|wait`, `pool.status`,

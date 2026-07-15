@@ -2073,3 +2073,115 @@ for owner review of the rewrite itself, which remains outstanding. The owner sho
 personally review the rewritten history before any push is considered — this session's cleanup
 just means that review is no longer racing against a live, trivially-recoverable copy of the actual
 secret sitting in the local object database.
+
+### 2026-07-15 — R-WP6: same-session Start/Start and Start/Stop TOCTOU closed (third-review finding)
+
+Closes the "one new finding (major, not blocking)" recorded in the 2026-07-14 "R-WP6 merged to
+local master after third review pass" entry above (search this file for "TOCTOU" — this is the
+same-session concurrent `start` race that entry accepted as tracked debt rather than forcing a
+4th fix-and-review cycle).
+
+**Fix (already applied and reviewed before this session started; this session finished it):**
+`internal/integrations/xcodebuildmcp/adapter.go` gained a second, independent lock on top of the
+existing `stdinMu` (which still only guards the `stdinHolders` map access itself, per B2/second-
+review). `Adapter.sessionMu` guards a `sessionLocks map[string]*sync.Mutex`, one mutex per distinct
+sessionID ever seen (never removed — same bounded-key-space pattern as
+`internal/provisioner.Provisioner.lockForBase`). `Start` and `Stop` each call the new
+`lockForSession(sessionID)` helper as their first real action (right after the `LeasesRoot == ""`
+guard) and hold that session's mutex via `defer sessMu.Unlock()` for their entire body, so the
+whole read-check-spawn-write sequence (`Start`) or read-kill-remove sequence (`Stop`) can never
+interleave with another `Start`/`Stop` call for the *same* sessionID. Distinct sessions get distinct
+locks and stay unserialized against each other, so this does not reintroduce the throughput problem
+B2's fix was solving. Full design rationale is inline in `adapter.go`'s comments on the
+`sessionLocks` field, `lockForSession`, and both call sites — not repeated here.
+
+**This session's work:** the lock/comment diff was already present, uncommitted, and already
+`go build`/`go vet` clean when this session started. What was missing was the regression proof and
+the commit. Added two new tests to
+`internal/integrations/xcodebuildmcp/adapter_test.go`:
+
+- `TestXcodeBuildMCPStartConcurrentSameSessionRace` — 25 goroutines call `Start` concurrently for
+  one shared `*Adapter`/one sessionID. Asserts exactly 1 success (`Running: true`, real PID) and 24
+  failures all matching the existing `"already running"` error text; asserts the on-disk `PIDMeta`
+  matches the winner's PID; asserts the fake XcodeBuildMCP binary's shared log file has exactly one
+  line (proof only one child process ever actually spawned, not just that only one `Start` call
+  reported success). Ran `go test -race -count=10 -v`: 10/10 clean passes, ~0.4-0.5s each.
+- `TestXcodeBuildMCPStartRacesStopSameSession` — primes one running instance, then races 20
+  goroutines each calling either `Start` or `Stop` (alternating) for the same session. Since which
+  call "wins" the lock at any given tick is a legitimate race (not a bug), this test does not assert
+  a specific winner; instead it asserts the invariant the fix guarantees regardless of interleaving:
+  after all goroutines finish, `Status()` must exactly match reality (a PID is reported running iff
+  that exact PID is alive), and every other PID spawned during the run must be dead — i.e. the run
+  can never end with two live children for one session, nor with a live child `Status` doesn't know
+  about (an orphan). Ran `go test -race -count=10 -v`: 10/10 clean passes, ~0.4-0.7s each.
+
+Considered and attempted a Start-races-Stop test that also pins a specific expected winner (e.g. by
+injecting an artificial delay to force a known interleaving order) — decided against it: forcing a
+specific winner via a sleep/signal seam would either require modifying the already-reviewed
+`adapter.go` production code paths just to make them instrumentable for one test (out of scope: "do
+not touch the already-applied mutex/lock design beyond what's needed to make it compile/pass"), or
+would be timing-dependent on wall-clock sleeps racing goroutine scheduling, i.e. exactly the kind of
+flaky test this task's instructions warned against shipping. The invariant-based version above gives
+real regression coverage (it would fail on the pre-fix code, since an unserialized Start/Stop could
+leave two live children or an orphan) without that risk.
+
+**Verified the existing, unrelated race test is unaffected:**
+`go test -race ./internal/integrations/xcodebuildmcp/... -run TestXcodeBuildMCPStdinHoldersConcurrentAccessRace -count=5 -v`
+→ 5/5 pass (this test exercises 8 *distinct* sessions and covers the original B2 map-access race;
+the new per-session lock must not, and does not, serialize unrelated sessions against each other).
+
+**Full gate suite, all real output read, not paraphrased:**
+- `gofmt -l .` — the two files this session touched (`adapter.go`, `adapter_test.go`) are clean
+  (`gofmt -l` on just those two paths produced no output). The bare `gofmt -l .` invocation flags
+  pre-existing, unrelated formatting drift in files this session never touched (every R-WP worktree
+  under `.worktrees/`, one benchmark worktree's daemon copies under
+  `.claude/worktrees/.../bench/results/...`, and three files in the main checkout —
+  `internal/broker/errors.go`, `internal/integrations/xcodebuildmcp/bindings.go`, and
+  `internal/integrations/xcodebuildmcp/config.go`). None of those three were part of this fix's diff
+  (`git status` before this session started showed only `adapter.go` modified) and are out of this
+  task's declared scope, so left untouched rather than silently reformatted as drive-by scope creep.
+- `go build ./...` — clean.
+- `go vet ./...` — clean.
+- `go vet -tags darwin_sim ./...` — clean.
+- `go test -race ./...` — one transient failure on the first run
+  (`internal/ipc.TestDialDaemonSurvivesParentExit`, an unrelated ~34s-per-run daemon-survives-
+  parent-exit stability test this session never touched) that reproduced as a clean 3/3 pass in
+  isolation and a clean pass again as part of the full suite on immediate re-run; read as resource
+  contention from running every package's tests (including this session's own new concurrency tests)
+  under `-race` simultaneously on a shared dev host, not a real regression — re-ran the full command
+  a second time and got a clean all-`ok` result end to end.
+- `go test -race -tags darwin_sim ./...` — clean, all `ok` (the `xcodebuildmcp` package took ~160s
+  under this tag since it includes the live-runtime test below).
+- `go test -race ./internal/integrations/xcodebuildmcp/... -count=1 -v` — all 11 tests pass,
+  including both new ones and the existing `TestXcodeBuildMCPStdinHoldersConcurrentAccessRace`.
+- `go test -race ./internal/daemon/... -count=1 -v` — all tests pass, untouched by this fix (daemon-
+  ownership model, B1's `safety.ValidateLeasePath` call sites, and the build-tag-split env seams
+  were not touched this session, matching the task's explicit "must NOT change" list).
+- `go test -race -tags darwin_sim ./cmd/simurgh -run 'TestXcodeBuildMCP|TestIntegrationXcodeBuildMCP' -count=1 -v`
+  — all 5 tests pass, including `TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess` (the B2
+  regression proof) unaffected by the new per-session lock.
+
+**Live runtime re-verification
+(`go test -race -tags darwin_sim ./internal/integrations/xcodebuildmcp -run TestXcodeBuildMCPRuntimeTwoSessionAttribution -count=1 -v`):**
+passed in 251s against real `xcrun simctl` + real `npx xcodebuildmcp`, verdict `"composes"` again —
+two concurrent leases, two adapter PIDs, distinct UDIDs/DerivedData roots, zero global
+`~/Library/Developer/Xcode/DerivedData` pollution, stopping session A left session B's adapter and
+DerivedData intact. Same scope caveat as the original entry: functional/isolation proof only, one
+host, one fixture project, two sessions — not a latency, performance, or concurrency-scale claim.
+
+**Docs:** this entry, plus a new bullet in `docs/ARCHITECTURE.md` section 14 (search for "third-
+review finding, closed") documenting the `sessionLocks`/`lockForSession` design alongside the
+existing `stdinMu` writeup, so the two locks' distinct responsibilities (map-access safety across
+different sessions vs. whole-critical-section serialization within one session) are recorded
+together in the architecture doc, not just in code comments.
+
+**Committed directly to local `master`** (R-WP6 already merged per the entry above; this fix lands
+as the next commit(s) on top, no merge/push). Not pushed to `origin`. No other file outside
+`internal/integrations/xcodebuildmcp/`, this file, and `docs/ARCHITECTURE.md` was touched — a
+`git status --short` immediately before committing was re-checked to confirm no accidental overlap
+with the untracked benchmark/docs files a parallel effort was concurrently adding to this same
+checkout (`bench/HANDOFF_FIXES_PROMPT.md`, `docs/plans/SIMURGH_CLAUDE_CODE_MASTER_PROMPT.md`, etc.
+— none of those were added or modified by this session). `master` HEAD also advanced by one
+unrelated docs-only commit from that parallel effort (`d1d1152`, "docs: correct README
+status/license claims, add R-WP roadmap section") partway through this session; confirmed via
+`git log` that this fix's commit(s) land cleanly on top of that, not in conflict with it.

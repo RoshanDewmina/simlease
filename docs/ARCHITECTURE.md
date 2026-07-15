@@ -450,6 +450,30 @@ reconstructed per call:
   (`internal/integrations/xcodebuildmcp`) reproduces `WARNING: DATA RACE`
   reliably on the pre-mutex code under `go test -race` and passes with the
   mutex in place.
+- **Same-session `Start`/`Start` and `Start`/`Stop` TOCTOU (third-review
+  finding, closed).** `stdinMu` alone only serializes the map access itself,
+  not the whole read-check-spawn-write body of `Start` (or the
+  read-kill-remove body of `Stop`): two overlapping `start --session X` calls
+  could both pass the "not already running" guard (`readPIDMeta` →
+  `processAlive`) and both spawn a child, with the second's `writePIDMeta`
+  silently orphaning the first; a `Stop` racing a `Start` for the same
+  session had the same shape, since `Stop`'s final `os.Remove(PIDMeta)` never
+  re-verified it was still describing the process it had just killed. Fixed
+  with a second, independent lock: `Adapter.sessionMu` guards a
+  `sessionLocks map[string]*sync.Mutex` (one mutex per distinct sessionID,
+  never removed — same bounded-key-space pattern as
+  `internal/provisioner.Provisioner.lockForBase`); `Start` and `Stop` each
+  acquire their session's mutex via `lockForSession` as their first real
+  action and hold it via `defer` for their entire body, so overlapping
+  same-session `Start`/`Start` or `Start`/`Stop` calls can never interleave.
+  Distinct sessions get distinct locks and remain unserialized against each
+  other. Regression-tested by
+  `TestXcodeBuildMCPStartConcurrentSameSessionRace` (≥20 concurrent `Start`
+  calls for one session; asserts exactly one winner, one live child, one
+  `writePIDMeta`) and `TestXcodeBuildMCPStartRacesStopSameSession`
+  (interleaved `Start`/`Stop` for one session; asserts the final on-disk
+  status always matches reality with no orphaned child), both in
+  `internal/integrations/xcodebuildmcp/adapter_test.go`.
 
 **B2 regression proof (`TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess`,
 `darwin_sim`-tagged, `cmd/simurgh`):** this is the test that would have

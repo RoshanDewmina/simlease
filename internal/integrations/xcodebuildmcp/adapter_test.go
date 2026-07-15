@@ -359,6 +359,207 @@ func TestXcodeBuildMCPStdinHoldersConcurrentAccessRace(t *testing.T) {
 	}
 }
 
+// TestXcodeBuildMCPStartConcurrentSameSessionRace proves the R-WP6
+// third-review TOCTOU finding is closed: many goroutines calling Start
+// concurrently for the SAME sessionID must never let more than one of them
+// pass the "already running" guard and spawn a child. Before the
+// sessionLocks fix, the read (readPIDMeta/processAlive) — spawn (cmd.Start)
+// — write (writePIDMeta) sequence was not serialized per-session, so two
+// overlapping Starts could both observe "not running" and both spawn,
+// silently orphaning one child. This test must reliably show exactly one
+// winner, exactly one live child, and exactly one line in the fake binary's
+// shared log — run with -race and -count>1, since a race this narrow can
+// pass on scheduling luck alone on a single run.
+func TestXcodeBuildMCPStartConcurrentSameSessionRace(t *testing.T) {
+	const goroutines = 25
+	bin := fakeXBMCP(t)
+	lease := activeLease("lease-501", "AAAAAAAA-0000-0000-0000-000000000501")
+	root := t.TempDir()
+	get := func(_ context.Context, id string) (broker.Lease, error) {
+		if id != lease.ID {
+			return broker.Lease{}, os.ErrNotExist
+		}
+		return lease, nil
+	}
+	a := NewAdapter(root, get)
+	a.Command = []string{bin}
+	a.Version = "test-fake"
+
+	type result struct {
+		st  Status
+		err error
+	}
+	results := make([]result, goroutines)
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for i := 0; i < goroutines; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start // release all goroutines at once to maximize overlap
+			st, err := a.Start(context.Background(), "lease-501")
+			results[i] = result{st: st, err: err}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	var successes, failures []result
+	for _, r := range results {
+		if r.err == nil {
+			successes = append(successes, r)
+		} else {
+			failures = append(failures, r)
+		}
+	}
+	if len(successes) != 1 {
+		t.Fatalf("expected exactly 1 successful Start out of %d, got %d: %+v", goroutines, len(successes), results)
+	}
+	if len(failures) != goroutines-1 {
+		t.Fatalf("expected %d failed Starts, got %d", goroutines-1, len(failures))
+	}
+	winner := successes[0]
+	if !winner.st.Running || winner.st.PID <= 0 {
+		t.Fatalf("winner status=%+v", winner.st)
+	}
+	for _, f := range failures {
+		if !strings.Contains(f.err.Error(), "already running") {
+			t.Fatalf("unexpected failure error (want \"already running\"): %v", f.err)
+		}
+	}
+
+	if !processAlive(winner.st.PID) {
+		t.Fatalf("winner pid %d not alive", winner.st.PID)
+	}
+
+	paths := AdapterDir(filepath.Join(root, "lease-501"))
+	meta, err := readPIDMeta(paths.PIDMeta)
+	if err != nil {
+		t.Fatalf("pid meta: %v", err)
+	}
+	if meta.PID != winner.st.PID || meta.LeaseID != "lease-501" {
+		t.Fatalf("on-disk meta=%+v does not match winner pid=%d", meta, winner.st.PID)
+	}
+
+	// Confirm only one child process ever executed the fake binary — if the
+	// TOCTOU race were unfixed, two goroutines could pass the "not already
+	// running" guard and both spawn, orphaning one.
+	logPath := filepath.Join(paths.Root, "adapter.log")
+	raw := waitFile(t, logPath, 2*time.Second)
+	lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("expected exactly 1 child process log line (one spawned child), got %d:\n%s", len(lines), raw)
+	}
+	if !strings.Contains(lines[0], fmt.Sprintf("pid=%d", winner.st.PID)) {
+		t.Fatalf("log line does not attribute the winner pid %d: %s", winner.st.PID, lines[0])
+	}
+
+	if err := a.Stop(context.Background(), "lease-501"); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+	waitDead(t, winner.st.PID, 2*time.Second)
+}
+
+// TestXcodeBuildMCPStartRacesStopSameSession attempts to prove Start and Stop
+// racing each other for the SAME sessionID never leaves an inconsistent or
+// orphaned state. Making this fully deterministic (asserting a specific
+// winner) is not possible — Start and Stop are legitimately racing, and
+// either a fresh Start or a Stop may legitimately "win" the lock for any
+// given tick — so instead this asserts the invariant the sessionLocks fix is
+// supposed to guarantee regardless of interleaving: at the end, the on-disk
+// Status must exactly match reality (a PID is reported running iff that
+// exact PID is alive), and every other child ever spawned during the run
+// must be dead — i.e. no run can end with two live children for one session,
+// nor with a live child that Status doesn't know about (an orphan).
+func TestXcodeBuildMCPStartRacesStopSameSession(t *testing.T) {
+	bin := fakeXBMCP(t)
+	lease := activeLease("lease-777", "AAAAAAAA-0000-0000-0000-000000000777")
+	root := t.TempDir()
+	get := func(_ context.Context, id string) (broker.Lease, error) {
+		if id != lease.ID {
+			return broker.Lease{}, os.ErrNotExist
+		}
+		return lease, nil
+	}
+	a := NewAdapter(root, get)
+	a.Command = []string{bin}
+	a.Version = "test-fake"
+
+	// Prime one running instance so the very first ticks already have a live
+	// child for Stop calls to race against, not just after some Start
+	// eventually wins the lock for the first time.
+	st0, err := a.Start(context.Background(), "lease-777")
+	if err != nil {
+		t.Fatalf("initial Start: %v", err)
+	}
+
+	const goroutines = 20
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	var mu sync.Mutex
+	var startedPIDs []int
+	for i := 0; i < goroutines; i++ {
+		i := i
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			if i%2 == 0 {
+				st, err := a.Start(context.Background(), "lease-777")
+				if err == nil {
+					mu.Lock()
+					startedPIDs = append(startedPIDs, st.PID)
+					mu.Unlock()
+				}
+			} else {
+				_ = a.Stop(context.Background(), "lease-777")
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	mu.Lock()
+	allPIDs := append([]int{st0.PID}, startedPIDs...)
+	mu.Unlock()
+
+	finalSt, err := a.Status(context.Background(), "lease-777")
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+
+	aliveCount := 0
+	for _, pid := range allPIDs {
+		if processAlive(pid) {
+			aliveCount++
+			if !finalSt.Running || finalSt.PID != pid {
+				t.Fatalf("pid %d alive but final status=%+v does not attribute it (orphan or misattribution)", pid, finalSt)
+			}
+		}
+	}
+	if finalSt.Running {
+		if aliveCount != 1 {
+			t.Fatalf("status reports running but aliveCount=%d (want exactly 1), pids=%v, status=%+v", aliveCount, allPIDs, finalSt)
+		}
+	} else if aliveCount != 0 {
+		t.Fatalf("status reports not running but %d orphaned children still alive: %v", aliveCount, allPIDs)
+	}
+
+	// Cleanup: stop whatever's left running and wait for every spawned child
+	// (including any that lost the race and were already reaped) to be dead.
+	_ = a.Stop(context.Background(), "lease-777")
+	deadline := time.Now().Add(3 * time.Second)
+	for _, pid := range allPIDs {
+		for processAlive(pid) && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if processAlive(pid) {
+			t.Fatalf("pid %d still alive after final cleanup Stop", pid)
+		}
+	}
+}
+
 func waitFile(t *testing.T, path string, d time.Duration) []byte {
 	t.Helper()
 	deadline := time.Now().Add(d)

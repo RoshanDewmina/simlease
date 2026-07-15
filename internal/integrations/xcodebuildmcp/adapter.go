@@ -70,6 +70,32 @@ type Adapter struct {
 	// at construction and only ever read afterward, so they need no lock.
 	stdinMu      sync.Mutex
 	stdinHolders map[string]*os.File
+
+	// sessionMu guards sessionLocks. sessionLocks serializes the ENTIRE
+	// Start and Stop critical section per sessionID (R-WP6 third-review
+	// finding: same-session concurrent Start calls TOCTOU-race the "refuse a
+	// second child" guard — readPIDMeta/processAlive check, then real work
+	// spawning a child, then writePIDMeta/stdinHolders write, none of it
+	// serialized — so two overlapping starts for the same session could both
+	// pass the guard and both spawn a child, with the second's metadata
+	// write silently orphaning the first; a Stop racing a Start for the same
+	// session had the same shape, since Stop's final os.Remove(PIDMeta)
+	// never re-verified it was still describing the process it just killed).
+	// This lock is IN ADDITION to stdinMu, not a replacement: stdinMu alone
+	// already covers the original B2 finding (concurrent Start/Stop for
+	// DIFFERENT sessions racing on the shared stdinHolders map access
+	// itself), which TestXcodeBuildMCPStdinHoldersConcurrentAccessRace
+	// exercises with 8 distinct sessions and must keep passing unchanged.
+	// sessionLocks closes the wider, same-session race that a map-access
+	// mutex alone cannot: it serializes the whole read-check-spawn-write (or
+	// read-kill-remove) sequence, so overlapping Start/Start or Start/Stop
+	// calls for one session can never interleave. Locks accumulate one per
+	// distinct sessionID ever seen and are never removed, mirroring
+	// internal/provisioner.Provisioner.lockForBase — that key space (base
+	// device specs) is likewise small and bounded, and this one is bounded
+	// by active lease/session IDs.
+	sessionMu    sync.Mutex
+	sessionLocks map[string]*sync.Mutex
 }
 
 // NewAdapter constructs an Adapter with defaults.
@@ -81,7 +107,26 @@ func NewAdapter(leasesRoot string, getLease LeaseGetter) *Adapter {
 		Clock:        time.Now,
 		LookPath:     exec.LookPath,
 		stdinHolders: map[string]*os.File{},
+		sessionLocks: map[string]*sync.Mutex{},
 	}
+}
+
+// lockForSession returns the mutex serializing Start/Stop for sessionID,
+// creating it on first use. Distinct sessionIDs get distinct locks, so
+// unrelated sessions are never serialized against each other — only
+// same-session Start/Start or Start/Stop calls block on one another.
+func (a *Adapter) lockForSession(sessionID string) *sync.Mutex {
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	if a.sessionLocks == nil {
+		a.sessionLocks = map[string]*sync.Mutex{}
+	}
+	mu, ok := a.sessionLocks[sessionID]
+	if !ok {
+		mu = &sync.Mutex{}
+		a.sessionLocks[sessionID] = mu
+	}
+	return mu
 }
 
 func (a *Adapter) version() string {
@@ -113,6 +158,14 @@ func (a *Adapter) Start(ctx context.Context, sessionID string) (Status, error) {
 	if a.LeasesRoot == "" {
 		return Status{}, fmt.Errorf("xcodebuildmcp: leases root is required")
 	}
+
+	// Serialize the whole read-check-spawn-write sequence for this
+	// sessionID: closes the same-session Start/Start TOCTOU (see
+	// sessionLocks doc on the Adapter struct).
+	sessMu := a.lockForSession(sessionID)
+	sessMu.Lock()
+	defer sessMu.Unlock()
+
 	lease, err := a.GetLease(ctx, sessionID)
 	if err != nil {
 		return Status{}, err
@@ -218,6 +271,16 @@ func (a *Adapter) Stop(ctx context.Context, sessionID string) error {
 	if a.LeasesRoot == "" {
 		return fmt.Errorf("xcodebuildmcp: leases root is required")
 	}
+
+	// Serialize the whole read-metadata-through-kill-through-remove-metadata
+	// sequence for this sessionID: closes Start racing Stop for the same
+	// session (see sessionLocks doc on the Adapter struct) — without this, a
+	// Stop's final os.Remove(PIDMeta) could delete a concurrently-started
+	// new Start's metadata instead of the one it just killed.
+	sessMu := a.lockForSession(sessionID)
+	sessMu.Lock()
+	defer sessMu.Unlock()
+
 	// Stop has destructive side effects (kills a process, removes files), so
 	// it fails closed on an unvalidated sessionID rather than silently
 	// treating a malformed/traversal-shaped ID as "not found" — reuse the

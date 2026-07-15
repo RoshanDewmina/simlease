@@ -1964,3 +1964,34 @@ those call sites; CLI flags/JSON output shape for `simurgh integration xcodebuil
 start|stop|status` unchanged; no `bench/evidence`/`bench/results` mutation; no
 performance/latency claims; R-WP5 still not started. This fix round has not yet had its own
 independent review pass — a third review should cover this commit before any merge decision.
+
+### 2026-07-14 (continued) — R-WP6 merged to local master after third review pass
+
+Third independent review pass (of `8042efc`, the fix for round-2's three findings) re-derived
+every claim itself rather than trusting the implementer's report: reran the race test 5x (clean),
+built both tagless and `darwin_sim`-tagged binaries and grepped `strings` output directly (0 vs 1
+occurrences of each env var — confirms the build-tag split actually excludes them), checked the
+real Makefile/CI build steps (`go build ./...`, tagless) to confirm production ships never include
+`darwin_sim`, and ran the new LEASE_NOT_FOUND tests itself over the real IPC/CLI path.
+
+**Verdict: all three round-2 findings CONFIRMED FIXED**, independently re-verified, not just
+re-claimed.
+
+**One new finding (major, not blocking):** same-session concurrent `start` calls have a TOCTOU —
+the "refuse a second child" check (`readPIDMeta` → `processAlive` → later `writePIDMeta`) isn't
+serialized per-session, so two overlapping `start --session X` calls can both pass the guard and
+both spawn a child; the second's metadata write silently orphans the first (or a concurrent `Stop`
+racing a `Start` can delete the new Start's metadata instead). Doesn't crash the daemon, doesn't
+cross lease-isolation boundaries, only reachable via concurrent-same-session usage (not the normal
+sequential start→build→stop pattern). Owner decision: accept as tracked debt rather than a 4th
+fix-and-review cycle, given ordinary usage doesn't hit this.
+
+**Merged:** `8042efc` fast-forwarded/merged into local `master`. Not pushed to `origin`. R-WP6 is
+now considered complete for local use, with the same-session-concurrency gap tracked below as
+known debt (see also a new `docs/lessons/` entry and a REVIEW_STANDARDS.md follow-up if this
+pattern recurs).
+
+**R-WP5 recommendation reaffirmed**: retain as originally scoped. The live two-session test proved
+XcodeBuildMCP composes with Simurgh's isolation for the scenarios exercised; the new TOCTOU finding
+is orthogonal to that (a session-lifecycle bookkeeping gap, not an isolation-boundary gap), so it
+does not change the R-WP5 read.

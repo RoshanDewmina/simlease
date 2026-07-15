@@ -1,5 +1,63 @@
 # Changelog
 
+## Unreleased
+
+Post-v0.0.1 work, tracked as `R-WP*` packages (Phase B). Not yet tagged.
+
+### R-WP0 — baseline protect
+
+- Status/report-only baseline gate before Phase B work started; no
+  functional change.
+
+### R-WP1 — reuse + liveness
+
+- `ReuseIfExists`: acquire can attach to an existing compatible lease
+  instead of always provisioning a new device.
+- Reap dead `QUEUED` owners; cancel stranded queued waits when the
+  requesting process has exited.
+
+### R-WP2 — global capacity
+
+- Host-global capacity accounting across specs, with explicit queue
+  reasons surfaced on `pool.status` / `simurgh status`.
+- Structured capacity-queue metadata exposed over MCP.
+- Auto-started daemon detaches from the parent shell (fixes IPC handshake
+  hangs when the daemon is spawned by a client process).
+
+### R-WP3 — session/job control-plane
+
+- Session/job model with independent build slots; build-slot status
+  surfaced on `pool.status`.
+- Race-safe job transitions and atomic claiming of terminal resources.
+
+### R-WP4 — readiness cache
+
+- Bounded readiness polling with classified timeouts (provisioner).
+- Additive acquire/build/install/launch/test/capture phase timings
+  (control-plane).
+- Writable caches confined under the lease root; symlinks resolved before
+  cache-confinement checks (isolator).
+- Warm-seed compatibility keys and CoW seed/fallback made stricter
+  (complete keys required, seed replacement serialized).
+- Benchmark cells for this package were explicitly deferred by owner
+  directive — implementation and tests are complete, no timed numbers were
+  published.
+
+### R-WP6 — XcodeBuildMCP session adapter
+
+- `simurgh integration xcodebuildmcp start|stop|status --session <id>`:
+  bounded adapter that owns ephemeral MCP config and child process
+  lifecycle for an active lease, moved into the daemon so start/stop/status
+  are daemon-owned rather than CLI-process-owned.
+- `sessionID` validated on Stop/Status; a live two-session runtime test
+  proved XcodeBuildMCP composes with Simurgh's isolation boundaries.
+- Went through three independent review rounds; one major, non-blocking
+  finding (a same-session concurrent-`start` TOCTOU) was accepted as
+  tracked debt rather than a fourth fix/review cycle.
+
+R-WP5 (PATH shim) remains gated/not started; no entry here because no code
+shipped for it.
+
 ## v0.0.1 — 2026-07-13
 
 ### M0 — skeleton

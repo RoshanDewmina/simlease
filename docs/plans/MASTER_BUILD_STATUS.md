@@ -1,8 +1,10 @@
 # Simurgh Master Build Status
 
-**Updated:** 2026-07-14 (resume session, following the 17:16 UTC pause entry)
+**Updated:** 2026-07-14 (correction pass, following the R-WP6 merge)
 **Roadmap naming:** Phase B packages use `R-WP*` (not Phase A `P0-*` / harness `WP*`).
-**Package state:** **R-WP6 gate-verified, live runtime validated — NOT REVIEWED, NOT MERGED**
+**Package state:** **R-WP6 MERGED to local `master`** at `a5afb8a` ("merge: R-WP6
+XcodeBuildMCP session adapter (3 review rounds, all blocking findings
+resolved)") after three independent review rounds; not pushed to `origin`.
 
 ## Baseline
 
@@ -11,13 +13,15 @@
 - Go: `go1.26.5 darwin/arm64`
 - macOS: `27.0` (Build `26A5378n`), `arm64`
 - Xcode: `27.0` (Build `27A5194q`); `xcrun simctl help` exit 0
-- **Master (unchanged):** `4447e3c267a25d09ea20c3779c400dfa71330bef` — nothing merged or pushed
+- **Master:** `a5afb8a` (R-WP6 merge commit) — R-WP0 through R-WP6 are all
+  ancestors of local `master`; nothing pushed to `origin`. Prior baseline for
+  this table was `4447e3c267a25d09ea20c3779c400dfa71330bef` (pre-R-WP6-merge).
 
 ## Current work package
 
 - ID: **R-WP6**
 - Goal: Bounded XcodeBuildMCP session adapter + validation; evidence-backed R-WP5 reassessment
-- State: **Resumed and gate-verified this session.** Committed adapter at `bec8670`; live runtime test formatted, one-line-fixed, compiled, and run green with real evidence (see below). **Still not independently reviewed; not merged; not pushed.**
+- State: **Resumed and gate-verified this session.** Committed adapter at `bec8670`; live runtime test formatted, one-line-fixed, compiled, and run green with real evidence (see below). **Since this session: independently reviewed across 3 rounds and merged to local `master` (`a5afb8a`); still not pushed.**
 - Files owned (committed): `internal/integrations/xcodebuildmcp/*` (including the now-committed live test), `cmd/simurgh/integration.go`, `cmd/simurgh/integration_xcodebuildmcp_test.go`, `cmd/simurgh/main.go`, plus this status / orchestrator-state / session report / AGENT_GUIDE / ARCHITECTURE
 - Non-goals held: Phase A timed cells / `p0_rerun_driver` / `BENCH_START_AT` / bench evidence publishes; R-WP5 PATH shims (gated); merge/push
 
@@ -98,14 +102,14 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 | **R-WP2** | tip `23c2dce` | complete |
 | **R-WP3** | tip `b811736` | complete |
 | **R-WP4** | tip `f395061` (code tip `4e500f1` + status) | **implementation-complete / benchmark-deferred** |
-| **R-WP6** | `bec8670` + this session's commit(s) | **gate-verified, live runtime validated — not independently reviewed, not merged** |
+| **R-WP6** | `bec8670` + fix rounds, merged as `a5afb8a` | **complete — merged to local `master` after 3 review rounds; not pushed** |
 
 ## Open failures/risks
 
 1. Benchmark cells remain unmet by owner STOPPED directive — not a code defect in R-WP4/R-WP6.
 2. Control-plane Session/Job state remains non-durable (R-WP3 carry-forward).
 3. R-WP5 PATH shim still gated behind R-WP6 reassessment (correction #3); the live runtime evidence now exists — see this doc's R-WP5 recommendation section / orchestrator-state.md for the grounded (not decided) call.
-4. R-WP6 live test is now compiled, formatted, and passing with real evidence, but **has not had an independent code review pass** — that remains a separate follow-up stage.
+4. R-WP6 live test is compiled, formatted, and passing with real evidence, and **has since had three independent review rounds and been merged to local `master`** (`a5afb8a`); one major, non-blocking finding (same-session concurrent `start` TOCTOU) was accepted as tracked debt rather than a 4th fix-review cycle — see `docs/plans/orchestrator-state.md`.
 5. Security rewrite unreachable-object caveat remains; **no push** of rewritten history without owner review.
 6. `internal/pressure` `TestCheckCombinesSignals` is disk-space-dependent on hosts with <5GiB free on `/` (not hermetic on disk); excluded from this session's regression gate by owner authorization; not fixed, not in scope for R-WP6.
 7. Approved R-WP2 minor debt untouched: capacity migration surprise; LaunchAgent optional; global queue-position semantics.
@@ -113,7 +117,7 @@ go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -cou
 
 ## Next package
 
-- R-WP6 gates are green and the live runtime test passed with evidence this session. Independent review of `bec8670` + the live test fix is the next step before any merge.
+- R-WP6 is merged to local `master` (`a5afb8a`) after 3 review rounds; remaining next steps are the owner's R-WP5 decision and, eventually, an explicit push to `origin`.
 - **R-WP5**: owner decides defer/shrink/retain using the grounded recommendation in this session's orchestrator-state.md entry — this doc does not make that call.
 - Do **not** merge/push stacked branches from this status alone.
 - Do **not** restart Phase A timed drivers unless owner directs.

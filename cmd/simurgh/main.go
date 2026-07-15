@@ -100,11 +100,11 @@ Blocks until stdin closes or the process is signaled.`)
 		}
 	}
 
-	fmt.Fprintf(os.Stderr, "simurgh %s (pre-v0 scaffold; no commands implemented yet)\n", version)
+	fmt.Fprintf(os.Stderr, "simurgh %s — unrecognized command; run 'simurgh help' for usage\n", version)
 }
 
 func printHelp() {
-	fmt.Println(`simurgh — iOS simulator lease broker (pre-v0 scaffold)
+	fmt.Println(`simurgh — iOS simulator lease broker
 
 Usage:
   simurgh acquire --model NAME [flags]

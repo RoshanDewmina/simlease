@@ -51,9 +51,12 @@ Post-v0.0.1 work, tracked as `R-WP*` packages (Phase B). Not yet tagged.
   are daemon-owned rather than CLI-process-owned.
 - `sessionID` validated on Stop/Status; a live two-session runtime test
   proved XcodeBuildMCP composes with Simurgh's isolation boundaries.
-- Went through three independent review rounds; one major, non-blocking
-  finding (a same-session concurrent-`start` TOCTOU) was accepted as
-  tracked debt rather than a fourth fix/review cycle.
+- Went through four independent review rounds. Rounds 1-2 fixed path
+  validation, cross-process lifecycle, a data race, two env-var backdoors,
+  and an error-classification regression. Round 3 found a same-session
+  concurrent-`start` TOCTOU; round 4 confirmed the fix and closed it. One
+  narrower, non-blocking finding remains tracked (unbounded lock-map
+  growth from malformed session IDs, same-user local IPC only).
 
 R-WP5 (PATH shim) remains gated/not started; no entry here because no code
 shipped for it.

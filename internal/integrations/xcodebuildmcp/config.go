@@ -9,22 +9,22 @@ import (
 )
 
 const (
-	adapterSubdir     = "xcodebuildmcp"
-	mcpJSONName       = "mcp.json"
-	sessionYAMLName   = "config.yaml"
-	pidMetaName       = "adapter.pid.json"
-	logName           = "adapter.log"
-	versionName       = "xcodebuildmcp.version"
+	adapterSubdir   = "xcodebuildmcp"
+	mcpJSONName     = "mcp.json"
+	sessionYAMLName = "config.yaml"
+	pidMetaName     = "adapter.pid.json"
+	logName         = "adapter.log"
+	versionName     = "xcodebuildmcp.version"
 )
 
 // SessionPaths are ephemeral adapter artifacts under the lease root.
 type SessionPaths struct {
-	Root         string
-	MCPJSON      string
-	SessionYAML  string
-	PIDMeta      string
-	Log          string
-	VersionFile  string
+	Root        string
+	MCPJSON     string
+	SessionYAML string
+	PIDMeta     string
+	Log         string
+	VersionFile string
 }
 
 // AdapterDir returns <leaseRoot>/xcodebuildmcp and related paths.

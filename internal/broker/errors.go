@@ -30,11 +30,11 @@ const (
 )
 
 const (
-	CodeCapacityQueued    = "CAPACITY_QUEUED"
-	CodeLeaseNotFound     = "LEASE_NOT_FOUND"
-	CodeInvalidState      = "INVALID_STATE"
-	CodeProvisionFailed   = "PROVISION_FAILED"
-	CodeAcquireCancelled  = "ACQUIRE_CANCELLED"
+	CodeCapacityQueued   = "CAPACITY_QUEUED"
+	CodeLeaseNotFound    = "LEASE_NOT_FOUND"
+	CodeInvalidState     = "INVALID_STATE"
+	CodeProvisionFailed  = "PROVISION_FAILED"
+	CodeAcquireCancelled = "ACQUIRE_CANCELLED"
 
 	FixCapacityQueued   = "simurgh status --queue   # or pass wait:true"
 	FixLeaseNotFound    = "simurgh list"
@@ -44,12 +44,12 @@ const (
 )
 
 var (
-	errLeaseNotFound     = errors.New("broker: lease not found")
-	errInvalidState      = errors.New("broker: invalid lease state")
-	errCapacityQueued    = errors.New("broker: capacity queued")
-	errProvisionFailed   = errors.New("broker: provision failed")
-	errAcquireCancelled  = errors.New("broker: acquire cancelled")
-	errInvalidError      = errors.New("broker: error requires code, message, and fix")
+	errLeaseNotFound    = errors.New("broker: lease not found")
+	errInvalidState     = errors.New("broker: invalid lease state")
+	errCapacityQueued   = errors.New("broker: capacity queued")
+	errProvisionFailed  = errors.New("broker: provision failed")
+	errAcquireCancelled = errors.New("broker: acquire cancelled")
+	errInvalidError     = errors.New("broker: error requires code, message, and fix")
 )
 
 // NewError constructs a validated error triple.

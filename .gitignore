@@ -27,3 +27,4 @@ go.work.sum
 
 # Local worktrees
 .worktrees/
+.claude/worktrees/

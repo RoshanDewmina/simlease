@@ -2038,8 +2038,9 @@ section 3) beyond what the original rewrite verified.
 **Finding: rewrite was correct for reachable history, but the object-DB caveat was real, not
 hypothetical.** The old pre-rewrite tip (`40a245a`) was confirmed NOT an ancestor of the branch's
 current HEAD (`593a051`) — the rewrite genuinely replaced history. But the real leaked credential
-body (`crsr_REDACTED_LEAKED_AND_REVOKED`) was still physically
-present and trivially retrievable as a dangling, packed blob (`d5c78d267b0a...`,
+body (already revoked/rotated by the owner; redacted here — `crsr_[REDACTED, see 2026-07-15 entry
+below for why]`) was still physically present and trivially retrievable as a dangling, packed blob
+(`d5c78d267b0a...`,
 `bench/evidence/warmdd-lancer-20260714T033925Z.json` at the old commit `40a245a`), kept alive only
 by that commit's own reflog entry (default 30-day grace period).
 
@@ -2227,3 +2228,49 @@ clean, full repo regression (`go test -race ./...`, all 18 packages) green inclu
 **R-WP6 overall status: MERGEABLE, no known blocking findings.** One tracked, non-blocking debt item
 added (Start-side sessionLocks growth from malformed IDs) alongside the existing tracked TOCTOU-class
 debt note (now superseded — same-session races are fixed; only the unrelated growth vector remains).
+
+### 2026-07-15 (continued) — Self-correction: redacted the leaked credential value from this file
+
+The final pre-publish audit found that my own 2026-07-14 entry above (documenting the object-DB
+cleanup) had quoted the actual leaked Cursor API credential body in plaintext — directly
+undermining the point of that cleanup, and falsifying the earlier "zero matches across all commits
+reachable from HEAD" claim the moment this commit landed. Redacted the value in place above.
+
+**What this does and doesn't fix:** the redaction removes the value from the *current* file content
+(HEAD's tree) going forward — any future read of this file, and any future push, carries only the
+redacted form. It does **not** remove the value from commit `a9443f9`'s own historical diff, which
+is now three commits back on `master` with other work built on top (`9494367`, `428d05a`). Unlike
+the earlier object-DB cleanup (which touched only dangling, already-unreferenced commits on a
+separate branch), `a9443f9` is a live ancestor of the current `master` tip — excising it fully would
+require rewriting and rebasing everything after it, a materially bigger and riskier operation than
+tonight's other cleanup. **Not performed autonomously; this is an owner decision**, not a unilateral
+call, given the credential is already confirmed revoked/rotated (so the residual risk of it sitting
+in one unpushed local commit's diff is low, not an active-compromise scenario) versus the disruption
+of a same-night rebase of already-reviewed, already-tested commits.
+
+**Owner options, either is reasonable:** (a) accept `a9443f9`'s historical diff as a known,
+low-risk, revoked-credential artifact in local-only unpushed history — simplest, no further action
+needed before local use; (b) authorize a full rebase-based excision before any push to `origin` —
+bigger operation, should be done deliberately with the owner present, not autonomously overnight.
+**Either way: do not push `master` (or any branch containing `a9443f9`) to `origin` without first
+deciding this**, since a push would carry the real secret value in `a9443f9`'s diff regardless of
+this redaction commit's own content.
+
+Also fixed in this pass (from the same audit): `CHANGELOG.md` and
+`docs/plans/MASTER_BUILD_STATUS.md` both still said the same-session TOCTOU was "accepted as
+tracked debt rather than a fourth fix/review cycle" — false since the fourth round (`9494367`,
+`428d05a`) actually happened and closed it, leaving only the narrower Start-side `sessionLocks`
+growth item open. Corrected both. Also fixed: three files with pre-existing `gofmt` drift
+(`internal/broker/errors.go`, `internal/integrations/xcodebuildmcp/bindings.go`, `config.go` —
+purely cosmetic column-alignment, no semantic change) and a `.gitignore` gap where `.worktrees/`
+was correctly ignored but `.claude/worktrees/` relied only on a local, unshared `.git/info/exclude`
+entry rather than the committed `.gitignore` (a fresh clone/collaborator wouldn't inherit that
+ignore rule).
+
+**Final pre-publish audit overall verdict:** prod-ready for local/private use and for the owner's
+own Lancer project, once the above redaction (done) lands. Full build/vet/test green under `-race`
+across all 18 packages. Dependency footprint: one direct dependency
+(`github.com/modelcontextprotocol/go-sdk`), all indirect deps mainstream/maintained, no red flags.
+Threat-model claim for the one remaining tracked debt item (Start-side `sessionLocks` growth)
+independently re-verified at the socket-permission level (`internal/ipc` creates the socket dir
+`0o700` and the socket file `0o600` — same-user-only access confirmed, not just asserted).

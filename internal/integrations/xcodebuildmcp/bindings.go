@@ -22,14 +22,14 @@ var requiredSimurghEnv = []string{
 
 // Bindings are the exact isolation + XcodeBuildMCP session defaults for one lease.
 type Bindings struct {
-	LeaseID     string
-	UDID        string
-	Dirs        isolator.LeaseDirs
-	Env         map[string]string
-	XBMCPEnv    map[string]string // XCODEBUILDMCP_* session-default env
-	CLIFlags    []string          // explicit flags supported by installed XcodeBuildMCP CLI
-	ExtraArgs   []string          // xcodebuild extraArgs (source-packages + destination)
-	DeveloperDir string           // optional DEVELOPER_DIR
+	LeaseID      string
+	UDID         string
+	Dirs         isolator.LeaseDirs
+	Env          map[string]string
+	XBMCPEnv     map[string]string // XCODEBUILDMCP_* session-default env
+	CLIFlags     []string          // explicit flags supported by installed XcodeBuildMCP CLI
+	ExtraArgs    []string          // xcodebuild extraArgs (source-packages + destination)
+	DeveloperDir string            // optional DEVELOPER_DIR
 }
 
 // BuildBindings derives isolation bindings strictly from an ACTIVE lease and
@@ -75,9 +75,9 @@ func BuildBindings(lease broker.Lease, leasesRoot string) (Bindings, error) {
 	}
 
 	xbmcpEnv := map[string]string{
-		"XCODEBUILDMCP_SIMULATOR_ID":     lease.Device.UDID,
+		"XCODEBUILDMCP_SIMULATOR_ID":      lease.Device.UDID,
 		"XCODEBUILDMCP_DERIVED_DATA_PATH": dirs.DerivedData,
-		"XCODEBUILDMCP_SENTRY_DISABLED":  "true",
+		"XCODEBUILDMCP_SENTRY_DISABLED":   "true",
 	}
 	for k, v := range xbmcpEnv {
 		env[k] = v

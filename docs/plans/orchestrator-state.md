@@ -1,6 +1,8 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 17:16 UTC
+**Updated:** 2026-07-14 17:16 UTC (superseded — see correction entry dated
+2026-07-14 at the end of this file: R-WP6 has since been reviewed 3 rounds
+and merged to local `master` at `a5afb8a`)
 **Owner:** Roshan
 **Orchestrator:** Cursor Sol session paused during **R-WP6** (XcodeBuildMCP
 adapter). Phase A remains **STOPPED/BLOCKED by explicit owner directive**
@@ -15,6 +17,14 @@ current correction commit (**not** complete, **not** reviewed).
 resume R-WP6 only, then **R-WP5 only after R-WP6 reassessment** (owner
 correction #3). Timed benchmark cells remain deferred. **Master remains
 `4447e3c` — nothing merged or pushed.**
+
+> **This header describes state as of 17:16 UTC and is stale on the
+> merge/master-SHA points.** As of the last dated entry in this file
+> (`R-WP6 merged to local master after third review pass`), R-WP6 is
+> **merged** to local `master` at `a5afb8a` after three independent review
+> rounds, and master is no longer at `4447e3c`. See that entry and
+> `docs/plans/MASTER_BUILD_STATUS.md` for current state. Left as originally
+> written below per this file's append-only convention for dated history.
 
 ## Operating decisions
 
@@ -1995,3 +2005,71 @@ pattern recurs).
 XcodeBuildMCP composes with Simurgh's isolation for the scenarios exercised; the new TOCTOU finding
 is orthogonal to that (a session-lifecycle bookkeeping gap, not an isolation-boundary gap), so it
 does not change the R-WP5 read.
+
+### 2026-07-14 (correction) — status-doc audit: confirm R-WP6 merge, correct stale "not merged" claims
+
+A prod-readiness audit this session flagged that this file's top "current state" header
+(dated 17:16 UTC, above) and `docs/plans/MASTER_BUILD_STATUS.md` still asserted R-WP6 was
+"NOT REVIEWED, NOT MERGED" and that `master` was unchanged at `4447e3c` — both false given the
+entry immediately above this one (`R-WP6 merged to local master after third review pass`).
+
+Verified directly against the repo, not just against this doc:
+
+- `git log -1 --oneline` → `a5afb8a merge: R-WP6 XcodeBuildMCP session adapter (3 review rounds,
+  all blocking findings resolved)` — this is current `master` HEAD.
+- `git log --oneline --merges -1` → confirms `a5afb8a` is the merge commit.
+- `git log --oneline a5afb8a..master` → empty; no commits on `master` past the merge.
+- R-WP0 through R-WP6 commits are all ancestors of `master`.
+
+Corrections made this pass: the top "current state" header block in this file (annotated
+in place as superseded, per this file's append-don't-rewrite convention for dated entries —
+the header block itself is not a dated entry, so it was corrected directly rather than
+appended-around), and the equivalent stale claims in `MASTER_BUILD_STATUS.md` (package-state
+line, master-SHA baseline, completed-packages table row, one open-risk line, and the
+next-package section). No prior dated entry in this file was edited or removed.
+
+### 2026-07-14 (continued, overnight) — Credential-rewrite branch: object-DB cleanup completed and verified
+
+Per owner authorization ("verify and resolve it tonight if I can verify it's safe"), a second
+independent read-only agent re-checked the Phase A branch's history rewrite
+(`claude/benchmark-blockers-2026-07-13-37773c`, `docs/plans/SIMURGH_SOL_SESSION_REPORT_2026-07-14.md`
+section 3) beyond what the original rewrite verified.
+
+**Finding: rewrite was correct for reachable history, but the object-DB caveat was real, not
+hypothetical.** The old pre-rewrite tip (`40a245a`) was confirmed NOT an ancestor of the branch's
+current HEAD (`593a051`) — the rewrite genuinely replaced history. But the real leaked credential
+body (`crsr_REDACTED_LEAKED_AND_REVOKED`) was still physically
+present and trivially retrievable as a dangling, packed blob (`d5c78d267b0a...`,
+`bench/evidence/warmdd-lancer-20260714T033925Z.json` at the old commit `40a245a`), kept alive only
+by that commit's own reflog entry (default 30-day grace period).
+
+**Remediation performed (local only, no push, no force-push, no history rewrite of any live
+branch):**
+1. Inventoried every dangling object repo-wide (`git fsck --unreachable --dangling --no-reflog`) —
+   20 dangling commits total. Every single one was either a `WIP on.../index on.../untracked files
+   on...` git-stash byproduct (matched by message/timestamp to this session's own stash push/pop
+   operations, plus one older pre-session stash from 2026-07-12/M0.2a) or the exact two leak-chain
+   commits (`40a245a`, `6ff247f`) already identified by the verification agent. Confirmed zero live
+   `git stash list` entries anywhere across the main checkout and all 8 worktrees before proceeding.
+2. `git reflog expire --expire-unreachable=now --stale-fix` scoped to exactly
+   `refs/heads/claude/benchmark-blockers-2026-07-13-37773c` and that worktree's `HEAD` only —
+   removed the specific pin keeping the leak commits artificially alive. No other branch's reflog
+   was touched.
+3. `git repack -Ad` then `git prune --expire=now` (repo-wide, justified only after step 1 confirmed
+   every dangling object was safe to lose) — physically removed the leaked blob and both leak
+   commits from the object store.
+4. `git commit-graph write --reachable` to drop the now-stale commit-graph cache entries.
+
+**Verification after cleanup:**
+- `git cat-file -p d5c78d267b0a...` → `fatal: Not a valid object name` (confirmed gone).
+- `git cat-file -t 40a245a` / `6ff247f` → both `fatal: could not get object info` (confirmed gone).
+- `git fsck --full` → clean, zero errors, zero dangling objects remaining.
+- Every worktree and branch tip re-verified unchanged after the operation (master `a5afb8a`, Phase
+  A branch still `593a051`, all R-WP worktrees at their expected tips, zero dirty-file surprises).
+
+**Still binding, unchanged by this cleanup:** no push of the Phase A branch or any branch without
+explicit owner authorization. This cleanup only removes a local artifact; it does not substitute
+for owner review of the rewrite itself, which remains outstanding. The owner should still
+personally review the rewritten history before any push is considered — this session's cleanup
+just means that review is no longer racing against a live, trivially-recoverable copy of the actual
+secret sitting in the local object database.

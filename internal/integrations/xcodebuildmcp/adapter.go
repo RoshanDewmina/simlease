@@ -90,10 +90,17 @@ type Adapter struct {
 	// mutex alone cannot: it serializes the whole read-check-spawn-write (or
 	// read-kill-remove) sequence, so overlapping Start/Start or Start/Stop
 	// calls for one session can never interleave. Locks accumulate one per
-	// distinct sessionID ever seen and are never removed, mirroring
-	// internal/provisioner.Provisioner.lockForBase — that key space (base
-	// device specs) is likewise small and bounded, and this one is bounded
-	// by active lease/session IDs.
+	// distinct sessionID ever seen and are never removed. Stop validates
+	// sessionID via safety.ValidateLeasePath BEFORE calling lockForSession
+	// (a fourth-review finding: validating after locking would let a flood
+	// of malformed sessionIDs grow this map unboundedly even though each
+	// call fails immediately after), bounding its key space the same way
+	// internal/provisioner.Provisioner.lockForBase's key space is bounded by
+	// validating model/runtime before ever calling lockForBase. Start
+	// deliberately does NOT format-validate before locking (see Start's own
+	// comment) to preserve LEASE_NOT_FOUND classification parity for any
+	// nonexistent sessionID shape — its sessionLocks growth exposure from
+	// malformed IDs is real, known, non-blocking debt, not yet fixed here.
 	sessionMu    sync.Mutex
 	sessionLocks map[string]*sync.Mutex
 }
@@ -158,6 +165,20 @@ func (a *Adapter) Start(ctx context.Context, sessionID string) (Status, error) {
 	if a.LeasesRoot == "" {
 		return Status{}, fmt.Errorf("xcodebuildmcp: leases root is required")
 	}
+
+	// Deliberately NOT format-validating sessionID here before locking,
+	// unlike Stop (see Stop's comment): Start's GetLease closure treats ANY
+	// nonexistent sessionID string uniformly as LEASE_NOT_FOUND (round-3
+	// fix, TestXBMCPStartUnknownSessionOverRealIPCReturnsLeaseNotFound
+	// exercises this with the deliberately non-lease-shaped fixture
+	// "lease-does-not-exist"). A format pre-check here would intercept
+	// malformed-but-broker-miss IDs and reclassify them as INVALID_LEASE_ID
+	// instead, breaking that parity with plain lease.get. This does leave
+	// sessionLocks growth unbounded for a flood of distinct bogus sessionIDs
+	// reaching Start specifically (tracked as known, non-blocking debt —
+	// same-user local IPC only, no state corruption, no isolation-boundary
+	// crossing); fixing it properly needs eviction/expiry on sessionLocks,
+	// not format-based rejection, and is out of scope for this fix.
 
 	// Serialize the whole read-check-spawn-write sequence for this
 	// sessionID: closes the same-session Start/Start TOCTOU (see
@@ -272,6 +293,19 @@ func (a *Adapter) Stop(ctx context.Context, sessionID string) error {
 		return fmt.Errorf("xcodebuildmcp: leases root is required")
 	}
 
+	// Stop has destructive side effects (kills a process, removes files), so
+	// it fails closed on an unvalidated sessionID rather than silently
+	// treating a malformed/traversal-shaped ID as "not found" — reuse the
+	// same allowlist internal/safety already establishes for lease paths.
+	// Validated BEFORE lockForSession (not just before touching disk):
+	// lockForSession's map has no eviction, so locking first would let a
+	// flood of distinct malformed sessionIDs grow it unboundedly even
+	// though each call fails immediately after.
+	leaseDir, err := safety.ValidateLeasePath(a.LeasesRoot, sessionID)
+	if err != nil {
+		return fmt.Errorf("xcodebuildmcp: invalid session %s: %w", sessionID, err)
+	}
+
 	// Serialize the whole read-metadata-through-kill-through-remove-metadata
 	// sequence for this sessionID: closes Start racing Stop for the same
 	// session (see sessionLocks doc on the Adapter struct) — without this, a
@@ -281,14 +315,6 @@ func (a *Adapter) Stop(ctx context.Context, sessionID string) error {
 	sessMu.Lock()
 	defer sessMu.Unlock()
 
-	// Stop has destructive side effects (kills a process, removes files), so
-	// it fails closed on an unvalidated sessionID rather than silently
-	// treating a malformed/traversal-shaped ID as "not found" — reuse the
-	// same allowlist internal/safety already establishes for lease paths.
-	leaseDir, err := safety.ValidateLeasePath(a.LeasesRoot, sessionID)
-	if err != nil {
-		return fmt.Errorf("xcodebuildmcp: invalid session %s: %w", sessionID, err)
-	}
 	paths := AdapterDir(leaseDir)
 	meta, err := readPIDMeta(paths.PIDMeta)
 	if err != nil {

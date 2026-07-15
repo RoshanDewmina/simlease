@@ -2185,3 +2185,45 @@ checkout (`bench/HANDOFF_FIXES_PROMPT.md`, `docs/plans/SIMURGH_CLAUDE_CODE_MASTE
 unrelated docs-only commit from that parallel effort (`d1d1152`, "docs: correct README
 status/license claims, add R-WP roadmap section") partway through this session; confirmed via
 `git log` that this fix's commit(s) land cleanly on top of that, not in conflict with it.
+
+### 2026-07-15 — Fourth review round on the TOCTOU fix: MERGEABLE, one finding fixed and corrected
+
+Fourth independent review pass on `9494367` (the TOCTOU fix) re-ran every test itself and traced
+the lock scope, the background reaper goroutine, and lock-ordering by hand rather than trusting the
+implementer's report. **Verdict: both fix goals (Start/Start and Start/Stop same-session races)
+CONFIRMED FIXED independently.** One new finding, major/non-blocking: `lockForSession` was called
+BEFORE sessionID validation in both `Start` and `Stop`, so a flood of distinct malformed sessionIDs
+could grow the never-evicted `sessionLocks` map unboundedly. The code's own comment compared this to
+`internal/provisioner.Provisioner.lockForBase`'s bounded-key-space pattern, but that pattern
+validates before locking — the comparison was inaccurate as shipped.
+
+**Fix applied directly (not dispatched — small, mechanical, done in-session):** reordered `Stop` to
+validate via `safety.ValidateLeasePath` before calling `lockForSession` (pure reordering, no
+behavior change — confirmed by the existing malformed-sessionID test passing unchanged).
+
+**First attempt at the same fix for `Start` was WRONG and reverted.** Adding the same
+`safety.ValidateLeasePath` pre-check to `Start` broke
+`TestXBMCPStartUnknownSessionOverRealIPCReturnsLeaseNotFound` (daemon) and
+`TestXcodeBuildMCPCLIStartUnknownSessionReturnsLeaseNotFound` (cmd/simurgh) — both deliberately use
+the non-`lease-<digits>`-shaped fixture `"lease-does-not-exist"` to prove Start's `GetLease` closure
+classifies ANY nonexistent sessionID uniformly as `LEASE_NOT_FOUND` (the round-3 fix), matching
+`broker.Get`'s plain map-lookup semantics (confirmed: `broker.Get` has no format constraint on lease
+IDs at all). A format pre-check in Start intercepts malformed-but-broker-miss IDs and reclassifies
+them as `INVALID_LEASE_ID` instead, breaking that deliberate parity. **Caught by running the full
+regression suite before committing** — reverted the Start-side change; kept it for Stop only, where
+it's a pure reorder with no error-classification impact (Stop's validation already existed pre-fix,
+only its position relative to the lock changed).
+
+**Net result:** Stop's `sessionLocks` growth is now genuinely bounded (validates before locking).
+Start's growth-from-malformed-IDs exposure remains open — **documented as known, non-blocking debt**
+(same-user local IPC only, no state corruption, no isolation-boundary crossing); a correct fix needs
+eviction/expiry on `sessionLocks`, not format-based rejection, and is out of scope for tonight.
+
+**Verified after correction:** full package suite (11/11), both previously-broken LEASE_NOT_FOUND
+tests (daemon + CLI layers) pass again, high-confidence race re-runs (10x) on both new TOCTOU tests
+clean, full repo regression (`go test -race ./...`, all 18 packages) green including
+`internal/ipc`'s earlier transient timeout (confirmed unrelated flakiness on rerun).
+
+**R-WP6 overall status: MERGEABLE, no known blocking findings.** One tracked, non-blocking debt item
+added (Start-side sessionLocks growth from malformed IDs) alongside the existing tracked TOCTOU-class
+debt note (now superseded — same-session races are fixed; only the unrelated growth vector remains).

@@ -13,6 +13,7 @@ import (
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
 	"github.com/RoshanDewmina/simurgh/internal/controlplane"
+	xbmcp "github.com/RoshanDewmina/simurgh/internal/integrations/xcodebuildmcp"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
 	"github.com/RoshanDewmina/simurgh/internal/isolator"
 	"github.com/RoshanDewmina/simurgh/internal/pressure"
@@ -32,6 +33,18 @@ type Deps struct {
 	LeasesRoot    string
 	DeviceLister  safety.DeviceLister  // warm.remove → DeleteSimulatorClone
 	DeviceDeleter safety.DeviceDeleter // warm.remove → DeleteSimulatorClone
+
+	// XBMCPAdapter is the single long-lived XcodeBuildMCP adapter, constructed
+	// once by cmd/simurgh at daemon startup (alongside Broker/Reaper) so its
+	// stdinHolders map — the mechanism that keeps an XcodeBuildMCP child's
+	// stdin pipe open — persists for the daemon process's actual lifetime.
+	// Before R-WP6 review finding B2, cmd/simurgh built a brand-new Adapter
+	// per one-shot CLI invocation of `simurgh integration xcodebuildmcp
+	// start|stop|status`; the moment the `start` process exited, its held
+	// stdin fd closed, the child saw EOF, and a stdio-transport MCP server
+	// typically exited — defeating "start now, stop/status later as separate
+	// invocations". Optional: nil when the CLI/tests don't wire XcodeBuildMCP.
+	XBMCPAdapter *xbmcp.Adapter
 }
 
 // RegisterLeaseHandlers registers lease.acquire|renew|release|get|list|wait,
@@ -51,6 +64,20 @@ func RegisterLeaseHandlers(server *ipc.Server, deps Deps) {
 	server.RegisterHandler("warm.remove", h.warmRemove)
 	server.RegisterHandler("prune.plan", h.prunePlan)
 	server.RegisterHandler("prune.apply", h.pruneApply)
+}
+
+// RegisterXcodeBuildMCPHandlers registers integration.xcodebuildmcp.start|stop|status
+// on server. deps.XBMCPAdapter must be the single long-lived Adapter constructed
+// once at daemon startup (see Deps.XBMCPAdapter and cmd/simurgh's daemon run) —
+// this is the R-WP6 review finding B2 fix: Adapter.Start/Stop/Status now run in
+// the daemon, which already owns leases/capacity for exactly this reason,
+// instead of being reconstructed (and losing stdinHolders) on every one-shot
+// CLI invocation. Call before Serve, alongside RegisterLeaseHandlers.
+func RegisterXcodeBuildMCPHandlers(server *ipc.Server, deps Deps) {
+	h := newHandlers(deps)
+	server.RegisterHandler("integration.xcodebuildmcp.start", h.xbmcpStart)
+	server.RegisterHandler("integration.xcodebuildmcp.stop", h.xbmcpStop)
+	server.RegisterHandler("integration.xcodebuildmcp.status", h.xbmcpStatus)
 }
 
 // AdvanceRehydratedQueues performs the one immediate post-rehydrate global
@@ -371,13 +398,9 @@ func parseOptionalDuration(s string) (time.Duration, error) {
 }
 
 func leaseNotFoundErr(id string) error {
-	// Reconstruct the same typed error broker uses so mapping stays uniform.
-	msg := fmt.Sprintf("lease %q not found", id)
-	env, err := broker.NewError(broker.CodeLeaseNotFound, msg, broker.FixLeaseNotFound)
-	if err != nil {
-		return fmt.Errorf("lease %q not found", id)
-	}
-	return &broker.LeaseNotFoundError{LeaseID: id, ErrorEnvelope: env}
+	// Reuse the broker's own typed-error constructor so mapping stays
+	// uniform no matter which code path resolved the lease.
+	return broker.NewLeaseNotFoundError(id)
 }
 
 func badRequest(err error) *ipc.Error {
@@ -704,6 +727,125 @@ func copySafetyEnvelope(env *safety.Error) *ipc.Error {
 	}
 	out, _ := ipc.NewError(env.Code, env.Message, env.Fix)
 	return out
+}
+
+// xbmcpSessionParams is the wire params shape for all three
+// integration.xcodebuildmcp.* methods — a bare session/lease id, matching the
+// CLI's `--session <id>` compatibility surface (ARCHITECTURE §14).
+type xbmcpSessionParams struct {
+	SessionID string `json:"sessionId"`
+}
+
+func (h *handlers) xbmcpStart(ctx context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
+	if h.deps.XBMCPAdapter == nil {
+		return nil, internalErr(errors.New("xcodebuildmcp adapter not configured"))
+	}
+	var p xbmcpSessionParams
+	if err := decodeParams(req.Params, &p); err != nil {
+		return nil, badRequest(err)
+	}
+	if p.SessionID == "" {
+		return nil, badRequest(errors.New("sessionId is required"))
+	}
+	st, err := h.deps.XBMCPAdapter.Start(ctx, p.SessionID)
+	if err != nil {
+		return nil, xbmcpErrorToIPC(err)
+	}
+	raw, mErr := json.Marshal(st)
+	if mErr != nil {
+		return nil, internalErr(mErr)
+	}
+	return raw, nil
+}
+
+func (h *handlers) xbmcpStop(ctx context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
+	if h.deps.XBMCPAdapter == nil {
+		return nil, internalErr(errors.New("xcodebuildmcp adapter not configured"))
+	}
+	var p xbmcpSessionParams
+	if err := decodeParams(req.Params, &p); err != nil {
+		return nil, badRequest(err)
+	}
+	if p.SessionID == "" {
+		return nil, badRequest(errors.New("sessionId is required"))
+	}
+	if err := h.deps.XBMCPAdapter.Stop(ctx, p.SessionID); err != nil {
+		return nil, xbmcpErrorToIPC(err)
+	}
+	raw, mErr := json.Marshal(map[string]bool{"stopped": true})
+	if mErr != nil {
+		return nil, internalErr(mErr)
+	}
+	return raw, nil
+}
+
+func (h *handlers) xbmcpStatus(ctx context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
+	if h.deps.XBMCPAdapter == nil {
+		return nil, internalErr(errors.New("xcodebuildmcp adapter not configured"))
+	}
+	var p xbmcpSessionParams
+	if err := decodeParams(req.Params, &p); err != nil {
+		return nil, badRequest(err)
+	}
+	if p.SessionID == "" {
+		return nil, badRequest(errors.New("sessionId is required"))
+	}
+	st, err := h.deps.XBMCPAdapter.Status(ctx, p.SessionID)
+	if err != nil {
+		return nil, xbmcpErrorToIPC(err)
+	}
+	raw, mErr := json.Marshal(st)
+	if mErr != nil {
+		return nil, internalErr(mErr)
+	}
+	return raw, nil
+}
+
+// xbmcpErrorToIPC maps a raw Adapter.Start/Stop/Status error to the ipc.Error
+// wire triple. Before the errors.As check below (R-WP6 second-review Fix 3),
+// GetLease's "lease not found" case fell through to the message-based
+// classification like everything else and was misclassified as INTERNAL —
+// regressing the pre-B2 behavior where the CLI→IPC lease.get path returned a
+// structured LEASE_NOT_FOUND (exit 3). GetLease now returns
+// broker.NewLeaseNotFoundError (cmd/simurgh/daemon.go), so it is classified
+// exactly like the broker's own lease.get handler (brokerErrorToIPC) instead
+// of falling into the fragile string-matching fallback below.
+//
+// Everything else keeps the message-based classification, which mirrors,
+// verbatim, the mapping cmd/simurgh's printXBMCPErr used to apply
+// client-side when the Adapter ran in-process (pre-B2-fix): "want active"/
+// "no ACTIVE" and "no owned adapter"/"already running" become INVALID_STATE,
+// everything else stays INTERNAL. Reusing those exact code strings — which
+// equal broker.CodeInvalidState and ipc.CodeDaemonNotRunning — means
+// exitCodeForIPCError on the client reproduces the same exit codes the old
+// in-process exitCodeForCode mapping produced, so the CLI's observable
+// behavior (message, fix, exit code) is unchanged by moving execution here.
+func xbmcpErrorToIPC(err error) *ipc.Error {
+	if err == nil {
+		return nil
+	}
+	var nf *broker.LeaseNotFoundError
+	if errors.As(err, &nf) {
+		return copyBrokerEnvelope(nf.ErrorEnvelope)
+	}
+	msg := err.Error()
+	code := "INTERNAL"
+	fix := "check daemon lease state and XcodeBuildMCP install"
+	switch {
+	case strings.Contains(msg, "want active") || strings.Contains(msg, "no ACTIVE"):
+		code = "INVALID_STATE"
+		fix = "acquire/wait until the lease is ACTIVE with a device"
+	case strings.Contains(msg, "daemon is not running") || strings.Contains(msg, "DaemonNotRunning"):
+		code = "DAEMON_NOT_RUNNING"
+		fix = "simurgh daemon run"
+	case strings.Contains(msg, "no owned adapter") || strings.Contains(msg, "already running"):
+		code = "INVALID_STATE"
+	}
+	env, e := ipc.NewError(code, msg, fix)
+	if e != nil {
+		return &ipc.Error{Code: code, Message: msg, Fix: fix}
+	}
+	return env
 }
 
 // ReclaimLoop applies watcher decisions and periodically scans for orphans.

@@ -95,6 +95,8 @@ Blocks until stdin closes or the process is signaled.`)
 				}
 			}
 			os.Exit(runMCP())
+		case "integration":
+			os.Exit(runIntegration(os.Args[2:]))
 		}
 	}
 
@@ -121,6 +123,7 @@ Usage:
   simurgh doctor [--json]
   simurgh init [--force] [--json]
   simurgh mcp
+  simurgh integration xcodebuildmcp start|stop|status --session <id>
   simurgh [help]
 
 Acquire/release/renew/status/list are thin IPC clients over the daemon lease RPCs.
@@ -130,6 +133,7 @@ env prints eval-able isolation exports; exec runs a command with those env vars
 (and xcodebuild isolation flags) injected. PATH shim is v0.1 — not built.
 init writes .simurgh.yaml, registers simurgh mcp in .mcp.json, and prints an agent rules snippet.
 mcp runs the stdio MCP server exposing the five agent tools from ARCHITECTURE §8.
+integration xcodebuildmcp owns ephemeral MCP config + child lifecycle for an ACTIVE lease.
 Daemon serves the Unix socket IPC endpoint (daemon.ping + lease.* + pool.status + warm.* + prune.*).
 Doctor checks Xcode, simctl, iOS runtimes, socket perms, daemon liveness, stale leases, and disk usage.
 See docs/ROADMAP.md for the build plan.`)

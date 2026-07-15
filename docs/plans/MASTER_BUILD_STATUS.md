@@ -1,24 +1,62 @@
 # Simurgh Master Build Status
 
-**Updated:** 2026-07-14 16:47 UTC (America/Toronto 12:47 EDT)
+**Updated:** 2026-07-14 (resume session, following the 17:16 UTC pause entry)
 **Roadmap naming:** Phase B packages use `R-WP*` (not Phase A `P0-*` / harness `WP*`).
-**Package state:** **R-WP4 implementation-complete / benchmark-deferred**
+**Package state:** **R-WP6 gate-verified, live runtime validated — NOT REVIEWED, NOT MERGED**
 
 ## Baseline
 
-- Prior tip (R-WP3 gate-verified): `b811736a4543d658bd5aecbf5701b16bb5a7548a`
-- Branch/worktree: `feat/r-wp4-readiness-cache` @ `/Users/roshansilva/Documents/simurgh/.worktrees/r-wp4-readiness-cache`
+- Prior tip (R-WP4 review-fix closed): `f39506114f222d33ef5c6a62b97fc90e81083900`
+- Branch/worktree: `feat/r-wp6-xcodebuildmcp` @ `/Users/roshansilva/Documents/simurgh/.worktrees/r-wp6-xcodebuildmcp`
 - Go: `go1.26.5 darwin/arm64`
 - macOS: `27.0` (Build `26A5378n`), `arm64`
 - Xcode: `27.0` (Build `27A5194q`); `xcrun simctl help` exit 0
+- **Master (unchanged):** `4447e3c267a25d09ea20c3779c400dfa71330bef` — nothing merged or pushed
 
 ## Current work package
 
-- ID: **R-WP4**
-- Goal: Bounded readiness polls; formal APFS warm-seed compatibility keys; private writable-cache isolation; acquire/build/install/launch/test/capture phase instrumentation
-- State: **implementation-complete / benchmark-deferred** (all literal implementation gates green; **no** timed matrix / no new `bench/evidence` / no latency claims)
-- Files owned: `cmd/simurgh/warm_seed.go`, `cmd/simurgh/env.go`, `cmd/simurgh/warmdd.go`, `internal/isolator/*`, `internal/provisioner/{readiness,errors,simctl,provisioner}.go`, `internal/controlplane/{types,controlplane}.go`, docs (`AGENT_GUIDE`, `ARCHITECTURE`, this status + orchestrator-state)
-- Non-goals held: timed B1/B2/B4/B5/B6 / `p0_rerun_driver` / `BENCH_START_AT` / XcodeBuildMCP composition (owner STOPPED); R-WP5 PATH shims; R-WP6 adapter; public session/job RPCs; broker identity/capacity rewrites
+- ID: **R-WP6**
+- Goal: Bounded XcodeBuildMCP session adapter + validation; evidence-backed R-WP5 reassessment
+- State: **Resumed and gate-verified this session.** Committed adapter at `bec8670`; live runtime test formatted, one-line-fixed, compiled, and run green with real evidence (see below). **Still not independently reviewed; not merged; not pushed.**
+- Files owned (committed): `internal/integrations/xcodebuildmcp/*` (including the now-committed live test), `cmd/simurgh/integration.go`, `cmd/simurgh/integration_xcodebuildmcp_test.go`, `cmd/simurgh/main.go`, plus this status / orchestrator-state / session report / AGENT_GUIDE / ARCHITECTURE
+- Non-goals held: Phase A timed cells / `p0_rerun_driver` / `BENCH_START_AT` / bench evidence publishes; R-WP5 PATH shims (gated); merge/push
+
+### Live test resolution (this session)
+
+| Item | Detail |
+|---|---|
+| `runtime_live_test.go` pre-fix SHA-256 | `9582650a420aa69976fe03a15a81a799d136eadfb8f71796fca7ce0dda13f5f3` |
+| `gofmt -w` | needed formatting; applied |
+| Compile check | **build failed**: `runtime_live_test.go:93:8: assignment mismatch: 1 variable but b.Release returns 2 values` — file had never been compiled before this session |
+| Fix applied (owner-authorized, scoped to this exact line only) | `_ = b.Release(...)` → `_, _ = b.Release(...)`, matching the discard-error style of the two adjacent cleanup lines in the same `t.Cleanup` block |
+| Post-fix `gofmt -l` | clean (no-op) |
+| Post-fix SHA-256 | `dd315aba5f82cda2eabb5ce726fd31071c632f4cd986aa125d61059fa14ce980` |
+
+### `internal/pressure` exclusion (this session)
+
+`TestCheckCombinesSignals` in `internal/pressure` fails deterministically on
+this host: the test mocks RAM/thermal via `setRunner` but computes the disk
+signal from the real host filesystem, and this host has ~2.3GiB free against
+the test's hardcoded 5GiB minimum. Confirmed pre-existing and unrelated to
+R-WP6 (`internal/pressure` last touched by `2b0a4d8`, a shared ancestor of
+`bec8670`, not modified by this branch). Owner-authorized, scoped exclusion
+of this one package from the regression gate for this dispatch only —
+`internal/pressure` itself was **not modified**.
+
+### Gates run this session (resume, in order)
+
+| Gate | Result |
+|---|---|
+| Package focused gate (7 tests) | **PASS**, `1.493s` |
+| CLI focused gate (3 tests) | **PASS**, `3.936s` |
+| `go build ./...` | **PASS**, `0.436s` |
+| `go vet ./...` | **PASS**, `0.385s` |
+| `go test -race ./...` (unscoped) | **FAIL** — only `internal/pressure` (see exclusion above); all other packages passed |
+| `go test -race $(go list ./... \| grep -v internal/pressure)` | **PASS**, 17/17 packages |
+| Broker named tests (8) | **PASS**, `1.018s` |
+| IPC `TestDialDaemonSurvivesParentExit` | **PASS**, `32.28s` (daemon PID `38481` stable) |
+| Daemon `TestReuseIfExistsLive` (`darwin_sim`) | **PASS**, `2.54s` (package `3.554s`) |
+| **Live runtime validation** `TestXcodeBuildMCPRuntimeTwoSessionAttribution` (`darwin_sim`) | **PASS**, `63.50s` (package `64.518s`) — verdict `"composes"`, see evidence JSON in `docs/plans/orchestrator-state.md` |
 
 ### Explicitly deferred (unpublished claims)
 
@@ -29,11 +67,12 @@
 | B4-defaults-rep | **deferred** |
 | B5 dual-window | **deferred** |
 | B6 third ARM-S | **deferred** |
-| XcodeBuildMCP composition check | **deferred** |
-| Warm-DD latency / time-to-green numbers | **unpublished** — implementation only |
-| New `bench/evidence/*` publishes | **not created** |
+| XcodeBuildMCP composition (bench, timed/latency) | **deferred** — functional composition proved (see below), no latency claim |
+| R-WP6 two-clone live runtime | **PASS**, `63.50s`, verdict `"composes"` — functional/isolation proof only, not a benchmark |
+| Warm-DD latency / time-to-green numbers | **unpublished** |
+| New `bench/evidence/*` publishes | **not created** from R-WP4/R-WP6 |
 
-### Acceptance commands (exact)
+### Prior R-WP4 acceptance commands (still the last full impl matrix on tip `f395061`)
 
 ```bash
 go test -race ./cmd/simurgh -run 'TestWarmSeedCompatibilityHit|TestWarmSeedCompatibilityMiss|TestWarmSeedNeverOverwritesNonEmptyDestination|TestWarmSeedCloneFallback' -count=1 -v
@@ -48,109 +87,6 @@ go test -race ./internal/ipc -run 'TestDialDaemonSurvivesParentExit' -count=1 -v
 go test -race -tags darwin_sim ./internal/daemon -run TestReuseIfExistsLive -count=1 -v
 ```
 
-### Gate results (R-WP4 worktree)
-
-| Gate | Result |
-|---|---|
-| warm-seed named 4 | **PASS** exit 0 — package 1.309s |
-| `TestWritableCachesStayUnderLeaseRoot` | **PASS** exit 0 — 1.153s |
-| readiness named 2 | **PASS** exit 0 — 1.212s |
-| controlplane named 4 | **PASS** exit 0 — 1.153s |
-| `go build ./...` | **PASS** exit 0 |
-| `go vet ./...` | **PASS** exit 0 |
-| `go test -race ./...` | **PASS** exit 0 (**17** packages; ipc 36.638s) |
-| capacity named tests | **PASS** exit 0 — 8 tests, 1.126s |
-| `TestDialDaemonSurvivesParentExit` | **PASS** exit 0 — **32.47s**; daemon **PID 70540** stable ≥30s |
-| `TestReuseIfExistsLive` (`darwin_sim`) | **PASS** exit 0 — test 2.52s, package 3.747s |
-
-### Behavioral proof (R-WP4)
-
-1. **Warm seed hit:** matching formal key CoW-seeds lease DerivedData (`SeedOutcomeHit`).
-2. **Warm seed miss:** exact field mismatch (e.g. XcodeBuild) → `SeedOutcomeMiss`, empty dest.
-3. **Never overwrite:** non-empty destination → `SeedOutcomeSkippedNonEmpty`.
-4. **Clone fallback:** failing clone → `SeedOutcomeFallbackCold`, empty dir restored.
-5. **Writable caches:** DerivedData/ModuleCache/SwiftPM/Results/tmp under lease root; escapes + default Xcode paths rejected.
-6. **Readiness success:** probe becomes ready under bound.
-7. **Readiness timeout:** classified `READINESS_TIMEOUT`; optional fallback after primary deadline; no hang.
-8. **Phase coverage:** aliases `acquire/build/install/launch/test/capture` recorded from real JobState timings.
-
-### Commits (from `b811736`)
-
-| SHA | Summary |
-|---|---|
-| `f6237d6` | feat(warm-seed): formal APFS compatibility keys and CoW seed/fallback |
-| `49bc1b3` | feat(isolator): enforce writable caches stay under lease root |
-| `41aa107` | feat(provisioner): bounded readiness polls with classified timeouts |
-| `1d51667` | feat(controlplane): additive acquire/build/install/launch/test/capture timings |
-| `36e1943` | docs(plans): record R-WP4 implementation-complete / benchmark-deferred |
-| `6c1277e` | docs(plans): pin R-WP4 tip SHA in MASTER_BUILD_STATUS |
-| `4133a4b` | docs(plans): finalize pre-review R-WP4 status |
-| `25f2926` | fix(warm-seed): require complete keys and serialize seed replacement |
-| `0d07d60` | fix(provisioner): bound fallback probes and preserve cancellation |
-| `0b47e3d` | fix(isolator): resolve symlinks before cache confinement |
-| `42174fc` | fix(controlplane): reset phase timings on retry attempts |
-| `4e500f1` | test(warm-seed): stress cross-process publish and seed locking |
-| *(final status commit is branch tip)* | docs(plans): close bounded R-WP4 review-fix loop |
-
-### Public symbols / dependents
-
-| Symbol | Dependents |
-|---|---|
-| `WarmSeedKey` / `WarmSeedKeyIncompleteError` | `BuildWarmSeedKeyFromArgv`; `cmd/simurgh` `runExec` |
-| `SeedWarmDerivedData` / `PublishWarmSeedContext` / per-digest lock | `cmd/simurgh` `runExec`; cross-process stress helper |
-| `ValidateWritableCachesUnderLeaseRoot` | `EnsureLeaseDir`; isolator tests |
-| `PollReadiness` / `FallbackTimeout` / `ReadinessTimeoutError` | `execSimctlClient.WaitBooted`; `Provisioner.Provision` |
-| `InstrumentedPhases` / aliases | `ControlPlane.TransitionJob` / `endPhaseLocked` |
-
-### Model notes (R-WP4)
-
-- Warm seed policy version: `WarmSeedPolicyVersion = "1"`.
-- Shared seed layout: `~/.simurgh/warm-dd/<digest>/{DerivedData,meta.json}`.
-- No public session/job CLI/RPC added.
-- Broker capacity/reuse identity untouched.
-- **No performance claims** from this package.
-
-### Single bounded R-WP4 review-fix loop
-
-All blocking/major/minor/nit findings were addressed with tests:
-
-1. `BuildWarmSeedKeyFromArgv` returns typed
-   `WarmSeedKeyIncompleteError` for missing/empty configuration and other
-   required dimensions. Omitted config never aliases explicit `Debug`; both
-   seed and publish cold-skip.
-2. Per-digest BSD `flock`: seed holds shared lock for validation+clone;
-   publish holds exclusive lock for unique staging + live replacement.
-   Replacement moves the old complete tree aside under lock, atomically
-   renames the staged tree live, then removes backup. Context cancellation
-   while acquiring a lock is returned; descriptors unlock/close on every exit.
-3. `FallbackTimeout` bounds fallback probes (default
-   `min(primary timeout, 5s)`, positive). Fallback context derives from caller;
-   blocking/ignoring fallback is still bounded and classified
-   `READINESS_TIMEOUT`; caller `context.Canceled` remains distinguishable.
-4. Cache confinement resolves symlinks through nearest existing ancestors,
-   including root; not-yet-created descendants remain supported. Symlink
-   escapes and default Xcode DerivedData/SwiftPM paths are rejected before
-   directory creation.
-5. Retried instrumented phases reset start/end/duration and aliases together.
-6. `WaitBooted` timeout/cancel mapping is tested; `Provision` retains the
-   existing `BOOT_TIMEOUT` error contract with the dead duplicate branch
-   removed.
-
-#### Review-fix gate proof
-
-| Gate | Result |
-|---|---|
-| focused warm-seed 8 tests | **PASS** 12.236s |
-| cross-process/goroutine stress `-race -count=3` | **PASS** 34.282s |
-| focused isolator 4 tests | **PASS** 1.981s |
-| focused readiness/provisioner tests | **PASS** 1.708s |
-| focused controlplane 5 tests | **PASS** 1.695s |
-| `go build ./...` / `go vet ./...` | **PASS** |
-| `go test -race ./...` | **PASS** 17 packages; cmd 10.839s |
-| capacity named 8 | **PASS** 1.226s |
-| detach 30s | **PASS** 33.51s; PID **4277** stable |
-| live `darwin_sim` reuse | **PASS** test 2.67s, package 3.887s |
-
 ## Completed packages
 
 | Package | Commit / note | State |
@@ -161,16 +97,28 @@ All blocking/major/minor/nit findings were addressed with tests:
 | **R-WP1** | tip `e948d26` | complete |
 | **R-WP2** | tip `23c2dce` | complete |
 | **R-WP3** | tip `b811736` | complete |
-| **R-WP4** | review-fix code tip `4e500f1`; final status commit is branch tip | **implementation-complete / benchmark-deferred** |
+| **R-WP4** | tip `f395061` (code tip `4e500f1` + status) | **implementation-complete / benchmark-deferred** |
+| **R-WP6** | `bec8670` + this session's commit(s) | **gate-verified, live runtime validated — not independently reviewed, not merged** |
 
 ## Open failures/risks
 
-1. Benchmark cells remain unmet by owner STOPPED directive — not a code defect in R-WP4.
+1. Benchmark cells remain unmet by owner STOPPED directive — not a code defect in R-WP4/R-WP6.
 2. Control-plane Session/Job state remains non-durable (R-WP3 carry-forward).
-3. PATH shim / XcodeBuildMCP adapter still deferred (R-WP5 gated behind R-WP6 reassessment).
+3. R-WP5 PATH shim still gated behind R-WP6 reassessment (correction #3); the live runtime evidence now exists — see this doc's R-WP5 recommendation section / orchestrator-state.md for the grounded (not decided) call.
+4. R-WP6 live test is now compiled, formatted, and passing with real evidence, but **has not had an independent code review pass** — that remains a separate follow-up stage.
+5. Security rewrite unreachable-object caveat remains; **no push** of rewritten history without owner review.
+6. `internal/pressure` `TestCheckCombinesSignals` is disk-space-dependent on hosts with <5GiB free on `/` (not hermetic on disk); excluded from this session's regression gate by owner authorization; not fixed, not in scope for R-WP6.
+7. Approved R-WP2 minor debt untouched: capacity migration surprise; LaunchAgent optional; global queue-position semantics.
+8. GitHub issues #1–#3 still OPEN.
 
 ## Next package
 
-- **R-WP5** only after R-WP6 reassessment (owner correction #3) — do not start reflexively.
-- Do **not** merge/push R-WP4 from this package alone.
+- R-WP6 gates are green and the live runtime test passed with evidence this session. Independent review of `bec8670` + the live test fix is the next step before any merge.
+- **R-WP5**: owner decides defer/shrink/retain using the grounded recommendation in this session's orchestrator-state.md entry — this doc does not make that call.
+- Do **not** merge/push stacked branches from this status alone.
 - Do **not** restart Phase A timed drivers unless owner directs.
+- Do **not** start R-WP5 implementation from this status alone.
+
+## Session report
+
+Detailed Sol session report: `docs/plans/SIMURGH_SOL_SESSION_REPORT_2026-07-14.md`

@@ -1,23 +1,30 @@
 # Simurgh orchestrator state
 
-**Updated:** 2026-07-14 16:47 UTC
-**Owner:** Roshan  
-**Orchestrator:** Cursor coder subagent for **R-WP4** (readiness + warm-cache;
-implementation-complete / benchmark-deferred). Phase A remains
-**STOPPED/BLOCKED by explicit owner directive** (not a pass) — Phase B
-continues only by that override recorded at `593a051`.  
-**Repository:** `/Users/roshansilva/Documents/simurgh`  
-**Active worktree:** `.worktrees/r-wp4-readiness-cache` on `feat/r-wp4-readiness-cache`  
+**Updated:** 2026-07-14 17:16 UTC
+**Owner:** Roshan
+**Orchestrator:** Cursor Sol session paused during **R-WP6** (XcodeBuildMCP
+adapter). Phase A remains **STOPPED/BLOCKED by explicit owner directive**
+(not a pass) — Phase B continues only by that override recorded at `593a051`.
+R-WP0…R-WP4 complete on stacked branches; **R-WP6 PAUSED** with last
+implementation/code tip `bec8670` and branch docs tip `c534a79` plus the
+current correction commit (**not** complete, **not** reviewed).
+**Repository:** `/Users/roshansilva/Documents/simurgh`
+**Active worktree:** `.worktrees/r-wp6-xcodebuildmcp` on `feat/r-wp6-xcodebuildmcp`
 **Current phase:** Phase A STOPPED/BLOCKED (owner override) →
-**R-WP0/R-WP1/R-WP2/R-WP3/R-WP4(impl) complete**; next is **R-WP5 only after
-R-WP6 reassessment** (owner correction #3). Timed benchmark cells remain deferred.
+**R-WP0/R-WP1/R-WP2/R-WP3/R-WP4(impl) complete**; **R-WP6 PAUSED**; next is
+resume R-WP6 only, then **R-WP5 only after R-WP6 reassessment** (owner
+correction #3). Timed benchmark cells remain deferred. **Master remains
+`4447e3c` — nothing merged or pushed.**
 
 ## Operating decisions
 
 - `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, and `docs/COMPETITOR_NOTES.md` are the living source of truth, in that order.
 - Phase order M0 → M1 → M2 → M3 → M4 is binding. No post-v0 work may enter v0.
 - Git module owner is inferred from the authenticated GitHub account: `github.com/RoshanDewmina/simurgh`.
-- The repository is local-only and has no remote. Do not push publicly. Until Roshan supplies a private remote, reviewed branches merge locally and GitHub PR / `claude-code-action` stages are recorded as unavailable rather than fabricated.
+- `origin` exists at `https://github.com/RoshanDewmina/simurgh.git`; stacked
+  feature tips remain unpushed. Do not push rewritten Phase A history until
+  owner review, and do not push/merge package branches without explicit owner
+  authorization.
 - Routine implementation uses Cursor CLI `cursor-agent`; the shell command `agent` is a different, unauthenticated Grok CLI and must not be used for Cursor work.
 - Low-risk scaffolding/mechanical work routes to `composer-2.5`; routine implementation routes to `grok-4.5-high`; sensitive fallback/review routes to `claude-sonnet-5-high`.
 - Destructive and socket/LaunchAgent paths remain owner-visible `sensitive` work and require full-diff Sonnet-or-orchestrator review.
@@ -1514,3 +1521,477 @@ time-to-green numbers, new bench/evidence — **unpublished / not run**.
   mutation, or performance claim.
 - No merge, push, R-WP5, or review dispatch.
 
+### 2026-07-14 17:16 UTC — PAUSED: R-WP6 owner stop + Sol session report
+
+- **Status:** **PAUSED** (not complete, not reviewed). Owner directed stop
+  during R-WP6; coder pause handoff preserved untracked live test
+  byte-for-byte and performed owned-resource cleanup only.
+- **Worktree / branch:** `.worktrees/r-wp6-xcodebuildmcp` on
+  `feat/r-wp6-xcodebuildmcp` (base `f395061`). Last implementation/code tip is
+  `bec8670f24feb9da6e4043c7fdc707f41e336f0d`; branch docs tip is `c534a79`
+  plus this correction commit (discover the resulting tip with
+  `git log -1 --oneline`).
+- **Committed implementation:** `bec8670 feat(integrations): add bounded XcodeBuildMCP
+  session adapter` — `simurgh integration xcodebuildmcp start|stop|status`,
+  lease-scoped bindings/config/PID lifecycle, unit+CLI attribution tests.
+- **Commit topology:** `bec8670` is the sole implementation commit beyond
+  R-WP4; docs commit `c534a79` and this correction commit follow it.
+- **Untracked (preserved, unverified):**
+  `internal/integrations/xcodebuildmcp/runtime_live_test.go`
+  (SHA-256 `9582650a420aa69976fe03a15a81a799d136eadfb8f71796fca7ce0dda13f5f3`).
+  Not formatted, compiled, or run.
+- **Pause-worker handoff gate report for `bec8670` (before untracked live
+  test):** package focused 7 tests PASS `6.722s`; CLI focused PASS `31.208s`;
+  `go build` / `go vet` PASS; `go test -race ./...` PASS 18 packages;
+  capacity PASS `1.814s`; detach PASS PID `66767` `35.990s`; live reuse PASS
+  test `13.25s` / package `14.484s`. These results are attributed to the
+  pause-worker handoff, not independently reproduced here or sourced from a
+  committed repository gate log.
+- **Cleanup (pause handoff):** no R-WP6 runtime validation started; probe
+  lease `lease-163` cancelled; removed `/tmp/r-wp6-runtime` and
+  `/tmp/xcodebuildmcp-2.6.2.tgz`; no owned XcodeBuildMCP children remain;
+  unrelated daemon/processes left untouched.
+- **Docs this entry:** `docs/plans/SIMURGH_SOL_SESSION_REPORT_2026-07-14.md`;
+  `MASTER_BUILD_STATUS.md` retargeted to R-WP6 paused.
+- **Still binding:** Phase A STOPPED/BLOCKED (`593a051`); no benchmark
+  restart; no merge/push; **master remains `4447e3c`**; R-WP5 only after
+  R-WP6 reassessment; security unreachable-object caveat + no push of
+  rewritten history without owner review.
+- **Safe next boundary:** resume R-WP6 only in this worktree, or stop after
+  docs. Do not start R-WP5 / R-WP7+ / merge / push / Phase A drivers from
+  this pause alone. Restart invariant: `git merge-base --is-ancestor bec8670
+  HEAD` must exit 0; do not require exact `HEAD == bec8670` because docs
+  commits follow the code tip.
+
+### 2026-07-14T20:18:22Z — RESUMED: R-WP6 owner-authorized resume, gate-verified, live runtime PASS
+
+- **Status:** resumed in-place in `.worktrees/r-wp6-xcodebuildmcp` on
+  `feat/r-wp6-xcodebuildmcp`. Preconditions verified before touching
+  anything: `pwd` correct, branch correct, `git merge-base --is-ancestor
+  bec8670 HEAD` exit 0, pre-fix SHA-256 of `runtime_live_test.go` matched
+  `9582650a420aa69976fe03a15a81a799d136eadfb8f71796fca7ce0dda13f5f3` exactly.
+- **`internal/pressure` exclusion (owner-authorized, scoped):**
+  `TestCheckCombinesSignals` fails deterministically because it computes the
+  disk-pressure signal from the real host filesystem (RAM/thermal are mocked
+  via `setRunner`; disk is not) and this host has ~2.3GiB free on `/` against
+  the test's hardcoded 5GiB minimum. Confirmed reproducible on a second
+  isolated run. Confirmed pre-existing and unrelated to R-WP6: last touched
+  by `2b0a4d8`, a shared ancestor of `bec8670`, untouched by this branch.
+  Owner authorized excluding this one package from the regression gate for
+  this dispatch only; `internal/pressure` itself was **not modified** and
+  is **not fixed** — it remains a known gap on low-disk hosts.
+- **Live test compile fix (owner-authorized, scoped to exactly one line):**
+  `runtime_live_test.go` had never been compiled before this session (per
+  the prior pause entry). First compile attempt failed:
+  `runtime_live_test.go:93:8: assignment mismatch: 1 variable but b.Release
+  returns 2 values`. Owner had independently read the full file earlier in
+  the session and confirmed the logic/cleanup/isolation design was sound —
+  this was a pure signature mismatch. Owner specified the exact fix: line 93
+  inside the `t.Cleanup` block, `_ = b.Release(context.Background(),
+  lease.ID)` → `_, _ = b.Release(context.Background(), lease.ID)`, matching
+  the unconditional-discard style of the two adjacent `exec.Command(...).Run()`
+  cleanup lines in the same block. No other line touched. Post-fix
+  `gofmt -l` was clean (no-op); post-fix SHA-256 is
+  `dd315aba5f82cda2eabb5ce726fd31071c632f4cd986aa125d61059fa14ce980`.
+- **Gates (in order, this session):** xcodebuildmcp package 7 tests PASS
+  `1.493s`; cmd/simurgh CLI 3 tests PASS `3.936s`; `go build ./...` PASS
+  `0.436s`; `go vet ./...` PASS `0.385s`; `go test -race ./...` unscoped
+  FAILED only on `internal/pressure` (see exclusion above), all other
+  packages passed; `go test -race $(go list ./... | grep -v
+  internal/pressure)` PASS 17/17 packages; broker 8 named tests PASS
+  `1.018s`; ipc `TestDialDaemonSurvivesParentExit` PASS `32.28s` (daemon PID
+  `38481` stable ≥30s); daemon `TestReuseIfExistsLive` (`darwin_sim`) PASS
+  `2.54s` (package `3.554s`).
+- **Live runtime validation:** `go test -race -tags darwin_sim
+  ./internal/integrations/xcodebuildmcp -run
+  TestXcodeBuildMCPRuntimeTwoSessionAttribution -count=1 -v` → **PASS**,
+  `63.50s` (package `64.518s`). Evidence JSON logged by the test:
+
+  ```json
+  {
+    "adapter_pid_a": 41894,
+    "adapter_pid_b": 41895,
+    "check": "r-wp6-xcodebuildmcp-runtime",
+    "dd_a": ".../TestXcodeBuildMCPRuntimeTwoSessionAttribution.../lease-1/DerivedData",
+    "dd_b": ".../TestXcodeBuildMCPRuntimeTwoSessionAttribution.../lease-2/DerivedData",
+    "global_sampleapp_after": 1,
+    "global_sampleapp_before": 1,
+    "lease_a": "lease-1",
+    "lease_b": "lease-2",
+    "no_global_pollution": true,
+    "stop_a_leaves_b_valid": true,
+    "udid_a": "69D6732E-0A1C-4230-B429-1D83A08D2045",
+    "udid_b": "3254B803-50F5-45DB-83F6-664A8BF38A7F",
+    "verdict": "composes",
+    "xcodebuildmcp_version": "2.6.2"
+  }
+  ```
+
+  Two real leases, two distinct UDIDs, two distinct DerivedData roots, two
+  distinct adapter PIDs, zero growth in the shared global
+  `~/Library/Developer/Xcode/DerivedData` (no pollution), and B's adapter +
+  DerivedData remained intact after A's adapter was stopped.
+- **Scope of the claim:** this is a functional/isolation composition proof
+  only — one host, one fixture project, two sessions, one run. It is
+  explicitly **not** a latency or performance claim, not a
+  stress/concurrency-scale test, and **not an independent code review** of
+  `bec8670` or the live test fix — that remains a separate, not-yet-started
+  follow-up stage.
+- **Docs updated this entry:** `docs/AGENT_GUIDE.md` (new XcodeBuildMCP
+  adapter section), `docs/ARCHITECTURE.md` (new §14), `MASTER_BUILD_STATUS.md`
+  (package state, gates, deferred table, open risks, next package),
+  `docs/plans/orchestrator-state.md` (this entry).
+- **Still binding:** Phase A STOPPED/BLOCKED (`593a051`); no benchmark
+  restart; no merge/push; master unchanged; R-WP7+ not started; no
+  `bench/evidence`/`bench/results` mutation; no performance claims; `bec8670`
+  and this session's work are **not reviewed**.
+
+#### R-WP5 recommendation (grounded, owner decides)
+
+**Recommendation: retain R-WP5 in the roadmap, scoped as originally planned
+(PATH shims for `xcodebuild`/`xcrun`), and unblock it now that R-WP6 has a
+real (if narrow) composition verdict.** Grounding: the live test proved
+XcodeBuildMCP sessions compose with Simurgh's per-lease isolation for the
+one scenario it exercised — two concurrent sessions stayed on separate
+UDIDs and separate DerivedData roots with no shared-tree pollution, and
+adapter lifecycle (start/stop/ownership) held under a real stop-one-keep-
+the-other sequence. That is exactly the kind of interaction R-WP5's PATH
+shims would need to preserve (any bare `xcodebuild`/`xcrun` call must still
+land inside the correct lease's isolated paths whether invoked directly or
+via an XcodeBuildMCP-launched child). Nothing in this run surfaced a reason
+to shrink or defer R-WP5's scope — the proof is narrow (one project, one
+run, no concurrency stress beyond two sessions, no independent review yet),
+so "retain as planned" rather than "expand" is the appropriately bounded
+read. This is a recommendation only; the owner decides.
+
+
+### 2026-07-14 (continued) — Independent review of `eb4a5a5`: NOT MERGEABLE
+
+Fresh-context reviewer (blackbox brief: diff + dependents map + REVIEW_STANDARDS.md,
+no build narrative) reviewed `f395061..eb4a5a5` in full. Orchestrator independently
+verified both blocking findings by reading the code directly before accepting the
+verdict — both confirmed real.
+
+**B1 (blocking, certain) — `Stop`/`Status` build filesystem paths from unvalidated
+`sessionID`.** `adapter.go:210`/`:241` do `filepath.Join(a.LeasesRoot, sessionID)`
+with no validation, bypassing `internal/safety.ValidateLeasePath` — documented
+elsewhere in this codebase as "the ONLY way to obtain a deletable filesystem path."
+`Start` resolves through the broker-trusted `lease.ID` first; `Stop`/`Status` don't.
+A crafted `--session` value can escape `LeasesRoot`.
+
+**B2 (blocking, certain) — the adapter's core CLI contract cannot work as designed.**
+Each `simurgh integration xcodebuildmcp <action>` invocation is a separate one-shot
+process (`main.go:99`, `os.Exit(runIntegration(...))`); `runIntegrationXcodeBuildMCP`
+constructs a fresh `Adapter` (empty `stdinHolders`) every call. `wStdin` — meant to
+"keep MCP stdio stdin pipes open until Stop" — lives only in that one process's
+memory and closes the instant the `start` process exits, EOF-ing the spawned child's
+stdin almost immediately. `start` now / `stop`-or-`status` later **as separate CLI
+invocations — the actual public interface** — is structurally broken. Invisible to
+every existing test (`adapter_test.go`, `runtime_live_test.go`) because both call
+`Start`/`Stop` in the same long-lived Go test process, never through separate real
+CLI invocations. This means today's live-test PASS evidence is real but does not
+validate the real CLI usage pattern.
+
+Minor/nit findings (PID-reuse verification gap, vague INVALID_STATE fix text,
+gofmt drift) do not block merge per REVIEW_STANDARDS.md and are not repeated here.
+
+**Verdict: NOT MERGEABLE. R-WP6 is not merged to master.** `eb4a5a5` remains on
+`feat/r-wp6-xcodebuildmcp` only. Fixing B1 is a small, bounded patch (route through
+the same lease-ID-allowlist pattern `internal/safety` already establishes). Fixing
+B2 is an architecture question, not a patch — the adapter's child process needs a
+long-lived owner (the existing `simurgh daemon` is the natural candidate) instead of
+a one-shot CLI process holding the stdin pipe; this needs an owner decision on
+design direction, not a subagent guessing at it.
+
+**R-WP5 recommendation is provisional, not final**, pending B2's resolution: R-WP5
+(PATH shims) assumes R-WP6's adapter lifecycle model works end-to-end via real CLI
+invocations, which B2 shows it currently doesn't. Re-affirm or revise the R-WP5
+recommendation once B2 has a chosen fix.
+
+
+### 2026-07-14 (continued) — B2 fixed: XcodeBuildMCP adapter ownership moved to the daemon
+
+Built on `84a0ce7` (B1 fix already on branch, untouched here). Fixes the B2
+finding above: `Adapter.Start`/`Stop`/`Status` execution moved from the
+one-shot CLI process into `internal/daemon`, matching the design direction
+the review verdict called for ("the adapter's child process needs a
+long-lived owner — the existing `simurgh daemon` is the natural
+candidate").
+
+**What changed and why:**
+- `internal/daemon/daemon.go` — added `Deps.XBMCPAdapter *xbmcp.Adapter`
+  (the single long-lived adapter, constructed once by `cmd/simurgh` at
+  daemon startup) and `RegisterXcodeBuildMCPHandlers`, which registers
+  `integration.xcodebuildmcp.start|stop|status` on the `*ipc.Server`
+  following the exact `RegisterLeaseHandlers`/`handlers` pattern already
+  established (context + typed params in, `json.RawMessage`/`*ipc.Error`
+  out). Added `xbmcpErrorToIPC`, which reproduces — verbatim — the
+  message-based code/fix classification `cmd/simurgh`'s old `printXBMCPErr`
+  used to apply client-side, so `exitCodeForIPCError` on the client
+  reproduces the exact same CLI exit codes as before (`INVALID_STATE`→3,
+  `DAEMON_NOT_RUNNING`→4, else→5) despite errors now round-tripping through
+  IPC instead of being raw in-process Go errors.
+- `cmd/simurgh/daemon.go` — `runDaemon()` now constructs exactly one
+  `*xbmcp.Adapter` alongside the broker/reaper/control-plane, with a
+  `GetLease` closure that calls `brk.Get(id)` directly (in-process, no IPC
+  round-trip — the adapter lives where the broker lives now). Version
+  probing (`xbmcp.RecordVersion`) moved from "once per CLI call" to "once
+  at daemon startup" — a strict improvement, same fallback-on-error
+  behavior. Registers the new handlers via
+  `daemon.RegisterXcodeBuildMCPHandlers(srv, deps)` alongside
+  `RegisterLeaseHandlers`. Also added two test-only env seams, both inert
+  unless explicitly set (see regression test below):
+  `SIMURGH_XBMCP_TEST_COMMAND` (override the adapter's child command) and
+  `SIMURGH_TEST_SKIP_PRESSURE` (bypass the RAM pressure gate).
+- `cmd/simurgh/integration.go` — `runXBMCPAction` is now a thin IPC client:
+  flag parsing is unchanged, but instead of constructing an `xbmcp.Adapter`
+  and calling `Start`/`Stop`/`Status` in-process, it calls
+  `dialAndCall(ctx, "integration.xcodebuildmcp."+action, ...)` (the same
+  helper `lease.*` commands already use) and renders the result with
+  `printXBMCPStatus`/`printXBMCPErr`/`printErrorTriple` **unchanged** — CLI
+  flags, JSON shape, and error-triple format are identical to before this
+  change; only where the value comes from moved.
+- `cmd/simurgh/integration_xcodebuildmcp_daemon_test.go` (new,
+  `darwin_sim`-tagged) — the actual B2 regression proof, see below.
+- `docs/ARCHITECTURE.md` §14 — documents the daemon-ownership model.
+
+**Gates (real output, this session, on this branch):**
+- `gofmt -l .` on touched files: empty. (Repo-wide `gofmt -l .` still lists
+  three pre-existing files — `internal/broker/errors.go`,
+  `internal/integrations/xcodebuildmcp/{bindings,config}.go` — none touched
+  by this change; confirmed via `git stash`/re-check that the drift predates
+  this work.)
+- `go build ./...`: clean.
+- `go vet ./...`: clean.
+- `go test -race ./... -count=1`: all 18 packages `ok`.
+- `go test -race ./internal/integrations/xcodebuildmcp/... -count=1 -v`: 8/8
+  PASS (unchanged adapter unit tests, still valid post-refactor since
+  `Adapter`'s own logic was not touched).
+- `go test -race ./internal/daemon/... -count=1 -v`: 22/22 PASS (existing
+  lease/warm/prune handler tests unaffected).
+- `go test -race ./cmd/simurgh -run 'TestXcodeBuildMCP|TestIntegrationXcodeBuildMCP' -count=1 -v`:
+  3/3 PASS.
+- `go test -race -tags darwin_sim ./internal/integrations/xcodebuildmcp -run TestXcodeBuildMCPRuntimeTwoSessionAttribution -count=1 -v`:
+  PASS, re-run after the refactor, 60.77s, same two-session
+  UDID/DerivedData/pid-attribution evidence as the original R-WP6 run
+  (verdict `"composes"`).
+
+**The B2 regression proof —
+`TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess`
+(`cmd/simurgh`, `darwin_sim`-tagged):** builds the real `simurgh` binary,
+runs `acquire --wait` as one subprocess to get a real ACTIVE lease with a
+real `xcrun simctl` device, runs `integration xcodebuildmcp start
+--session <id>` as a SEPARATE subprocess that is allowed to fully exit,
+then — as a further SEPARATE, later subprocess — runs `integration
+xcodebuildmcp status --session <id>` and asserts `Running: true` with the
+same owned PID. This is exactly the sequence B2 broke: before the fix, the
+`start` process exiting would close its held stdin pipe and the child would
+typically die with it, so the later `status` subprocess would see
+`Running: false`. First run of this test (before the two env seams existed)
+hung and hit its context deadline — not a code bug, but this dev host's
+baseline free+inactive RAM (~3.4 GiB under normal daily load: browser/editor
+tabs, unrelated concurrent builds) sitting under the broker's unrelated 4
+GiB pressure-gate default, so `acquire --wait` queued indefinitely. Added
+`SIMURGH_TEST_SKIP_PRESSURE` (daemon-wiring-only, inert unless set) to
+un-couple that host-load gate from this test, and `SIMURGH_XBMCP_TEST_COMMAND`
+to avoid depending on the real `npx xcodebuildmcp mcp` server for a test
+that's proving process-ownership lifetime, not MCP protocol behavior — same
+idea `runtime_live_test.go` already uses via `adapter.Command` override, just
+reachable from a CLI subprocess. After both seams: verified manually first
+(direct binary invocation, separate `start`/`status` processes, real device,
+`running: true` with matching pid in both, `stop` then `status` correctly
+flips to `running: false`), then the actual Go test:
+```
+=== RUN   TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess
+    integration_xcodebuildmcp_daemon_test.go:140: start subprocess exited; owned child pid=69584
+--- PASS: TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess (4.34s)
+PASS
+ok  	github.com/RoshanDewmina/simurgh/cmd/simurgh	5.357s
+```
+B2 is fixed: a separate later CLI process's `status` call sees the child
+started by an already-exited `start` process, still running, same pid.
+
+**Still binding:** no merge/push; `feat/r-wp6-xcodebuildmcp` only; B1 fix
+from `84a0ce7` untouched; `Adapter`'s own type/`Start`/`Stop`/`Status`
+methods and their internal logic (including the B1
+`safety.ValidateLeasePath` calls) untouched — only who constructs the
+adapter and when moved; no `bench/evidence`/`bench/results` mutation; no
+performance/latency claims; R-WP5 still not started. R-WP6 is not yet
+re-reviewed against this fix — the B1+B2 review verdict above remains the
+last independent read until a fresh review covers this commit.
+
+### 2026-07-14 (continued) — B2 fix (740abdb) fixed the original bug but introduced 3 new findings: NOT MERGEABLE
+
+Second independent review pass, same blackbox-brief protocol. Verdict: **NOT MERGEABLE.**
+
+**Blocking (certain) — unsynchronized concurrent access to `Adapter.stdinHolders`.** Moving the
+adapter to one long-lived, daemon-shared instance (fixing B2) means `stdinHolders` — a bare
+`map[string]*os.File` with zero mutex, never exercised concurrently before — is now written/read
+from multiple per-connection goroutines simultaneously. Reviewer wrote a temporary `-race` test
+(deleted after use) that reliably reproduced `WARNING: DATA RACE` on both the Start write and the
+Stop read/delete. Worst case: `fatal error: concurrent map read and map write`, crashing the whole
+daemon (leases too, not just xcodebuildmcp).
+
+**Blocking (certain) — two unconditional env-var backdoors in the shipped daemon binary.**
+`SIMURGH_XBMCP_TEST_COMMAND` and `SIMURGH_TEST_SKIP_PRESSURE`, added to make the new regression
+test practical, are read directly in `runDaemon()` with no build-tag gate and no secondary
+test-mode signal — live in the real `simurgh daemon run` path. The first lets any process that can
+set an env var before daemon start substitute an arbitrary binary for XcodeBuildMCP inside the
+lease isolation env; the second silently and permanently disables the RAM/thermal/disk pressure
+gate. Per the reviewer: "the detached daemon process inherits [the CLI subprocess's] env" — so
+this is reachable through ordinary CLI invocation environments, not just deliberate test harnesses.
+
+**Major (certain) — lease-not-found error classification regressed.** The old CLI→IPC `lease.get`
+path returned structured `LEASE_NOT_FOUND` (exit 3, fix "simurgh list"). The new in-process
+`GetLease` closure in `cmd/simurgh/daemon.go` hand-rolls a bare `fmt.Errorf`, which `xbmcpErrorToIPC`
+doesn't recognize, falling through to generic `INTERNAL` (exit 5). Contradicts the change's own
+"exit codes are unchanged" claim. Only affects `start` (the only caller of `GetLease`).
+
+**No regression on B1** — `ValidateLeasePath` calls in Stop/Status are untouched; confirmed by spot-check.
+
+Next: bounded fix round for exactly these three, then a third review pass before any merge
+decision. R-WP6 remains unmerged; R-WP5 stays gated.
+
+### 2026-07-14 (continued) — bounded fix round for the three second-review findings (Fix 1/2/3)
+
+Built on `a8319b8` (second review verdict, docs-only tip; code base is `740abdb`). Fixes exactly
+the three findings from the "B2 fix (740abdb) fixed the original bug but introduced 3 new
+findings" review entry above — no other behavior changed.
+
+**Fix 1 (blocking) — unsynchronized concurrent access to `Adapter.stdinHolders`.**
+`internal/integrations/xcodebuildmcp/adapter.go`: added `stdinMu sync.Mutex` to `Adapter`,
+guarding every `stdinHolders` read/write/delete — `Start`'s write (was: unguarded map insert) and
+`Stop`'s read+delete (was: unguarded map read then `delete`). Audited every other `Adapter` field
+(`LeasesRoot`, `GetLease`, `Command`, `Version`, `ProbeVersion`, `Clock`, `LookPath`): all are set
+once at construction and only read afterward — `stdinHolders` was the only mutable field exposed
+by B2's daemon-shared-Adapter change. New permanent test
+`TestXcodeBuildMCPStdinHoldersConcurrentAccessRace` (`internal/integrations/xcodebuildmcp/adapter_test.go`):
+8 sessions, one shared `*Adapter`, gated to fire `Start`+`Stop` concurrently via a closed channel.
+Verified against the pre-fix code first (mutex hunks manually reverted, not committed): failed
+reliably 3/3 runs under `-race` with `WARNING: DATA RACE` on both the `Start` write
+(`adapter.go:198`, `mapaccess2_faststr`/`mapassign`) and the `Stop` delete (`adapter.go:237`,
+`mapassign_faststr`) — the exact two sites the review named. Restored the mutex fix: same test
+passes 3/3 (and 5/5 in an earlier check) under `-race`.
+
+**Fix 2 (blocking) — two ungated env-var overrides in the production daemon binary.**
+`SIMURGH_XBMCP_TEST_COMMAND` and `SIMURGH_TEST_SKIP_PRESSURE` were read unconditionally inside
+`runDaemon()` (`cmd/simurgh/daemon.go`), reachable in the real shipped binary via any process env.
+Extracted both reads into `applyXBMCPTestCommandOverride(adapter *xbmcp.Adapter)` and
+`applyTestSkipPressureOverride(pressureOK func() (bool, string)) func() (bool, string)`, each
+defined twice with the same build-tag split this codebase already uses for `darwin_sim`-gated live
+test files:
+- `cmd/simurgh/xbmcp_test_seams_darwin_sim.go` (`//go:build darwin_sim`) — the real
+  `os.Getenv`-reading implementation.
+- `cmd/simurgh/xbmcp_test_seams_other.go` (`//go:build !darwin_sim`) — pure no-ops; never call
+  `os.Getenv` at all.
+
+`runDaemon()` calls both helpers unconditionally; which file links in is decided purely by the
+build tag. Verified the exclusion three ways, not just by inspection:
+1. `go list -f '{{.GoFiles}}' ./cmd/simurgh` (tagless) lists `xbmcp_test_seams_other.go`;
+   `go list -tags darwin_sim -f '{{.GoFiles}}' ./cmd/simurgh` lists
+   `xbmcp_test_seams_darwin_sim.go` — mutually exclusive, confirmed by direct `go list` output.
+2. Built both binaries (`go build ./cmd/simurgh` and `go build -tags darwin_sim ./cmd/simurgh`)
+   and ran `strings` over each: the tagless binary contains **zero** occurrences of
+   `SIMURGH_XBMCP_TEST_COMMAND` or `SIMURGH_TEST_SKIP_PRESSURE`; the darwin_sim binary contains
+   both. This is binary-level proof, not just source-level.
+3. `cmd/simurgh/integration_xcodebuildmcp_daemon_test.go`'s `buildRealSimurghBinaryForDaemonTest`
+   built its nested test binary via plain `go build -o out .` (no tags) — meaning the B2
+   regression test's own subject binary would have silently no-op'd both seams under the new
+   split. Fixed to `go build -tags darwin_sim -o out .`; confirmed the daemon auto-start path
+   resolves via `os.Executable()` (`internal/ipc/client.go`), i.e. the auto-started daemon really
+   is this same tagged binary, not a separately-resolved system `simurgh`.
+`docs/ARCHITECTURE.md` §14 updated to describe the split and the binary-level verification.
+
+**Fix 3 (major) — lease-not-found error classification regressed.** Added
+`broker.NewLeaseNotFoundError(id string) error` (`internal/broker/errors.go`), a thin exported
+wrapper around the package's existing unexported `leaseNotFound` constructor (previously only
+reachable from inside `internal/broker`), so callers with no `error` to propagate from
+`Broker.Get`'s `(Lease, bool)` return can synthesize the identical typed/structured error the
+broker's own `lease.get` handler already returns. `cmd/simurgh/daemon.go`'s `GetLease` closure now
+returns `broker.NewLeaseNotFoundError(id)` instead of a bare `fmt.Errorf`.
+`internal/daemon/daemon.go`'s `xbmcpErrorToIPC` now checks `errors.As(err, &nf)` for a
+`*broker.LeaseNotFoundError` first and reuses `copyBrokerEnvelope` (the same helper
+`brokerErrorToIPC` uses) before falling into
+the pre-existing message-matching classification — no new error taxonomy invented. Also simplified
+`leaseNotFoundErr` (used by the `lease.get` handler itself) to call the new exported constructor
+instead of duplicating the envelope-construction logic inline. Searched for an existing
+`LeaseNotFoundError`/`ErrLeaseNotFound` before adding anything: `broker.LeaseNotFoundError` was
+already exported and already used by `brokerErrorToIPC`; only a public constructor was missing.
+New tests, both through real daemon-RPC paths (no mocks):
+- `TestXBMCPStartUnknownSessionOverRealIPCReturnsLeaseNotFound` (`internal/daemon/daemon_test.go`):
+  real `*ipc.Server`/Unix-socket pair, `RegisterXcodeBuildMCPHandlers`, an `XBMCPAdapter` wired the
+  same way `cmd/simurgh/daemon.go` wires it; asserts the wire response is `LEASE_NOT_FOUND`.
+- `TestXcodeBuildMCPCLIStartUnknownSessionReturnsLeaseNotFound` (`cmd/simurgh/integration_xcodebuildmcp_test.go`,
+  untagged): builds the real binary, runs it directly (not `go run .` — that always exits 1 on any
+  non-zero child code, confirmed with a throwaway repro, which would have made this test unable to
+  observe `exit(3)`), auto-starts a real daemon against a fresh `SIMURGH_HOME`, calls
+  `integration xcodebuildmcp start --session lease-999999 --json` for a lease that provably cannot
+  exist, asserts exit code 3 and `{"code":"LEASE_NOT_FOUND",...}`.
+Verified against pre-fix code first (GetLease closure and `xbmcpErrorToIPC` manually reverted, not
+committed): both new tests failed as expected — `INTERNAL`/exit 5 — reproducing the exact
+regression described. Restored the fix: both pass.
+
+**Gates (real output, this session, on this branch):**
+- `gofmt -l .`: lists the same three pre-existing-drift files as the prior B2-fix entry
+  (`internal/broker/errors.go`, `internal/integrations/xcodebuildmcp/{bindings,config}.go`);
+  confirmed via `git stash`/re-check that the drift predates this session's changes too (my
+  `NewLeaseNotFoundError` addition to `errors.go` sits outside the misaligned block). Every file
+  actually touched or created this session is independently `gofmt`-clean.
+- `go build ./...`: clean. `go vet ./...`: clean. `go vet -tags darwin_sim ./...`: clean.
+- `go test -race ./... -count=1`: all 18 packages `ok`.
+- `go test -race -tags darwin_sim ./... -count=1`: two unrelated packages I never touched
+  (`internal/ipc`'s `TestDialDaemonSurvivesParentExit`, `internal/provisioner`'s
+  `TestProvisionRealClone`) flaked under full-suite parallelism — real `xcrun simctl` device
+  listing racing across concurrently-running packages on this shared dev host, the same class of
+  bench-machine fragility noted elsewhere in this repo's history. Re-ran each in isolation: both
+  pass standalone. Re-ran the full `-tags darwin_sim` suite with `-p 1` (serialized): all 18
+  packages `ok`, no failures.
+- `go test -race ./internal/integrations/xcodebuildmcp/... -count=1 -v`: 9/9 PASS (8 pre-existing
+  + `TestXcodeBuildMCPStdinHoldersConcurrentAccessRace`).
+- `go test -race ./internal/daemon/... -count=1 -v`: 23/23 PASS (22 pre-existing +
+  `TestXBMCPStartUnknownSessionOverRealIPCReturnsLeaseNotFound`).
+- `go test -race -tags darwin_sim ./cmd/simurgh -run 'TestXcodeBuildMCP|TestIntegrationXcodeBuildMCP' -count=1 -v`:
+  5/5 PASS, including `TestXcodeBuildMCPStatusSurvivesSeparateCLIProcess` (the B2 regression proof,
+  still green with the nested binary now built `-tags darwin_sim`) and both new Fix-3 tests.
+- `go test -race -tags darwin_sim ./internal/integrations/xcodebuildmcp -run TestXcodeBuildMCPRuntimeTwoSessionAttribution -count=1 -v`:
+  PASS, 58.6s, verdict `"composes"` unchanged from the original R-WP6 evidence.
+- No leftover `simurgh-clone[...]`/`simurgh-warm[...]` devices after this session's runs
+  (`xcrun simctl list devices` shows only the pre-existing `simurgh-base[...]` template).
+
+**Still binding:** no merge/push; `feat/r-wp6-xcodebuildmcp` only; B1 fix (`84a0ce7`,
+`safety.ValidateLeasePath` in Stop/Status) untouched — confirmed by spot-check, no diff touches
+those call sites; CLI flags/JSON output shape for `simurgh integration xcodebuildmcp
+start|stop|status` unchanged; no `bench/evidence`/`bench/results` mutation; no
+performance/latency claims; R-WP5 still not started. This fix round has not yet had its own
+independent review pass — a third review should cover this commit before any merge decision.
+
+### 2026-07-14 (continued) — R-WP6 merged to local master after third review pass
+
+Third independent review pass (of `8042efc`, the fix for round-2's three findings) re-derived
+every claim itself rather than trusting the implementer's report: reran the race test 5x (clean),
+built both tagless and `darwin_sim`-tagged binaries and grepped `strings` output directly (0 vs 1
+occurrences of each env var — confirms the build-tag split actually excludes them), checked the
+real Makefile/CI build steps (`go build ./...`, tagless) to confirm production ships never include
+`darwin_sim`, and ran the new LEASE_NOT_FOUND tests itself over the real IPC/CLI path.
+
+**Verdict: all three round-2 findings CONFIRMED FIXED**, independently re-verified, not just
+re-claimed.
+
+**One new finding (major, not blocking):** same-session concurrent `start` calls have a TOCTOU —
+the "refuse a second child" check (`readPIDMeta` → `processAlive` → later `writePIDMeta`) isn't
+serialized per-session, so two overlapping `start --session X` calls can both pass the guard and
+both spawn a child; the second's metadata write silently orphans the first (or a concurrent `Stop`
+racing a `Start` can delete the new Start's metadata instead). Doesn't crash the daemon, doesn't
+cross lease-isolation boundaries, only reachable via concurrent-same-session usage (not the normal
+sequential start→build→stop pattern). Owner decision: accept as tracked debt rather than a 4th
+fix-and-review cycle, given ordinary usage doesn't hit this.
+
+**Merged:** `8042efc` fast-forwarded/merged into local `master`. Not pushed to `origin`. R-WP6 is
+now considered complete for local use, with the same-session-concurrency gap tracked below as
+known debt (see also a new `docs/lessons/` entry and a REVIEW_STANDARDS.md follow-up if this
+pattern recurs).
+
+**R-WP5 recommendation reaffirmed**: retain as originally scoped. The live two-session test proved
+XcodeBuildMCP composes with Simurgh's isolation for the scenarios exercised; the new TOCTOU finding
+is orthogonal to that (a session-lifecycle bookkeeping gap, not an isolation-boundary gap), so it
+does not change the R-WP5 read.

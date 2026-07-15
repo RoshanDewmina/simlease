@@ -19,6 +19,7 @@ import (
 	"github.com/RoshanDewmina/simurgh/internal/broker"
 	"github.com/RoshanDewmina/simurgh/internal/controlplane"
 	"github.com/RoshanDewmina/simurgh/internal/daemon"
+	xbmcp "github.com/RoshanDewmina/simurgh/internal/integrations/xcodebuildmcp"
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
 	"github.com/RoshanDewmina/simurgh/internal/logrotate"
 	"github.com/RoshanDewmina/simurgh/internal/pressure"
@@ -169,6 +170,23 @@ func runDaemon() int {
 		}
 		maxProv = n
 	}
+	pressureOK := func() (bool, string) {
+		r := pressure.Check(leasesRoot)
+		return r.OK, r.Reason
+	}
+	// Test-only seam: this dev host's baseline free+inactive RAM regularly
+	// sits under the 4 GiB pressure-gate default under normal daily load
+	// (browser/editor tabs), which is real and correct production behavior
+	// but has nothing to do with R-WP6/B2 (adapter process-lifetime
+	// ownership) — it would otherwise make an unrelated resource gate the
+	// bottleneck for a CLI-integration test that needs a real ACTIVE lease.
+	// R-WP6 second-review Fix 2: the SIMURGH_TEST_SKIP_PRESSURE env-var read
+	// itself is compiled in only under -tags darwin_sim (see
+	// xbmcp_test_seams_darwin_sim.go / xbmcp_test_seams_other.go) — a
+	// tagless `go build ./...` (the real shipped binary) links the no-op, so
+	// this seam has zero effect in production no matter what any process's
+	// environment contains.
+	pressureOK = applyTestSkipPressureOverride(pressureOK)
 	brk := broker.New(broker.BrokerOptions{
 		Provisioner:               prov,
 		Store:                     st,
@@ -176,10 +194,7 @@ func runDaemon() int {
 		Capacity:                  capacity,
 		PerSpecCapacity:           perSpec,
 		MaxProvisioningOperations: maxProv,
-		PressureOK: func() (bool, string) {
-			r := pressure.Check(leasesRoot)
-			return r.OK, r.Reason
-		},
+		PressureOK:                pressureOK,
 	})
 	// Rehydrate before any client can connect so ownership is crash-durable.
 	if err := brk.Rehydrate(); err != nil {
@@ -206,6 +221,40 @@ func runDaemon() int {
 		Deleter:    safetyClient,
 	})
 
+	// Single long-lived XcodeBuildMCP adapter for the daemon's whole lifetime
+	// (R-WP6 review finding B2): its stdinHolders map must survive across
+	// separate CLI invocations of `simurgh integration xcodebuildmcp
+	// start|stop|status`, which a per-CLI-call Adapter (the pre-fix behavior)
+	// could never do — the moment the one-shot `start` process exited, its
+	// held stdin fd closed and the child saw EOF. GetLease reaches the broker
+	// directly in-process; no IPC round-trip needed since the adapter now
+	// lives where the broker lives.
+	xbmcpAdapter := xbmcp.NewAdapter(leasesRoot, func(_ context.Context, id string) (broker.Lease, error) {
+		lease, ok := brk.Get(id)
+		if !ok {
+			// R-WP6 second-review Fix 3: reuse the broker's own typed
+			// "lease not found" error (not a bare fmt.Errorf) so
+			// internal/daemon's xbmcpErrorToIPC classifies it as
+			// LEASE_NOT_FOUND/exit 3 — matching the pre-B2-fix CLI→IPC
+			// lease.get path exactly, instead of falling through to
+			// generic INTERNAL/exit 5.
+			return broker.Lease{}, broker.NewLeaseNotFoundError(id)
+		}
+		return lease, nil
+	})
+	if ver, err := xbmcp.RecordVersion(nil); err == nil && ver != "" {
+		xbmcpAdapter.Version = ver
+		xbmcpAdapter.ProbeVersion = func() (string, error) { return ver, nil }
+	}
+	// Test-only seam: lets CLI-level regression tests substitute a fake
+	// long-lived child for the real `npx xcodebuildmcp mcp` server (which
+	// needs network + the real npm package) — mirrors the Adapter.Command
+	// override the in-process live test (runtime_live_test.go) already uses.
+	// R-WP6 second-review Fix 2: same compile-time gate as pressureOK above —
+	// the SIMURGH_XBMCP_TEST_COMMAND env-var read only exists under -tags
+	// darwin_sim; a tagless build's applyXBMCPTestCommandOverride is a no-op.
+	applyXBMCPTestCommandOverride(xbmcpAdapter)
+
 	srv := ipc.NewServer(ln)
 	deps := daemon.Deps{
 		Broker:        brk,
@@ -215,8 +264,10 @@ func runDaemon() int {
 		LeasesRoot:    leasesRoot,
 		DeviceLister:  safetyClient,
 		DeviceDeleter: safetyClient,
+		XBMCPAdapter:  xbmcpAdapter,
 	}
 	daemon.RegisterLeaseHandlers(srv, deps)
+	daemon.RegisterXcodeBuildMCPHandlers(srv, deps)
 	// Rehydrate may have converted a crashed PROVISIONING lease to FAILED,
 	// freeing a global slot while other specs remain QUEUED. Advance once now,
 	// after all daemon dependencies and handlers are ready, instead of waiting

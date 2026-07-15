@@ -152,6 +152,22 @@ new `bench/evidence` publishes are explicitly out of this package. Do not
 treat any warm-seed or readiness change as a measured latency win until a
 later owner-directed benchmark pass.
 
+## XcodeBuildMCP integration adapter (R-WP6)
+
+`simurgh integration xcodebuildmcp start|stop|status --session <id> [--json]`
+starts/stops an XcodeBuildMCP child process bound to one lease's isolated
+env/paths (own UDID, own DerivedData/SwiftPM/module cache). Two concurrent
+sessions get two independent adapters; stopping one never touches the
+other's process or DerivedData. `stop` rejects a foreign PID.
+
+Live-validated (two real leases, two real `xcodebuildmcp simulator build`
+runs, `darwin_sim`-tagged `TestXcodeBuildMCPRuntimeTwoSessionAttribution`):
+distinct UDIDs, distinct DerivedData roots, distinct adapter PIDs, no growth
+in the shared global DerivedData tree, and session B stayed valid after
+session A's adapter was stopped. This is a functional isolation proof, not
+a latency/performance claim, and not an independent-review pass — see
+`docs/ARCHITECTURE.md` §14 and `docs/plans/orchestrator-state.md`.
+
 ## Release discipline
 
 Always `lease_release` / `simurgh release` when done.

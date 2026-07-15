@@ -150,6 +150,18 @@ func leaseNotFound(id string) error {
 	return &LeaseNotFoundError{LeaseID: id, ErrorEnvelope: env}
 }
 
+// NewLeaseNotFoundError constructs the same typed, structured "lease not
+// found" error the broker itself returns from Get/Renew/Release/Wait, for
+// callers outside this package that resolve leases via Broker.Get's
+// (Lease, bool) return (which carries no error to propagate) and need to
+// synthesize one of the exact same shape — e.g. so brokerErrorToIPC-style
+// errors.As classification (LEASE_NOT_FOUND, exit 3) keeps working
+// regardless of which code path resolved the lease. Prefer this over
+// hand-rolling a bare fmt.Errorf, which no classifier recognizes.
+func NewLeaseNotFoundError(id string) error {
+	return leaseNotFound(id)
+}
+
 func invalidState(id string, state LeaseState, op string) error {
 	msg := fmt.Sprintf("lease %q is %s; cannot %s", id, state, op)
 	env, err := NewError(CodeInvalidState, msg, FixInvalidState)

@@ -174,6 +174,17 @@ func Run(opts RunOptions) int {
 	return exitCode
 }
 
+// LookupEnv looks key up in an os.Environ()-shaped slice ("KEY=value"
+// entries), returning "" if absent. Exported so callers building a
+// RunOptions.Resolver.Getenv from the same environ they pass as
+// RunOptions.Environ (the correct way to keep guard/audit-log env lookups
+// and real-binary-resolution env lookups reading from one consistent
+// source, rather than one reading a passed-in slice and the other reading
+// the real process environment) don't have to reimplement this.
+func LookupEnv(environ []string, key string) string {
+	return lookupEnv(environ, key)
+}
+
 func lookupEnv(environ []string, key string) string {
 	prefix := key + "="
 	for _, kv := range environ {

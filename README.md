@@ -5,8 +5,11 @@ simulators. A daemon leases exclusive simulator clones (queue + TTL instead of
 collisions), emits per-lease DerivedData / module-cache / SwiftPM isolation, and
 exposes the same surface as a CLI and a stdio MCP server.
 
-**Status:** `v0.0.1`, closed source, no public remote. Do not add an OSS
-license file or push this tree to a public host.
+**Status:** `v0.0.1`. A private GitHub remote (`origin`) exists; the repo is
+currently private on GitHub. No LICENSE file exists yet — licensing/publication
+is a pending decision by the owner, not a permanent prohibition. Do not treat
+this as open-source, redistribute it, or add a license file until the owner
+decides and explicitly confirms.
 
 ## Requirements
 
@@ -135,6 +138,7 @@ attaches. Then use the five tools: `lease_acquire`, `lease_renew`,
 | `simurgh warm create --model NAME [--runtime VER] [--json]` | Create a warm clone-source template |
 | `simurgh warm list [--json]` | List warm templates |
 | `simurgh warm remove --model NAME [--runtime VER] [--json]` | Delete a warm template |
+| `simurgh integration xcodebuildmcp start\|stop\|status --session <id> [--json]` | Own XcodeBuildMCP lifecycle for an ACTIVE lease (session id accepts the lease id); `start` writes ephemeral MCP config under the lease root and launches an owned child, `stop` kills only that child |
 | `simurgh prune [--apply] [--json]` | Plan (default) or apply orphan/held cleanup |
 | `simurgh doctor [--json]` | Environment diagnostics (does not auto-start the daemon) |
 | `simurgh init [--force] [--json]` | Project `.simurgh.yaml` + `.mcp.json` registration |
@@ -156,5 +160,8 @@ helpers. Stop a foreground/background daemon with the usual process signal
 
 ## License / distribution
 
-Closed source. No public remote, no OSS license file, no package-registry
-publish. Local private use and private git remotes only.
+No LICENSE file exists yet, so no license is granted — this is not
+open-source and must not be redistributed. A private GitHub remote
+(`origin`) exists and the repo is currently private on GitHub; publishing
+publicly, adding a license file, and any package-registry publish are
+pending decisions by the owner, not yet made.

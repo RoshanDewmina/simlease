@@ -151,3 +151,41 @@ followed verbatim on a fresh Mac account succeeds.
   manifest schema from report §11.3.
 - **Someday:** dashboard UI, Android, teams. Only with validation evidence
   (PRD §7 thresholds).
+
+---
+
+## Post-v0.0.1: R-WP* packages (Phase B)
+
+M0–M4 above shipped as `v0.0.1`. Work since then has continued as a
+sequence of `R-WP*` packages (Phase B) rather than further M-numbered
+milestones. One line each:
+
+- **R-WP0 — baseline protect**: status/report-only baseline gate before
+  Phase B work started; no functional change.
+- **R-WP1 — reuse + liveness**: `ReuseIfExists` acquire-time attach to an
+  existing compatible lease instead of always provisioning; reap dead
+  `QUEUED` owners and cancel stranded queued waits.
+- **R-WP2 — global capacity**: host-global capacity accounting across
+  specs with explicit queue reasons on `pool.status` / `simurgh status`,
+  plus an auto-started-daemon detach fix for IPC handshake hangs.
+- **R-WP3 — session/job control-plane**: session/job model with
+  independent build slots, surfaced on `pool.status`, with race-safe job
+  transitions and atomic claiming of terminal resources.
+- **R-WP4 — readiness cache**: bounded readiness polling with classified
+  timeouts, additive phase timings, writable-cache confinement under the
+  lease root, and stricter warm-seed compatibility/CoW handling.
+- **R-WP5 — PATH shim**: gated / not started. Not skipped-forever — still
+  the planned opt-in PATH shim from the "Post-v0" backlog above — just not
+  yet begun.
+- **R-WP6 — XcodeBuildMCP session adapter**: `simurgh integration
+  xcodebuildmcp start|stop|status --session <id>`, a bounded adapter
+  owning ephemeral MCP config and child-process lifecycle for an active
+  lease, moved into the daemon so start/stop/status are daemon-owned
+  rather than CLI-process-owned.
+
+All of R-WP0–R-WP4 and R-WP6 are merged to `master`; R-WP5 remains gated.
+This section is a summary, not the live status — for exact current state
+(what's merged, in-flight, or blocked right now), see
+[`docs/plans/orchestrator-state.md`](plans/orchestrator-state.md) and
+[`docs/plans/MASTER_BUILD_STATUS.md`](plans/MASTER_BUILD_STATUS.md) rather
+than relying on this file staying perfectly current.

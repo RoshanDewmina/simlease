@@ -158,3 +158,29 @@ func TestReleaseOwnerGuard(t *testing.T) {
 		t.Fatalf("--force should bypass owner guard: %v", err)
 	}
 }
+
+func TestReleaseAllByLabelsOwnerFilter(t *testing.T) {
+	mine := broker.Lease{ID: "lease-mine", Owner: broker.Owner{PID: os.Getpid(), Agent: cliAgentName, SessionID: cliSessionID()}}
+	other := broker.Lease{ID: "lease-other", Owner: broker.Owner{PID: 1, Agent: "other", SessionID: "other"}}
+	leases := []broker.Lease{mine, other}
+
+	var withoutForce []string
+	for _, l := range leases {
+		if assertReleaseOwner(l, false) == nil {
+			withoutForce = append(withoutForce, l.ID)
+		}
+	}
+	if len(withoutForce) != 1 || withoutForce[0] != "lease-mine" {
+		t.Fatalf("without --force: releasable=%v want [lease-mine]", withoutForce)
+	}
+
+	var withForce []string
+	for _, l := range leases {
+		if assertReleaseOwner(l, true) == nil {
+			withForce = append(withForce, l.ID)
+		}
+	}
+	if len(withForce) != 2 {
+		t.Fatalf("with --force: releasable=%v want both leases", withForce)
+	}
+}

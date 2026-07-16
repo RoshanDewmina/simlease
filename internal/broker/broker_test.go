@@ -803,3 +803,66 @@ func TestRetryQueuesPromotesAfterTransientPressureDip(t *testing.T) {
 		t.Fatalf("promoted lease has no device")
 	}
 }
+
+func TestHoldSuppressesInactivityReclaimSignal(t *testing.T) {
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	clock := now
+	p := &fakeProvisioner{}
+	b := New(BrokerOptions{
+		Capacity:    1,
+		Provisioner: p,
+		Clock:       func() time.Time { return clock },
+	})
+	lease, err := b.Acquire(context.Background(), AcquireRequest{
+		Spec: testSpec(), TTL: time.Hour, Owner: Owner{PID: 1},
+		Timeouts: Timeouts{Inactivity: 5 * time.Minute},
+	})
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	clock = now.Add(20 * time.Minute)
+	held, err := b.Hold(context.Background(), lease.ID, 30*time.Minute)
+	if err != nil {
+		t.Fatalf("hold: %v", err)
+	}
+	if held.HeldUntil.Before(clock) {
+		t.Fatalf("HeldUntil=%v want after %v", held.HeldUntil, clock)
+	}
+	if !held.HeartbeatAt.Equal(clock) {
+		t.Fatalf("HeartbeatAt=%v want %v", held.HeartbeatAt, clock)
+	}
+	unheld, err := b.Unhold(context.Background(), lease.ID)
+	if err != nil {
+		t.Fatalf("unhold: %v", err)
+	}
+	if !unheld.HeldUntil.IsZero() {
+		t.Fatalf("HeldUntil=%v want zero after unhold", unheld.HeldUntil)
+	}
+}
+
+func TestHoldRejectsNonActive(t *testing.T) {
+	now := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
+	b := New(BrokerOptions{
+		Capacity:    1,
+		Provisioner: &fakeProvisioner{},
+		Clock:       func() time.Time { return now },
+	})
+	first, err := b.Acquire(context.Background(), AcquireRequest{
+		Spec: testSpec(), TTL: time.Minute, Owner: Owner{PID: 1},
+	})
+	if err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+	second, err := b.Acquire(context.Background(), AcquireRequest{
+		Spec: testSpec(), TTL: time.Minute, Wait: false, Owner: Owner{PID: 2},
+	})
+	if second.State != LeaseQueued {
+		t.Fatalf("setup: want queued, got %s (err=%v)", second.State, err)
+	}
+	_ = first
+	_, err = b.Hold(context.Background(), second.ID, time.Minute)
+	var inv *InvalidStateError
+	if !errors.As(err, &inv) {
+		t.Fatalf("hold queued: err=%v want InvalidStateError", err)
+	}
+}

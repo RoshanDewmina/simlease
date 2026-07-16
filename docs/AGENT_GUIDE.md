@@ -112,6 +112,33 @@ Emitted `xcodebuildFlags` (also on the lease / MCP acquire result):
 is no PATH shim yet (v0.1) — bare `xcodebuild` without `exec` or explicit flags
 will use shared defaults and defeat isolation.
 
+## Build discipline
+
+**Always route `xcodebuild` through `simurgh exec`.** Short one-liners and
+quick probes are fine bare; any build, test, or archive that can run more than a
+minute must go through exec so flag-merge and auto-renew apply:
+
+```bash
+simurgh exec <lease-id> -- xcodebuild … build
+simurgh exec <lease-id> -- xcodebuild … test
+```
+
+Bypassing exec (bare `xcodebuild`, hand-merged flags, or XcodeBuildMCP without
+the per-lease adapter) risks:
+
+- **Isolation loss** — shared DerivedData / wrong simulator UDID.
+- **Mid-run reclaim** — lease TTL or inactivity expires during a long compile;
+  the daemon reclaims the device and your build fails or writes to stale paths.
+
+`simurgh exec` renews the lease on a TTL/3 cadence while the child runs. For
+work outside exec (MCP tool calls, multi-step scripts), call `lease_renew` /
+`simurgh renew <lease-id>` before expiry — do not acquire a second lease.
+Check `lease_status` / `simurgh status` if unsure how much TTL remains.
+
+`simurgh hold <lease-id>` and `simurgh unhold <lease-id>` suppress inactivity-driven
+reclaim for non-exec work (MCP steps, manual debugging); TTL still expires unless you
+`renew`. Prefer `exec` for long `xcodebuild` runs so TTL auto-renew applies.
+
 ## Capacity (host-global)
 
 `SIMURGH_CAPACITY` caps ACTIVE+PROVISIONING leases for the whole host — it no

@@ -17,6 +17,7 @@ const (
 	// 60m: a real agent lane (install app, pair daemon, several live agent
 	// runs) measured 25–60m; 30m expired active workloads mid-run (2026-07-16).
 	defaultTTL            = 60 * time.Minute
+	defaultHoldExtend     = 30 * time.Minute
 	capacityHardCap       = 4
 	capacityRAMPerLeaseGB = 6
 )
@@ -297,6 +298,49 @@ func (b *Broker) Renew(ctx context.Context, leaseID string, ttl time.Duration) (
 	lease.HeartbeatAt = now
 	lease.TTL = ttl
 	lease.ExpiresAt = now.Add(ttl)
+	b.persistLocked()
+	return cloneLease(lease), nil
+}
+
+// Hold marks an ACTIVE lease busy: bumps HeartbeatAt and extends HeldUntil so
+// the watcher suppresses inactivity reclaim until unhold or the absolute TTL.
+// Hard timeout and ExpiresAt still reclaim. extend defaults to defaultHoldExtend.
+func (b *Broker) Hold(ctx context.Context, leaseID string, extend time.Duration) (Lease, error) {
+	_ = ctx
+	if extend <= 0 {
+		extend = defaultHoldExtend
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	lease, ok := b.leases[leaseID]
+	if !ok {
+		return Lease{}, leaseNotFound(leaseID)
+	}
+	if lease.State != LeaseActive {
+		return Lease{}, invalidState(leaseID, lease.State, "hold")
+	}
+	now := b.clock()
+	lease.HeartbeatAt = now
+	lease.HeldUntil = now.Add(extend)
+	b.persistLocked()
+	return cloneLease(lease), nil
+}
+
+// Unhold clears the busy hold on an ACTIVE lease.
+func (b *Broker) Unhold(ctx context.Context, leaseID string) (Lease, error) {
+	_ = ctx
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	lease, ok := b.leases[leaseID]
+	if !ok {
+		return Lease{}, leaseNotFound(leaseID)
+	}
+	if lease.State != LeaseActive {
+		return Lease{}, invalidState(leaseID, lease.State, "unhold")
+	}
+	lease.HeldUntil = time.Time{}
 	b.persistLocked()
 	return cloneLease(lease), nil
 }

@@ -67,6 +67,10 @@ func main() {
 			os.Exit(runRelease(os.Args[2:]))
 		case "renew":
 			os.Exit(runRenew(os.Args[2:]))
+		case "hold":
+			os.Exit(runHold(os.Args[2:]))
+		case "unhold":
+			os.Exit(runUnhold(os.Args[2:]))
 		case "status":
 			os.Exit(runStatus(os.Args[2:]))
 		case "list":
@@ -110,6 +114,8 @@ Usage:
   simurgh acquire --model NAME [flags]
   simurgh release [<lease-id>] [--all --label k=v] [--json]
   simurgh renew <lease-id> [--ttl DUR] [--json]
+  simurgh hold <lease-id> [--duration DUR] [--json]
+  simurgh unhold <lease-id> [--json]
   simurgh status [--queue] [--json]
   simurgh list [--label-selector k=v,...] [--json]
   simurgh env <lease-id> [--json]

@@ -147,6 +147,27 @@ func TestTick_HardTimeout(t *testing.T) {
 	}
 }
 
+func TestTick_HoldSuppressesInactivity(t *testing.T) {
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	lease := baseActive("lease-held", 1, now)
+	lease.HeartbeatAt = now.Add(-20 * time.Minute)
+	lease.Timeouts.Inactivity = 10 * time.Minute
+	lease.HeldUntil = now.Add(30 * time.Minute)
+	fb := &fakeBroker{}
+	fb.set(lease)
+
+	w := New(WatcherOptions{
+		Broker:         fb,
+		Now:            func() time.Time { return now },
+		IsProcessAlive: func(pid int) bool { return true },
+	})
+
+	got := w.Tick(context.Background())
+	if len(got) != 0 {
+		t.Fatalf("hold should suppress inactivity reclaim, got %+v", got)
+	}
+}
+
 func TestTick_InactivityTimeout(t *testing.T) {
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
 	lease := baseActive("lease-4", 1, now)

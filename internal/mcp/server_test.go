@@ -30,7 +30,7 @@ func connectTestClient(t *testing.T, srv *mcpsdk.Server) *mcpsdk.ClientSession {
 	return cs
 }
 
-func TestNewServerRegistersFiveTools(t *testing.T) {
+func TestNewServerRegistersLeaseTools(t *testing.T) {
 	srv := newServer(serverConfig{
 		Call: func(context.Context, string, any) (json.RawMessage, error) {
 			t.Fatal("unexpected RPC call during ListTools")
@@ -45,6 +45,8 @@ func TestNewServerRegistersFiveTools(t *testing.T) {
 	want := []string{
 		"lease_acquire",
 		"lease_renew",
+		"lease_hold",
+		"lease_unhold",
 		"lease_release",
 		"lease_status",
 		"pool_status",
@@ -642,5 +644,17 @@ func TestRPCErrorFormat(t *testing.T) {
 	var target *rpcError
 	if !errors.As(err, &target) {
 		t.Fatal("errors.As failed")
+	}
+}
+
+func TestDefaultLastLeasePathFailsClosedOnHomeMismatch(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("SIMURGH_HOME", dir)
+	got, err := DefaultLastLeasePath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Join(dir, "last-lease") {
+		t.Fatalf("DefaultLastLeasePath() = %q", got)
 	}
 }

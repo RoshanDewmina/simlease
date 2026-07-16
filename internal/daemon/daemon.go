@@ -47,7 +47,7 @@ type Deps struct {
 	XBMCPAdapter *xbmcp.Adapter
 }
 
-// RegisterLeaseHandlers registers lease.acquire|renew|release|get|list|wait,
+// RegisterLeaseHandlers registers lease.acquire|renew|release|hold|unhold|get|list|wait,
 // pool.status, warm.create|list|remove, and prune.plan|apply on server. Call
 // before Serve (or concurrently — RegisterHandler is mutex-guarded).
 func RegisterLeaseHandlers(server *ipc.Server, deps Deps) {
@@ -55,6 +55,8 @@ func RegisterLeaseHandlers(server *ipc.Server, deps Deps) {
 	server.RegisterHandler("lease.acquire", h.acquire)
 	server.RegisterHandler("lease.renew", h.renew)
 	server.RegisterHandler("lease.release", h.release)
+	server.RegisterHandler("lease.hold", h.hold)
+	server.RegisterHandler("lease.unhold", h.unhold)
 	server.RegisterHandler("lease.get", h.get)
 	server.RegisterHandler("lease.list", h.list)
 	server.RegisterHandler("lease.wait", h.wait)
@@ -143,6 +145,11 @@ type idParams struct {
 	TTL string `json:"ttl,omitempty"` // renew only
 }
 
+type holdParams struct {
+	ID       string `json:"id"`
+	Duration string `json:"duration,omitempty"`
+}
+
 type listParams struct {
 	Labels map[string]string `json:"labels,omitempty"`
 }
@@ -215,6 +222,40 @@ func (h *handlers) renew(ctx context.Context, req ipc.Request) (json.RawMessage,
 		return nil, badRequest(fmt.Errorf("ttl: %w", err))
 	}
 	lease, err := h.deps.Broker.Renew(ctx, p.ID, ttl)
+	if err != nil {
+		return nil, brokerErrorToIPC(err)
+	}
+	return h.marshalLeaseResult(lease)
+}
+
+func (h *handlers) hold(ctx context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
+	var p holdParams
+	if err := decodeParams(req.Params, &p); err != nil {
+		return nil, badRequest(err)
+	}
+	if p.ID == "" {
+		return nil, badRequest(errors.New("id is required"))
+	}
+	extend, err := parseOptionalDuration(p.Duration)
+	if err != nil {
+		return nil, badRequest(fmt.Errorf("duration: %w", err))
+	}
+	lease, err := h.deps.Broker.Hold(ctx, p.ID, extend)
+	if err != nil {
+		return nil, brokerErrorToIPC(err)
+	}
+	return h.marshalLeaseResult(lease)
+}
+
+func (h *handlers) unhold(ctx context.Context, req ipc.Request) (json.RawMessage, *ipc.Error) {
+	var p idParams
+	if err := decodeParams(req.Params, &p); err != nil {
+		return nil, badRequest(err)
+	}
+	if p.ID == "" {
+		return nil, badRequest(errors.New("id is required"))
+	}
+	lease, err := h.deps.Broker.Unhold(ctx, p.ID)
 	if err != nil {
 		return nil, brokerErrorToIPC(err)
 	}

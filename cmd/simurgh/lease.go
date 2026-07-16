@@ -521,7 +521,7 @@ func runRelease(args []string) int {
 			printErrorTriple("INVALID_INPUT", "--all requires at least one --label k=v", "simurgh release --all --label k=v", asJSON)
 			return 3
 		}
-		return releaseAllByLabels(labels, asJSON)
+		return releaseAllByLabels(labels, force, asJSON)
 	}
 
 	id, err := resolveLeaseIDOrLast(leaseID)
@@ -556,7 +556,7 @@ func runRelease(args []string) int {
 	return 0
 }
 
-func releaseAllByLabels(labels map[string]string, asJSON bool) int {
+func releaseAllByLabels(labels map[string]string, force, asJSON bool) int {
 	raw, err := dialAndCall(context.Background(), "lease.list", map[string]any{"labels": labels})
 	if err != nil {
 		printIPCError(err, asJSON)
@@ -569,9 +569,14 @@ func releaseAllByLabels(labels map[string]string, asJSON bool) int {
 		fmt.Fprintf(os.Stderr, "simurgh release: %v\n", err)
 		return 5
 	}
-	okN, failN := 0, 0
-	var failures []string
+	okN, failN, skipN := 0, 0, 0
+	var failures, skipped []string
 	for _, l := range wrap.Leases {
+		if err := assertReleaseOwner(l, force); err != nil {
+			skipN++
+			skipped = append(skipped, fmt.Sprintf("%s: %s", l.ID, err.Error()))
+			continue
+		}
 		_, err := dialAndCall(context.Background(), "lease.release", map[string]any{"id": l.ID})
 		if err != nil {
 			failN++
@@ -581,18 +586,26 @@ func releaseAllByLabels(labels map[string]string, asJSON bool) int {
 		okN++
 	}
 	summary := map[string]any{
-		"matched":  len(wrap.Leases),
-		"released": okN,
-		"failed":   failN,
-		"failures": failures,
+		"matched":       len(wrap.Leases),
+		"released":      okN,
+		"skipped":       skipN,
+		"failed":        failN,
+		"failures":      failures,
+		"skippedLeases": skipped,
 	}
 	if asJSON {
 		_ = json.NewEncoder(os.Stdout).Encode(summary)
 	} else {
-		fmt.Printf("matched=%d released=%d failed=%d\n", len(wrap.Leases), okN, failN)
+		fmt.Printf("matched=%d released=%d skipped=%d failed=%d\n", len(wrap.Leases), okN, skipN, failN)
+		for _, s := range skipped {
+			fmt.Println("skipped:", s)
+		}
 		for _, f := range failures {
 			fmt.Println(f)
 		}
+	}
+	if skipN > 0 && !force {
+		return 3
 	}
 	if failN > 0 {
 		return 5

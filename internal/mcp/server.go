@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
+	"github.com/RoshanDewmina/simurgh/internal/simurghhome"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -32,7 +33,7 @@ type serverConfig struct {
 	LastLeasePath string // absolute path; empty → DefaultLastLeasePath()
 }
 
-// NewServer constructs the simurgh MCP server with all five tools registered.
+// NewServer constructs the simurgh MCP server with all lease/pool tools registered.
 func NewServer() *mcpsdk.Server {
 	return newServer(serverConfig{})
 }
@@ -68,6 +69,18 @@ func newServer(cfg serverConfig) *mcpsdk.Server {
 	}, s.handleLeaseRenew)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name: "lease_hold",
+		Description: "Mark an active lease busy so inactivity reclaim is suppressed while you run a long non-exec command. " +
+			"Call before starting work that bypasses simurgh exec (e.g. a long xcodebuild). " +
+			"Pair with lease_unhold when finished. TTL and hard-timeout reclaim still apply.",
+	}, s.handleLeaseHold)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
+		Name:        "lease_unhold",
+		Description: "Clear a lease_hold busy marker so normal inactivity reclaim resumes.",
+	}, s.handleLeaseUnhold)
+
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name: "lease_release",
 		Description: "Release a lease when you are finished with the simulator so the device can be deleted and capacity returned to the pool. " +
 			"Always release before ending your session. Do not leave leases dangling — they hold pool capacity and keep clone devices around until cleaned up. " +
@@ -97,17 +110,10 @@ type server struct {
 	cfg serverConfig
 }
 
-// --- path helpers (duplicated from cmd/simurgh; avoid importing package main) ---
+// --- path helpers (shared with cmd/simurgh via internal/simurghhome) ---
 
 func simurghHomeDir() (string, error) {
-	if h := os.Getenv("SIMURGH_HOME"); h != "" {
-		return h, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".simurgh"), nil
+	return simurghhome.Dir()
 }
 
 // DefaultSocketPath returns ~/.simurgh/simurghd.sock (honors $SIMURGH_HOME).
@@ -244,8 +250,9 @@ type leaseAcquireParams struct {
 }
 
 type leaseIDParams struct {
-	LeaseID string `json:"lease_id" jsonschema:"lease id returned by lease_acquire"`
-	TTL     string `json:"ttl,omitempty" jsonschema:"optional new TTL duration string, e.g. 30m"`
+	LeaseID  string `json:"lease_id" jsonschema:"lease id returned by lease_acquire"`
+	TTL      string `json:"ttl,omitempty" jsonschema:"optional new TTL duration string, e.g. 30m"`
+	Duration string `json:"duration,omitempty" jsonschema:"optional hold duration string, e.g. 30m"`
 }
 
 type leaseStatusParams struct {
@@ -445,6 +452,42 @@ func (s *server) handleLeaseRenew(ctx context.Context, _ *mcpsdk.CallToolRequest
 	var wrap wireLeaseWrap
 	if err := json.Unmarshal(raw, &wrap); err != nil {
 		return nil, zero, fmt.Errorf("decode lease.renew: %w", err)
+	}
+	return nil, leaseRenewResult{ID: wrap.Lease.ID, ExpiresAt: wrap.Lease.ExpiresAt}, nil
+}
+
+func (s *server) handleLeaseHold(ctx context.Context, _ *mcpsdk.CallToolRequest, in leaseIDParams) (*mcpsdk.CallToolResult, leaseRenewResult, error) {
+	var zero leaseRenewResult
+	if strings.TrimSpace(in.LeaseID) == "" {
+		return nil, zero, fmt.Errorf("lease_id is required")
+	}
+	params := map[string]any{"id": in.LeaseID}
+	if in.Duration != "" {
+		params["duration"] = in.Duration
+	}
+	raw, err := s.cfg.Call(ctx, "lease.hold", params)
+	if err != nil {
+		return nil, zero, mapCallError(err)
+	}
+	var wrap wireLeaseWrap
+	if err := json.Unmarshal(raw, &wrap); err != nil {
+		return nil, zero, fmt.Errorf("decode lease.hold: %w", err)
+	}
+	return nil, leaseRenewResult{ID: wrap.Lease.ID, ExpiresAt: wrap.Lease.ExpiresAt}, nil
+}
+
+func (s *server) handleLeaseUnhold(ctx context.Context, _ *mcpsdk.CallToolRequest, in leaseIDParams) (*mcpsdk.CallToolResult, leaseRenewResult, error) {
+	var zero leaseRenewResult
+	if strings.TrimSpace(in.LeaseID) == "" {
+		return nil, zero, fmt.Errorf("lease_id is required")
+	}
+	raw, err := s.cfg.Call(ctx, "lease.unhold", map[string]any{"id": in.LeaseID})
+	if err != nil {
+		return nil, zero, mapCallError(err)
+	}
+	var wrap wireLeaseWrap
+	if err := json.Unmarshal(raw, &wrap); err != nil {
+		return nil, zero, fmt.Errorf("decode lease.unhold: %w", err)
 	}
 	return nil, leaseRenewResult{ID: wrap.Lease.ID, ExpiresAt: wrap.Lease.ExpiresAt}, nil
 }

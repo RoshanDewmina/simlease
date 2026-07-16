@@ -70,7 +70,9 @@ acquire JSON also carries `.lease.env.xcodebuildFlags` — typically:
 `-destination platform=iOS Simulator,id=<udid>`.
 
 Easiest way to apply those flags: `simurgh exec` injects them for any
-`xcodebuild` argv. Against this repo’s fixture (live-proven in M2.1 / M3.3):
+`xcodebuild` argv and auto-renews the lease during long runs — always route
+builds/tests through exec (see `docs/AGENT_GUIDE.md`). Against this repo’s
+fixture (live-proven in M2.1 / M3.3):
 
 ```bash
 simurgh exec "$L" -- xcodebuild \

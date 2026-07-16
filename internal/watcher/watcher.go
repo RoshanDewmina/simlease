@@ -64,6 +64,7 @@ func New(opts WatcherOptions) *Watcher {
 // without side effects.
 //
 // ACTIVE priority: PID exit (--rm / ReleaseOnPIDExit) → hard → inactivity → TTL.
+// Inactivity is suppressed while HeldUntil is in the future (lease.hold).
 // When ReleaseOnPIDExit is false, ACTIVE owner PID liveness is not checked.
 //
 // QUEUED: owner PID liveness is always checked. A dead queued owner strands
@@ -113,7 +114,8 @@ func (w *Watcher) decide(lease broker.Lease, now time.Time) (string, bool) {
 	if inactivity <= 0 {
 		inactivity = w.defaultInactivity
 	}
-	if inactivity > 0 && now.Sub(lease.HeartbeatAt) > inactivity {
+	held := !lease.HeldUntil.IsZero() && now.Before(lease.HeldUntil)
+	if !held && inactivity > 0 && now.Sub(lease.HeartbeatAt) > inactivity {
 		return "inactivity timeout", true
 	}
 

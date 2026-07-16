@@ -125,6 +125,7 @@ type Lease struct {
 	ExpiresAt        time.Time         `json:"expiresAt"`
 	TTL              time.Duration     `json:"ttl"`
 	HeartbeatAt      time.Time         `json:"heartbeatAt"`
+	HeldUntil        time.Time         `json:"heldUntil,omitempty"`
 	Timeouts         Timeouts          `json:"timeouts"`
 	ReleaseOnPIDExit bool              `json:"releaseOnPIDExit"`
 }
@@ -142,6 +143,7 @@ type leaseWire struct {
 	ExpiresAt        time.Time         `json:"expiresAt"`
 	TTL              string            `json:"ttl"`
 	HeartbeatAt      time.Time         `json:"heartbeatAt"`
+	HeldUntil        time.Time         `json:"heldUntil,omitempty"`
 	Timeouts         Timeouts          `json:"timeouts"`
 	ReleaseOnPIDExit bool              `json:"releaseOnPIDExit"`
 }
@@ -161,6 +163,7 @@ func (l Lease) MarshalJSON() ([]byte, error) {
 		ExpiresAt:        l.ExpiresAt,
 		TTL:              durationString(l.TTL),
 		HeartbeatAt:      l.HeartbeatAt,
+		HeldUntil:        l.HeldUntil,
 		Timeouts:         l.Timeouts,
 		ReleaseOnPIDExit: l.ReleaseOnPIDExit,
 	})
@@ -189,6 +192,7 @@ func (l *Lease) UnmarshalJSON(data []byte) error {
 		ExpiresAt:        w.ExpiresAt,
 		TTL:              ttl,
 		HeartbeatAt:      w.HeartbeatAt,
+		HeldUntil:        w.HeldUntil,
 		Timeouts:         w.Timeouts,
 		ReleaseOnPIDExit: w.ReleaseOnPIDExit,
 	}

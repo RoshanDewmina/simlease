@@ -113,5 +113,8 @@ run_cell "B1-reuse"  "$HERE/run.sh" --scenario B1 --arms S --retries 3 --simurgh
 run_cell "B2"        "$HERE/run.sh" --scenario B2 --retries 3
 run_cell "B4-defaults" "$HERE/run.sh" --scenario B4 --arms S --reps 1
 BENCH_HEALTH_WINDOW_S=30 run_cell "B5-window30" "$HERE/run.sh" --scenario B5 --arms S,L
+# B6 ARM-S: foreground one-rep-at-a-time (background-kill workaround).
+run_cell "B6-simurgh-rep3" "$HERE/run_b6.sh" --arms S --reps 1
+run_cell "B6-xcodebuildmcp" "$HERE/check_xcodebuildmcp.sh"
 
 say "driver complete"

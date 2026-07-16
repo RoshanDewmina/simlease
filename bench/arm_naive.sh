@@ -6,6 +6,7 @@
 # exists to measure.
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$HERE/lib.sh"
 
 SIM_NAME="${BENCH_SIM_NAME:-iPhone 17 Pro}"
 
@@ -40,9 +41,22 @@ for runtime, devs in data.get("devices", {}).items():
 ' "$1"
 }
 
+PROVISION_STEPS="$(mktemp)"
+trap 'rm -f "$PROVISION_STEPS"' EXIT
 if [[ "$(device_state "$BENCH_UDID")" != "Booted" ]]; then
+  boot_start="$(mono_ns)"
   xcrun simctl boot "$BENCH_UDID" >/dev/null 2>&1 || true
+  boot_end="$(mono_ns)"
+  jq -nc --argjson s "$boot_start" --argjson e "$boot_end" --argjson d "$((boot_end - boot_start))" \
+    '{step:"simctl_boot", start_ns:$s, end_ns:$e, duration_ns:$d}' >>"$PROVISION_STEPS"
+  bs_start="$(mono_ns)"
   xcrun simctl bootstatus "$BENCH_UDID" -b >/dev/null 2>&1 || true
+  bs_end="$(mono_ns)"
+  jq -nc --argjson s "$bs_start" --argjson e "$bs_end" --argjson d "$((bs_end - bs_start))" \
+    '{step:"simctl_bootstatus", start_ns:$s, end_ns:$e, duration_ns:$d}' >>"$PROVISION_STEPS"
+fi
+if [[ -n "${BENCH_OUT:-}" && -s "$PROVISION_STEPS" ]]; then
+  jq -s '{arm:"naive", provision_steps:.}' "$PROVISION_STEPS" >"${BENCH_OUT%.json}.provision.json"
 fi
 
 export BENCH_ARM="naive"

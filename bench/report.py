@@ -101,6 +101,85 @@ def summarize_group(runs):
     }
 
 
+def load_provision_sidecars(results_dir):
+    """Load *.provision.json and *.acquire.json sidecars (P0-1 instrumentation)."""
+    sidecars = []
+    for path in sorted(glob.glob(os.path.join(results_dir, "run-*.provision.json"))):
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"report.py: skipped {os.path.basename(path)}: {exc}", file=sys.stderr)
+            continue
+        data["_file"] = os.path.basename(path)
+        data["_kind"] = "provision"
+        sidecars.append(data)
+    for path in sorted(glob.glob(os.path.join(results_dir, "run-*.acquire.json"))):
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"report.py: skipped {os.path.basename(path)}: {exc}", file=sys.stderr)
+            continue
+        data["_file"] = os.path.basename(path)
+        data["_kind"] = "acquire"
+        sidecars.append(data)
+    for path in sorted(glob.glob(os.path.join(results_dir, "reuse-acquire-*.json"))):
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as exc:
+            print(f"report.py: skipped {os.path.basename(path)}: {exc}", file=sys.stderr)
+            continue
+        data["_file"] = os.path.basename(path)
+        data["_kind"] = "reuse_acquire"
+        sidecars.append(data)
+    return sidecars
+
+
+def provision_timing_stats(sidecars):
+    """Median per-step durations grouped by arm + step name."""
+    groups = {}
+    for sc in sidecars:
+        arm = sc.get("arm", "simurgh" if sc.get("_kind") == "acquire" else "unknown")
+        if sc.get("_kind") == "reuse_acquire":
+            arm = "simurgh"
+            steps = [{"step": "reuse_acquire", "duration_ns": sc.get("duration_ns", 0)}]
+        elif sc.get("_kind") == "acquire":
+            steps = [{"step": "acquire", "duration_ns": sc.get("duration_ns", 0)}]
+        else:
+            steps = sc.get("provision_steps", [])
+        for step in steps:
+            name = step.get("step", "unknown")
+            key = (arm, name)
+            groups.setdefault(key, []).append(step.get("duration_ns", 0))
+    return groups
+
+
+def render_provision_table(lines, sidecars):
+    stats = provision_timing_stats(sidecars)
+    if not stats:
+        return
+    lines.append("## Provision / acquire timing (simctl + lease, sidecars)")
+    lines.append("")
+    lines.append(
+        "Per-step medians from `*.provision.json`, `*.acquire.json`, and "
+        "`reuse-acquire-*.json` sidecars — costs that happen before workload.sh's "
+        "own step timing starts."
+    )
+    lines.append("")
+    lines.append("| Arm | Step | n | Median | Min | Max |")
+    lines.append("|---|---|---|---|---|---|")
+    for key in sorted(stats.keys()):
+        arm, step = key
+        vals = sorted(stats[key])
+        lines.append(
+            f"| {arm} | {step} | {len(vals)} | {fmt_ns(statistics.median(vals))} "
+            f"| {fmt_ns(vals[0])} | {fmt_ns(vals[-1])} |"
+        )
+    lines.append("")
+
+
 def badge_latency_stats(runs):
     """Per (scenario, arm): time-to-badge latencies from first-attempt
     launch steps that recorded one (older runs predate the field)."""
@@ -168,7 +247,7 @@ def window_sensitivity(runs):
     return groups
 
 
-def render(results_dir, runs, residue_log, green_log):
+def render(results_dir, runs, residue_log, green_log, sidecars=None):
     lines = []
     lines.append(f"# Bench summary — {os.path.basename(results_dir.rstrip('/'))}")
     lines.append("")
@@ -198,6 +277,9 @@ def render(results_dir, runs, residue_log, green_log):
 
     if green_log:
         render_green_table(lines, green_log)
+
+    if sidecars:
+        render_provision_table(lines, sidecars)
 
     latency_groups = badge_latency_stats(runs)
     if latency_groups:
@@ -267,7 +349,8 @@ def main():
     runs = load_runs(results_dir)
     residue_log = load_residue_log(results_dir)
     green_log = load_green_log(results_dir)
-    sys.stdout.write(render(results_dir, runs, residue_log, green_log))
+    sidecars = load_provision_sidecars(results_dir)
+    sys.stdout.write(render(results_dir, runs, residue_log, green_log, sidecars))
 
 
 if __name__ == "__main__":

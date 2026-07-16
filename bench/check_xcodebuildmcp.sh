@@ -5,7 +5,7 @@
 # with the lease's isolated DerivedData path + simulator UDID, then verify
 # artifacts land under the lease path (not the global DerivedData tree).
 #
-# Usage: check_xcodebuildmcp.sh [--out DIR]
+# Usage: check_xcodebuildmcp.sh [--out DIR] [--dry-run]
 # Emits: $OUT/xcodebuildmcp-composition.json (+ preflight.json if run)
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,11 +16,13 @@ SIM_NAME="${BENCH_SIM_NAME:-iPhone 17 Pro}"
 XBMCP_VERSION="${XBMCP_VERSION:-2.6.2}"
 OUT_ROOT="$HERE/results"
 SIMURGH_BIN="${SIMURGH_BIN:-$HERE/.bin/simurgh}"
+DRY_RUN=0
 
-usage() { echo "usage: check_xcodebuildmcp.sh [--out DIR]" >&2; exit 2; }
+usage() { echo "usage: check_xcodebuildmcp.sh [--out DIR] [--dry-run]" >&2; exit 2; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --out) OUT_ROOT="$2"; shift 2 ;;
+    --dry-run) DRY_RUN=1; shift ;;
     -h|--help) usage ;;
     *) echo "check_xcodebuildmcp.sh: unknown flag $1" >&2; usage ;;
   esac
@@ -29,6 +31,19 @@ done
 RUN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
 RESULTS_DIR="$OUT_ROOT/$RUN_TS"
 mkdir -p "$RESULTS_DIR"
+
+if [[ "$DRY_RUN" == "1" ]]; then
+  jq -nc \
+    --arg ts "$(iso_ts)" \
+    --arg status "blocked" \
+    --arg reason "dry_run_offline" \
+    '{timestamp:$ts, check:"xcodebuildmcp_composition", status:$status,
+      reason:$reason, verdict:null,
+      note:"offline harness self-test — run without --dry-run on a quiet machine with Lancer checkout"}' \
+    >"$RESULTS_DIR/xcodebuildmcp-composition.json"
+  echo "check_xcodebuildmcp.sh: dry-run wrote $RESULTS_DIR/xcodebuildmcp-composition.json" >&2
+  exit 0
+fi
 
 say() { echo "[$(date -u +%H:%M:%SZ)] $*" | tee -a "$RESULTS_DIR/check.log" >&2; }
 
@@ -160,13 +175,16 @@ dd_under_lease=$([[ "$dd_populated" == "true" ]] && echo true || echo false)
 no_global_pollution=$([[ "${after_global:-0}" -le "${before_global:-0}" ]] && echo true || echo false)
 build_ok=$([[ "$build_exit" -eq 0 ]] && echo true || echo false)
 
-if [[ "$build_ok" == "true" && "$dd_under_lease" == "true" && "$no_global_pollution" == "true" ]]; then
-  verdict="composes"
-elif [[ "$build_ok" == "true" && "$dd_under_lease" == "true" ]]; then
-  verdict="partial_global_dd_growth"
-else
-  verdict="does_not_compose"
-fi
+verdict="$(python3 -c '
+import sys
+sys.path.insert(0, sys.argv[1])
+from xcodebuildmcp_composition import composition_verdict
+print(composition_verdict(
+    build_ok=sys.argv[2] == "true",
+    dd_under_lease=sys.argv[3] == "true",
+    no_global_pollution=sys.argv[4] == "true",
+))
+' "$HERE" "$build_ok" "$dd_under_lease" "$no_global_pollution")"
 
 say "verdict=$verdict build_exit=$build_exit dd_under_lease=$dd_under_lease no_global_pollution=$no_global_pollution"
 

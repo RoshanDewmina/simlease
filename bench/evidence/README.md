@@ -19,6 +19,15 @@ full-screen agent badge).
 | B6 naive (3 reps) | `B6-naive-20260713T200959Z/` |
 | B6 diy (3 reps, one dir per foreground rep) | `B6-diy-20260713T211221Z/` `-212218Z/` `-213216Z/` |
 | B6 simurgh (2 of 3 planned reps) | `B6-simurgh-20260713T214256Z/` `-215145Z/` |
+| B6 simurgh rep 3 + XcodeBuildMCP | **live gate** — run `bench/p0_rerun_driver.sh` cells `B6-simurgh-rep3` + `B6-xcodebuildmcp` on a quiet machine with `~/Documents/command-center` checkout; evidence lands in `bench/results/<ts>/` and is copied to `bench/evidence/xcodebuildmcp-composition-<ts>.json` |
+
+**Live gates (hardware / quiet machine required):**
+
+| P0 item | Offline (unit-tested) | Live command |
+|---|---|---|
+| B1 reuse mode | `run.sh --simurgh-mode reuse` harness + `arm_simurgh.sh` preset-lease path | `bench/run.sh --scenario B1 --arms S --retries 3 --simurgh-mode reuse` after preflight |
+| time-to-N-green | `report_test.py`, `green-log.jsonl` emission in `run.sh` | any `run.sh --retries 3` cell; regenerate via `python3 bench/report.py <dir>` |
+| B6 XcodeBuildMCP | `xcodebuildmcp_composition_test.py`, `check_xcodebuildmcp.sh --dry-run` | `bench/check_xcodebuildmcp.sh` (needs Lancer repo + npx xcodebuildmcp) |
 
 Wrong-badge PNGs (the "agents literally screenshot each other's app" claim):
 

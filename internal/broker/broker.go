@@ -14,7 +14,9 @@ import (
 )
 
 const (
-	defaultTTL            = 30 * time.Minute
+	// 60m: a real agent lane (install app, pair daemon, several live agent
+	// runs) measured 25–60m; 30m expired active workloads mid-run (2026-07-16).
+	defaultTTL            = 60 * time.Minute
 	capacityHardCap       = 4
 	capacityRAMPerLeaseGB = 6
 )

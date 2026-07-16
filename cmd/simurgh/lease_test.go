@@ -27,11 +27,12 @@ func TestDefaultLastLeasePathHonorsSimurghHome(t *testing.T) {
 
 func TestDefaultLastLeasePathDefaultHome(t *testing.T) {
 	t.Setenv("SIMURGH_HOME", "")
-	got, err := DefaultLastLeasePath()
+	home, err := passwdHomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}
-	home, err := os.UserHomeDir()
+	t.Setenv("HOME", home)
+	got, err := DefaultLastLeasePath()
 	if err != nil {
 		t.Fatal(err)
 	}

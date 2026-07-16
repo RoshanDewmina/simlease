@@ -37,24 +37,34 @@ func mustSocket0600(t *testing.T, dir, name string) string {
 	return sock
 }
 
+func greenHomeSeams() (func() string, func() (string, error), func() string) {
+	return func() string { return "/tmp/explicit-simurgh-home" },
+		func() (string, error) { return "/home/user", nil },
+		func() string { return "/home/user" }
+}
+
 func TestRunChecksAllGreen(t *testing.T) {
 	sock := mustSocket0600(t, shortTempDir(t), "s.sock")
+	homeEnv, passwdHome, envHome := greenHomeSeams()
 
-	checks := RunChecks(context.Background(), DoctorOptions{
+	checks := RunChecks(context.Background(), withHomeSeams(DoctorOptions{
 		XcodeVersion: func(context.Context) (string, error) {
 			return "Xcode 27.0\nBuild version 27A5194q", nil
 		},
 		SimctlRuntimes: func(context.Context) ([]string, error) {
 			return []string{"iOS 27.0", "watchOS 27.0"}, nil
 		},
-		SocketPath: sock,
-		DialPing:   func(context.Context) error { return nil },
-		ListLeases: func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil },
-		LeasesRoot: t.TempDir(),
-	})
+		SimurghHomeEnv: homeEnv,
+		PasswdHome:     passwdHome,
+		EnvHome:        envHome,
+		SocketPath:     sock,
+		DialPing:       func(context.Context) error { return nil },
+		ListLeases:     func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil },
+		LeasesRoot:     t.TempDir(),
+	}))
 
-	if len(checks) != 7 {
-		t.Fatalf("got %d checks, want 7", len(checks))
+	if len(checks) != 8 {
+		t.Fatalf("got %d checks, want 8", len(checks))
 	}
 	for _, c := range checks {
 		if !c.OK {
@@ -66,15 +76,22 @@ func TestRunChecksAllGreen(t *testing.T) {
 	}
 }
 
-func greenExtras(t *testing.T) (func(context.Context) ([]LeaseExpiryInfo, error), string) {
+func greenExtras(t *testing.T) (func(context.Context) ([]LeaseExpiryInfo, error), string, func() string, func() (string, error), func() string) {
 	t.Helper()
-	return func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil }, t.TempDir()
+	homeEnv, passwdHome, envHome := greenHomeSeams()
+	return func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil }, t.TempDir(), homeEnv, passwdHome, envHome
 }
 
 func TestRunChecksCollectAllFailures(t *testing.T) {
 	dir := shortTempDir(t)
 	goodSock := mustSocket0600(t, dir, "good.sock")
-	listOK, leasesRoot := greenExtras(t)
+	listOK, leasesRoot, homeEnv, passwdHome, envHome := greenExtras(t)
+	homeFields := func(opts DoctorOptions) DoctorOptions {
+		opts.SimurghHomeEnv = homeEnv
+		opts.PasswdHome = passwdHome
+		opts.EnvHome = envHome
+		return opts
+	}
 
 	cases := []struct {
 		name        string
@@ -84,7 +101,7 @@ func TestRunChecksCollectAllFailures(t *testing.T) {
 	}{
 		{
 			name: "xcode alone",
-			opts: DoctorOptions{
+			opts: homeFields(DoctorOptions{
 				XcodeVersion: func(context.Context) (string, error) {
 					return "", errors.New("xcodebuild: command not found")
 				},
@@ -95,13 +112,13 @@ func TestRunChecksCollectAllFailures(t *testing.T) {
 				DialPing:   func(context.Context) error { return nil },
 				ListLeases: listOK,
 				LeasesRoot: leasesRoot,
-			},
+			}),
 			wantFailed:  []string{"xcode"},
-			wantOKCount: 6,
+			wantOKCount: 7,
 		},
 		{
 			name: "simctl probe fails both simctl and runtimes",
-			opts: DoctorOptions{
+			opts: homeFields(DoctorOptions{
 				XcodeVersion: func(context.Context) (string, error) {
 					return "Xcode 27.0", nil
 				},
@@ -112,14 +129,14 @@ func TestRunChecksCollectAllFailures(t *testing.T) {
 				DialPing:   func(context.Context) error { return nil },
 				ListLeases: listOK,
 				LeasesRoot: leasesRoot,
-			},
+			}),
 			// Shared probe: one shell-out; both checks report the failure.
 			wantFailed:  []string{"simctl", "runtimes"},
-			wantOKCount: 5,
+			wantOKCount: 6,
 		},
 		{
 			name: "runtimes alone",
-			opts: DoctorOptions{
+			opts: homeFields(DoctorOptions{
 				XcodeVersion: func(context.Context) (string, error) {
 					return "Xcode 27.0", nil
 				},
@@ -130,13 +147,13 @@ func TestRunChecksCollectAllFailures(t *testing.T) {
 				DialPing:   func(context.Context) error { return nil },
 				ListLeases: listOK,
 				LeasesRoot: leasesRoot,
-			},
+			}),
 			wantFailed:  []string{"runtimes"},
-			wantOKCount: 6,
+			wantOKCount: 7,
 		},
 		{
 			name: "socket alone",
-			opts: DoctorOptions{
+			opts: homeFields(DoctorOptions{
 				XcodeVersion: func(context.Context) (string, error) {
 					return "Xcode 27.0", nil
 				},
@@ -147,13 +164,13 @@ func TestRunChecksCollectAllFailures(t *testing.T) {
 				DialPing:   func(context.Context) error { return nil },
 				ListLeases: listOK,
 				LeasesRoot: leasesRoot,
-			},
+			}),
 			wantFailed:  []string{"socket"},
-			wantOKCount: 6,
+			wantOKCount: 7,
 		},
 		{
 			name: "daemon alone",
-			opts: DoctorOptions{
+			opts: homeFields(DoctorOptions{
 				XcodeVersion: func(context.Context) (string, error) {
 					return "Xcode 27.0", nil
 				},
@@ -166,18 +183,18 @@ func TestRunChecksCollectAllFailures(t *testing.T) {
 				},
 				ListLeases: listOK,
 				LeasesRoot: leasesRoot,
-			},
+			}),
 			// stale-leases reuses the same daemon-not-running signal.
 			wantFailed:  []string{"daemon", "stale-leases"},
-			wantOKCount: 5,
+			wantOKCount: 6,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			checks := RunChecks(context.Background(), tc.opts)
-			if len(checks) != 7 {
-				t.Fatalf("got %d checks, want 7 (collect-all)", len(checks))
+			if len(checks) != 8 {
+				t.Fatalf("got %d checks, want 8 (collect-all)", len(checks))
 			}
 			failed := map[string]Check{}
 			okCount := 0
@@ -209,17 +226,25 @@ func TestRunChecksCollectAllFailures(t *testing.T) {
 	}
 }
 
+func withHomeSeams(opts DoctorOptions) DoctorOptions {
+	homeEnv, passwdHome, envHome := greenHomeSeams()
+	opts.SimurghHomeEnv = homeEnv
+	opts.PasswdHome = passwdHome
+	opts.EnvHome = envHome
+	return opts
+}
+
 func TestRunChecksDaemonFixIsDaemonRun(t *testing.T) {
 	sock := mustSocket0600(t, shortTempDir(t), "s.sock")
 
-	checks := RunChecks(context.Background(), DoctorOptions{
+	checks := RunChecks(context.Background(), withHomeSeams(DoctorOptions{
 		XcodeVersion:   func(context.Context) (string, error) { return "Xcode 27.0", nil },
 		SimctlRuntimes: func(context.Context) ([]string, error) { return []string{"iOS 27.0"}, nil },
 		SocketPath:     sock,
 		DialPing:       func(context.Context) error { return errors.New("dial unix: connection refused") },
 		ListLeases:     func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil },
 		LeasesRoot:     t.TempDir(),
-	})
+	}))
 	var daemon Check
 	for _, c := range checks {
 		if c.Name == "daemon" {
@@ -240,14 +265,14 @@ func TestRunChecksDaemonFixIsDaemonRun(t *testing.T) {
 func TestRunChecksRuntimesFixIsDownloadPlatform(t *testing.T) {
 	sock := mustSocket0600(t, shortTempDir(t), "s.sock")
 
-	checks := RunChecks(context.Background(), DoctorOptions{
+	checks := RunChecks(context.Background(), withHomeSeams(DoctorOptions{
 		XcodeVersion:   func(context.Context) (string, error) { return "Xcode 27.0", nil },
 		SimctlRuntimes: func(context.Context) ([]string, error) { return nil, nil },
 		SocketPath:     sock,
 		DialPing:       func(context.Context) error { return nil },
 		ListLeases:     func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil },
 		LeasesRoot:     t.TempDir(),
-	})
+	}))
 	var runtimes Check
 	for _, c := range checks {
 		if c.Name == "runtimes" {
@@ -265,7 +290,7 @@ func TestRunChecksRuntimesFixIsDownloadPlatform(t *testing.T) {
 func TestRunChecksSimctlFailureStillReportsRuntimes(t *testing.T) {
 	sock := mustSocket0600(t, shortTempDir(t), "s.sock")
 
-	checks := RunChecks(context.Background(), DoctorOptions{
+	checks := RunChecks(context.Background(), withHomeSeams(DoctorOptions{
 		XcodeVersion: func(context.Context) (string, error) { return "Xcode 27.0", nil },
 		SimctlRuntimes: func(context.Context) ([]string, error) {
 			return nil, errors.New("simctl boom")
@@ -274,7 +299,7 @@ func TestRunChecksSimctlFailureStillReportsRuntimes(t *testing.T) {
 		DialPing:   func(context.Context) error { return nil },
 		ListLeases: func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil },
 		LeasesRoot: t.TempDir(),
-	})
+	}))
 	byName := map[string]Check{}
 	for _, c := range checks {
 		byName[c.Name] = c
@@ -317,14 +342,14 @@ func TestSocketWrongModeFails(t *testing.T) {
 		t.Fatalf("chmod: %v", err)
 	}
 
-	checks := RunChecks(context.Background(), DoctorOptions{
+	checks := RunChecks(context.Background(), withHomeSeams(DoctorOptions{
 		XcodeVersion:   func(context.Context) (string, error) { return "Xcode 27.0", nil },
 		SimctlRuntimes: func(context.Context) ([]string, error) { return []string{"iOS 27.0"}, nil },
 		SocketPath:     sock,
 		DialPing:       func(context.Context) error { return nil },
 		ListLeases:     func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil },
 		LeasesRoot:     t.TempDir(),
-	})
+	}))
 	var socket Check
 	for _, c := range checks {
 		if c.Name == "socket" {
@@ -342,7 +367,7 @@ func TestSocketWrongModeFails(t *testing.T) {
 func TestStaleLeases_OKWhenNone(t *testing.T) {
 	sock := mustSocket0600(t, shortTempDir(t), "s.sock")
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
-	checks := RunChecks(context.Background(), DoctorOptions{
+	checks := RunChecks(context.Background(), withHomeSeams(DoctorOptions{
 		XcodeVersion:   func(context.Context) (string, error) { return "Xcode 27.0", nil },
 		SimctlRuntimes: func(context.Context) ([]string, error) { return []string{"iOS 27.0"}, nil },
 		SocketPath:     sock,
@@ -355,7 +380,7 @@ func TestStaleLeases_OKWhenNone(t *testing.T) {
 			}, nil
 		},
 		LeasesRoot: t.TempDir(),
-	})
+	}))
 	c := byCheckName(checks, "stale-leases")
 	if !c.OK || c.Message != "0 stale active leases" {
 		t.Fatalf("stale-leases=%+v", c)
@@ -365,7 +390,7 @@ func TestStaleLeases_OKWhenNone(t *testing.T) {
 func TestStaleLeases_FailsWhenPastGrace(t *testing.T) {
 	sock := mustSocket0600(t, shortTempDir(t), "s.sock")
 	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
-	checks := RunChecks(context.Background(), DoctorOptions{
+	checks := RunChecks(context.Background(), withHomeSeams(DoctorOptions{
 		XcodeVersion:   func(context.Context) (string, error) { return "Xcode 27.0", nil },
 		SimctlRuntimes: func(context.Context) ([]string, error) { return []string{"iOS 27.0"}, nil },
 		SocketPath:     sock,
@@ -377,7 +402,7 @@ func TestStaleLeases_FailsWhenPastGrace(t *testing.T) {
 			}, nil
 		},
 		LeasesRoot: t.TempDir(),
-	})
+	}))
 	c := byCheckName(checks, "stale-leases")
 	if c.OK {
 		t.Fatal("expected stale-leases failure")
@@ -392,14 +417,14 @@ func TestStaleLeases_FailsWhenPastGrace(t *testing.T) {
 
 func TestStaleLeases_DaemonDownReusesDaemonSignal(t *testing.T) {
 	sock := mustSocket0600(t, shortTempDir(t), "s.sock")
-	checks := RunChecks(context.Background(), DoctorOptions{
+	checks := RunChecks(context.Background(), withHomeSeams(DoctorOptions{
 		XcodeVersion:   func(context.Context) (string, error) { return "Xcode 27.0", nil },
 		SimctlRuntimes: func(context.Context) ([]string, error) { return []string{"iOS 27.0"}, nil },
 		SocketPath:     sock,
 		DialPing:       func(context.Context) error { return errors.New("connection refused") },
 		ListLeases:     func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil },
 		LeasesRoot:     t.TempDir(),
-	})
+	}))
 	c := byCheckName(checks, "stale-leases")
 	if c.OK || c.Code != CodeDaemonNotRunning || c.Fix != FixDaemonNotRunning {
 		t.Fatalf("stale-leases should reuse daemon-not-running: %+v", c)
@@ -412,20 +437,42 @@ func TestDiskUsage_AlwaysOK(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "blob"), make([]byte, 2048), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	checks := RunChecks(context.Background(), DoctorOptions{
+	checks := RunChecks(context.Background(), withHomeSeams(DoctorOptions{
 		XcodeVersion:   func(context.Context) (string, error) { return "Xcode 27.0", nil },
 		SimctlRuntimes: func(context.Context) ([]string, error) { return []string{"iOS 27.0"}, nil },
 		SocketPath:     sock,
 		DialPing:       func(context.Context) error { return nil },
 		ListLeases:     func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil },
 		LeasesRoot:     root,
-	})
+	}))
 	c := byCheckName(checks, "disk-usage")
 	if !c.OK {
 		t.Fatalf("disk-usage must always be OK: %+v", c)
 	}
 	if !strings.Contains(c.Message, "leases/:") {
 		t.Fatalf("message=%q", c.Message)
+	}
+}
+
+func TestRunChecksHomeMismatch(t *testing.T) {
+	sock := mustSocket0600(t, shortTempDir(t), "s.sock")
+	checks := RunChecks(context.Background(), DoctorOptions{
+		XcodeVersion:   func(context.Context) (string, error) { return "Xcode 27.0", nil },
+		SimctlRuntimes: func(context.Context) ([]string, error) { return []string{"iOS 27.0"}, nil },
+		SimurghHomeEnv: func() string { return "" },
+		PasswdHome:     func() (string, error) { return "/Users/passwd", nil },
+		EnvHome:        func() string { return "/tmp/polluted" },
+		SocketPath:     sock,
+		DialPing:       func(context.Context) error { return nil },
+		ListLeases:     func(context.Context) ([]LeaseExpiryInfo, error) { return nil, nil },
+		LeasesRoot:     t.TempDir(),
+	})
+	c := byCheckName(checks, "home-mismatch")
+	if c.OK {
+		t.Fatalf("home-mismatch should fail: %+v", c)
+	}
+	if c.Code != CodeHomeMismatch || c.Fix != FixHomeMismatch {
+		t.Fatalf("home-mismatch=%+v", c)
 	}
 }
 

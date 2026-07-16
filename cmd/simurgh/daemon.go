@@ -34,18 +34,6 @@ const (
 	daemonStatusLogLines    = 50
 )
 
-// simurghHomeDir resolves the on-disk root: $SIMURGH_HOME if set, else ~/.simurgh.
-func simurghHomeDir() (string, error) {
-	if h := os.Getenv("SIMURGH_HOME"); h != "" {
-		return h, nil
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(home, ".simurgh"), nil
-}
-
 // DefaultSocketPath returns the production Unix socket path.
 func DefaultSocketPath() (string, error) {
 	home, err := simurghHomeDir()

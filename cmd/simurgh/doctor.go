@@ -34,6 +34,9 @@ func runDoctor(jsonOut bool) int {
 		DialPing:       dialPing(socketPath),
 		ListLeases:     listLeasesForDoctor,
 		LeasesRoot:     leasesRoot,
+		SimurghHomeEnv: func() string { return os.Getenv("SIMURGH_HOME") },
+		PasswdHome:     passwdHomeDir,
+		EnvHome:        func() string { return os.Getenv("HOME") },
 	}
 
 	checks := cli.RunChecks(context.Background(), opts)

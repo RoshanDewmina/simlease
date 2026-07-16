@@ -474,6 +474,7 @@ func runRelease(args []string) int {
 	var (
 		leaseID string
 		all     bool
+		force   bool
 		labels  = make(map[string]string)
 		asJSON  bool
 		posSeen bool
@@ -483,6 +484,8 @@ func runRelease(args []string) int {
 		switch {
 		case a == "--all":
 			all = true
+		case a == "--force":
+			force = true
 		case a == "--json":
 			asJSON = true
 		case a == "--label":
@@ -498,7 +501,7 @@ func runRelease(args []string) int {
 			}
 			labels[k] = v
 		case a == "-h" || a == "--help" || a == "help":
-			fmt.Println("usage: simurgh release [<lease-id>] [--all --label k=v] [--json]")
+			fmt.Println("usage: simurgh release [<lease-id>] [--all --label k=v] [--force] [--json]")
 			return 0
 		case strings.HasPrefix(a, "-"):
 			printErrorTriple("INVALID_INPUT", fmt.Sprintf("unknown flag %q", a), "simurgh release [<lease-id>] [--all --label k=v]", asJSON)
@@ -535,6 +538,10 @@ func runRelease(args []string) int {
 		}
 		printErrorTriple("INVALID_INPUT", err.Error(), "simurgh release [<lease-id>]", asJSON)
 		return 3
+	}
+
+	if errCode := verifyReleaseOwner(id, force, asJSON); errCode != 0 {
+		return errCode
 	}
 
 	raw, err := dialAndCall(context.Background(), "lease.release", map[string]any{"id": id})

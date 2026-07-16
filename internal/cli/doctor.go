@@ -17,6 +17,7 @@ const (
 	CodeSocketInvalid     = "SOCKET_INVALID"
 	CodeDaemonNotRunning  = "DAEMON_NOT_RUNNING"
 	CodeStaleLeases       = "STALE_LEASES"
+	CodeHomeMismatch      = "HOME_MISMATCH"
 )
 
 // Exact fix command strings for failing checks.
@@ -28,7 +29,8 @@ const (
 	FixDaemonNotRunning  = "simurgh daemon run"
 	// Stale ACTIVE leases are past ExpiresAt; release triggers immediate teardown
 	// (M2.3). prune does not touch ACTIVE leases — do not suggest prune here.
-	FixStaleLeases = "simurgh release <lease-id>"
+	FixStaleLeases  = "simurgh release <lease-id>"
+	FixHomeMismatch = "export SIMURGH_HOME=$HOME/.simurgh  # or unset HOME to match passwd home"
 )
 
 // StaleLeaseGrace is how far past ExpiresAt an ACTIVE lease may drift before
@@ -63,14 +65,19 @@ type DoctorOptions struct {
 	LeasesRoot string
 	// Now overrides wall clock for the stale-lease check (tests).
 	Now func() time.Time
+	// Home resolution seams for the home-mismatch check (tests).
+	SimurghHomeEnv func() string
+	PasswdHome     func() (string, error)
+	EnvHome        func() string
 }
 
 // RunChecks runs all doctor checks and returns every result (collect-all, not fail-fast).
 func RunChecks(ctx context.Context, opts DoctorOptions) []Check {
-	checks := make([]Check, 0, 7)
+	checks := make([]Check, 0, 8)
 	checks = append(checks, checkXcode(ctx, opts))
 	simctl, runtimes := checkSimctlAndRuntimes(ctx, opts)
 	checks = append(checks, simctl, runtimes)
+	checks = append(checks, checkHomeMismatch(opts))
 	checks = append(checks, checkSocket(opts.SocketPath))
 	checks = append(checks, checkDaemon(ctx, opts))
 	checks = append(checks, checkStaleLeases(ctx, opts))
@@ -125,6 +132,31 @@ func checkSimctlAndRuntimes(ctx context.Context, opts DoctorOptions) (Check, Che
 		return simctlOK, fail(runtimesName, CodeIOSRuntimeMissing, "no installed iOS simulator runtime", FixIOSRuntimeMissing)
 	}
 	return simctlOK, ok(runtimesName, fmt.Sprintf("%d iOS runtime(s): %s", len(ios), strings.Join(ios, ", ")))
+}
+
+func checkHomeMismatch(opts DoctorOptions) Check {
+	const name = "home-mismatch"
+	simurghHome := ""
+	if opts.SimurghHomeEnv != nil {
+		simurghHome = opts.SimurghHomeEnv()
+	}
+	if simurghHome != "" {
+		return ok(name, fmt.Sprintf("SIMURGH_HOME set (%s)", simurghHome))
+	}
+	if opts.PasswdHome == nil || opts.EnvHome == nil {
+		return fail(name, CodeHomeMismatch, "home resolution probes not configured", FixHomeMismatch)
+	}
+	passwdHome, err := opts.PasswdHome()
+	if err != nil {
+		return fail(name, CodeHomeMismatch, fmt.Sprintf("passwd home lookup failed: %v", err), FixHomeMismatch)
+	}
+	envHome := opts.EnvHome()
+	if envHome == "" || envHome == passwdHome {
+		return ok(name, fmt.Sprintf("HOME matches passwd home (%s)", passwdHome))
+	}
+	return fail(name, CodeHomeMismatch,
+		fmt.Sprintf("HOME=%q differs from passwd home %q while SIMURGH_HOME is unset", envHome, passwdHome),
+		FixHomeMismatch)
 }
 
 func checkSocket(path string) Check {

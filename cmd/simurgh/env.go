@@ -122,10 +122,12 @@ func runExec(args []string) int {
 			sawDash = true
 		case a == "-h" || a == "--help" || a == "help":
 			fmt.Println(`usage: simurgh exec <lease-id> -- <cmd...>
-Run <cmd> with the lease isolation env injected. For xcodebuild, also injects
-isolation flags (-derivedDataPath, -clonedSourcePackagesDirPath, -destination).
+Run <cmd> with the lease isolation env injected. Renews the lease periodically
+while the child runs. For xcodebuild, merges isolation flags: skips
+-derivedDataPath, -clonedSourcePackagesDirPath, and -resultBundlePath when you
+already passed them; always replaces -destination with the leased simulator.
 For xcodebuild test / test-without-building, additionally allocates a fresh
--resultBundlePath under the lease Results/ dir.
+-resultBundlePath under the lease Results/ dir when you did not supply one.
 Exit code is the child's exit code (not the IPC 0/2/3/4/5 contract).`)
 			return 0
 		case strings.HasPrefix(a, "-"):
@@ -175,21 +177,23 @@ Exit code is the child's exit code (not the IPC 0/2/3/4/5 contract).`)
 	var warmKey WarmSeedKey
 	var haveWarmKey bool
 	var warmHome string
+	var skipWarmDD bool
 	leaseDD := iso.Env["SIMURGH_DERIVED_DATA"]
 	if isXcodebuild(argv) {
-		// Inject base isolation flags after the binary (PATH shim is v0.1 — not built).
-		flags := append([]string(nil), iso.XcodebuildFlags...)
+		isolationFlags := append([]string(nil), iso.XcodebuildFlags...)
 		if isXcodebuildTest(argv) {
 			results := iso.Env["SIMURGH_RESULT_BUNDLE_DIR"]
 			if results == "" {
 				results = filepath.Join(iso.Env["SIMURGH_DERIVED_DATA"], "..", "Results")
 			}
 			bundle := isolator.AllocateResultBundlePath(isolator.LeaseDirs{Results: results}, time.Now)
-			flags = append(flags, "-resultBundlePath", bundle)
+			isolationFlags = append(isolationFlags, "-resultBundlePath", bundle)
 		}
-		argv = append([]string{argv[0]}, append(flags, argv[1:]...)...)
+		var mergeRes MergeXcodebuildFlagsResult
+		argv, mergeRes = MergeXcodebuildIsolationFlags(argv, isolationFlags, os.Stderr)
+		skipWarmDD = mergeRes.SkipWarmDerivedData
 
-		if !isXcodebuildQueryOnly(argv) {
+		if !skipWarmDD && !isXcodebuildQueryOnly(argv) {
 			if home, herr := simurghHomeDir(); herr == nil {
 				xcodeVersion, xcodeBuild := probeXcodeVersionBuild()
 				sdk, runtime := probeSDKRuntime()
@@ -213,20 +217,32 @@ Exit code is the child's exit code (not the IPC 0/2/3/4/5 contract).`)
 		env = append(env, k+"="+v)
 	}
 
+	renewCtx, stopRenew := context.WithCancel(context.Background())
+	defer stopRenew()
+	renewLoop := newExecRenewLoop(leaseID, wrap.Lease, func(ctx context.Context) error {
+		_, renewErr := dialAndCall(ctx, "lease.renew", map[string]any{"id": leaseID})
+		return renewErr
+	})
+	go renewLoop.run(renewCtx)
+
 	cmd := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
 	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	err = cmd.Run()
+	stopRenew()
+
 	if err == nil {
-		if haveWarmKey && leaseDD != "" {
+		if haveWarmKey && !skipWarmDD && leaseDD != "" {
 			_ = PublishWarmSeed(warmHome, warmKey, leaseDD)
 		}
+		logExecLeaseStatusAfterChild(leaseID)
 		return 0
 	}
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
+		logExecLeaseStatusAfterChild(leaseID)
 		return ee.ExitCode()
 	}
 	fmt.Fprintf(os.Stderr, "simurgh exec: %v\n", err)

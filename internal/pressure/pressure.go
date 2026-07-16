@@ -43,12 +43,45 @@ var commandRunner runner = func(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).Output()
 }
 
-// CheckRAM reports whether free+inactive pages exceed minFreeBytes.
-// A minFreeBytes of 0 uses the 4 GiB architecture default.
-// Fail-open on exec/parse errors.
+// kern.memorystatus_vm_pressure_level values (xnu memorystatus.h).
+const (
+	kernelPressureNormal   = 1
+	kernelPressureWarn     = 2
+	kernelPressureCritical = 4
+)
+
+// CheckRAM reports whether the host has memory headroom for a new lease.
+//
+// Primary signal: the kernel's own pressure verdict
+// (kern.memorystatus_vm_pressure_level: 1=normal, 2=warn, 4=critical).
+// free+inactive systematically undercounts availability on macOS — the
+// compressor and file cache keep those pools small on a busy-but-healthy
+// host (observed 2026-07-16: the old gate blocked the pool at 2.6 GiB
+// free+inactive while the kernel reported warn and memory_pressure showed
+// 38% system-wide free). Only critical blocks; warn is allowed but noted.
+//
+// Fallback: free+inactive vs minFreeBytes when the sysctl is unreadable
+// (minFreeBytes 0 uses the 4 GiB architecture default). Fail-open on
+// exec/parse errors, per package contract.
 func CheckRAM(minFreeBytes uint64) Signal {
 	if minFreeBytes == 0 {
 		minFreeBytes = defaultMinRAMBytes
+	}
+	if out, err := commandRunner("sysctl", "-n", "kern.memorystatus_vm_pressure_level"); err == nil {
+		if level, perr := strconv.Atoi(strings.TrimSpace(string(out))); perr == nil {
+			if level >= kernelPressureCritical {
+				return Signal{
+					Name:   "ram",
+					OK:     false,
+					Detail: fmt.Sprintf("kernel memory pressure critical (level %d)", level),
+				}
+			}
+			return Signal{
+				Name:   "ram",
+				OK:     true,
+				Detail: fmt.Sprintf("kernel memory pressure level %d (1=normal 2=warn 4=critical)", level),
+			}
+		}
 	}
 	out, err := commandRunner("vm_stat")
 	if err != nil {

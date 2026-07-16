@@ -39,8 +39,58 @@ func TestCheckDiskStatfsErrorFailsOpen(t *testing.T) {
 	}
 }
 
+func TestCheckRAMKernelPressureLevels(t *testing.T) {
+	cases := []struct {
+		level string
+		ok    bool
+	}{
+		{"1", true},  // normal
+		{"2", true},  // warn — allowed, sims still boot fine
+		{"4", false}, // critical — block
+	}
+	for _, c := range cases {
+		restore := setRunner(func(name string, args ...string) ([]byte, error) {
+			if name != "sysctl" {
+				t.Fatalf("kernel path must not fall back for level %s: %s %v", c.level, name, args)
+			}
+			return []byte(c.level + "\n"), nil
+		})
+		sig := CheckRAM(4 << 30)
+		restore()
+		if sig.OK != c.ok {
+			t.Fatalf("level %s: OK = %v want %v (%+v)", c.level, sig.OK, c.ok, sig)
+		}
+		if sig.Name != "ram" {
+			t.Fatalf("Name = %q", sig.Name)
+		}
+	}
+}
+
+func TestCheckRAMSysctlUnavailableFallsBackToVMStat(t *testing.T) {
+	defer setRunner(func(name string, args ...string) ([]byte, error) {
+		if name == "sysctl" {
+			return nil, errors.New("sysctl: unknown oid")
+		}
+		return []byte(`Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                               300000.
+Pages inactive:                           200000.
+`), nil
+	})()
+
+	sig := CheckRAM(4 << 30)
+	if !sig.OK {
+		t.Fatalf("fallback vm_stat path should pass: %+v", sig)
+	}
+	if !strings.Contains(sig.Detail, "free+inactive") {
+		t.Fatalf("fallback Detail should be the vm_stat form: %q", sig.Detail)
+	}
+}
+
 func TestCheckRAMParsesRealShapedOutput(t *testing.T) {
 	defer setRunner(func(name string, args ...string) ([]byte, error) {
+		if name == "sysctl" {
+			return nil, errors.New("forced fallback to vm_stat")
+		}
 		if name != "vm_stat" {
 			t.Fatalf("unexpected command %s %v", name, args)
 		}

@@ -214,6 +214,22 @@ session A's adapter was stopped. This is a functional isolation proof, not
 a latency/performance claim, and not an independent-review pass — see
 `docs/ARCHITECTURE.md` §14 and `docs/plans/orchestrator-state.md`.
 
+**Isolation only holds if every caller goes through the adapter.** Calling
+the raw XcodeBuildMCP MCP tools directly (`session_set_defaults`,
+`build_run_sim`, etc. against a globally-registered XcodeBuildMCP server,
+not one started via `integration xcodebuildmcp start --session <id>`)
+bypasses this isolation entirely — that server's session defaults are
+process-global, so two concurrent agents calling it directly WILL clobber
+each other's project/scheme/simulator regardless of which Simurgh lease
+each one holds (observed live, two independent agents, 2026-07-17). Always
+start the per-lease adapter first and drive builds through it.
+
+**`build_run_sim`'s `launchArgs` parameter is argv, not env vars.** To pass
+environment (e.g. `LANCER_SEED_DEMO=1`) to the launched app, use
+`session_set_defaults({env: {...}})` (via the per-lease adapter) or
+`launch_app_sim`'s `env:` map — not `launchArgs`, which only affects process
+argv and silently does nothing for env-gated debug seams.
+
 ## Release discipline
 
 Always `lease_release` / `simurgh release` when done.

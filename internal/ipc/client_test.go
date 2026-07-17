@@ -3,10 +3,15 @@ package ipc
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -168,4 +173,51 @@ func buildFakeDaemon(t *testing.T) string {
 		t.Fatalf("build fakedaemon: %v\n%s", err, outBytes)
 	}
 	return out
+}
+
+func TestClassifyResponseFailureDaemonDisconnected(t *testing.T) {
+	cases := []error{
+		io.EOF,
+		&net.OpError{Op: "read", Net: "unix", Err: syscall.ECONNRESET},
+		&net.OpError{Op: "read", Net: "unix", Err: syscall.EPIPE},
+	}
+	for _, in := range cases {
+		err := ClassifyResponseFailure(in)
+		var dd *DaemonDisconnectedError
+		if !errors.As(err, &dd) || dd.ErrorEnvelope == nil {
+			t.Fatalf("ClassifyResponseFailure(%v) = %v, want DaemonDisconnectedError", in, err)
+		}
+		if dd.ErrorEnvelope.Code != CodeDaemonDisconnected {
+			t.Fatalf("code=%q want %q", dd.ErrorEnvelope.Code, CodeDaemonDisconnected)
+		}
+		if dd.ErrorEnvelope.Message == "" || dd.ErrorEnvelope.Fix == "" {
+			t.Fatalf("non-actionable envelope: %+v", dd.ErrorEnvelope)
+		}
+		if !strings.Contains(dd.ErrorEnvelope.Fix, "simurgh daemon status") {
+			t.Fatalf("fix must reference daemon status: %q", dd.ErrorEnvelope.Fix)
+		}
+	}
+}
+
+func TestClassifyResponseFailureKeepsTruncatedProtocolError(t *testing.T) {
+	err := ClassifyResponseFailure(ErrTruncatedFrame)
+	if !errors.Is(err, ErrTruncatedFrame) {
+		t.Fatalf("got %v, want ErrTruncatedFrame unchanged", err)
+	}
+	var dd *DaemonDisconnectedError
+	if errors.As(err, &dd) {
+		t.Fatalf("truncated frame must not become daemon-disconnected: %+v", dd)
+	}
+}
+
+func TestClassifyResponseFailureKeepsMalformedJSON(t *testing.T) {
+	in := fmt.Errorf("%w: unexpected end", ErrMalformedJSON)
+	err := ClassifyResponseFailure(in)
+	if !errors.Is(err, ErrMalformedJSON) {
+		t.Fatalf("got %v, want ErrMalformedJSON unchanged", err)
+	}
+	var dd *DaemonDisconnectedError
+	if errors.As(err, &dd) {
+		t.Fatalf("malformed frame must not become daemon-disconnected: %+v", dd)
+	}
 }

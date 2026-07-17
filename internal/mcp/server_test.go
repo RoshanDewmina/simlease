@@ -605,6 +605,70 @@ func TestDaemonErrorSurfacesAsToolErrorWithMessageAndFix(t *testing.T) {
 	}
 }
 
+func TestLeaseAcquireWaitMidResponseEOFDaemonDisconnected(t *testing.T) {
+	home, err := os.MkdirTemp("/tmp", "smg-mcp-eof-")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	t.Setenv("SIMURGH_HOME", home)
+	if err := os.MkdirAll(filepath.Join(home, "logs"), 0o700); err != nil {
+		t.Fatalf("mkdir logs: %v", err)
+	}
+
+	socketPath := filepath.Join(home, "simurghd.sock")
+	ln, err := ipc.Listen(socketPath)
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		req, err := ipc.NewDecoder(c).DecodeRequest()
+		if err != nil {
+			return
+		}
+		if req.Method != "lease.acquire" {
+			return
+		}
+		// Mid-response EOF: drop after the wait:true acquire request is in.
+	}()
+
+	srv := NewServer()
+	cs := connectTestClient(t, srv)
+	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name: "lease_acquire",
+		Arguments: map[string]any{
+			"model": "iPhone 17 Pro",
+			"wait":  true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CallTool protocol error: %v", err)
+	}
+	if !res.IsError {
+		t.Fatal("expected IsError=true")
+	}
+	text := toolErrorText(t, res)
+	if strings.TrimSpace(text) == "EOF" || text == "EOF" {
+		t.Fatalf("want DAEMON_DISCONNECTED triple, got bare EOF: %q", text)
+	}
+	if !strings.Contains(text, ipc.CodeDaemonDisconnected) {
+		t.Fatalf("error text missing code: %q", text)
+	}
+	if !strings.Contains(text, "fix:") || !strings.Contains(text, "simurgh daemon status") {
+		t.Fatalf("error text missing fix: %q", text)
+	}
+	if !strings.Contains(text, "connection to daemon lost") {
+		t.Fatalf("error text missing message: %q", text)
+	}
+}
+
 func decodeStructured[T any](t *testing.T, res *mcpsdk.CallToolResult) T {
 	t.Helper()
 	var out T

@@ -1549,3 +1549,124 @@ func TestAcquireCancelledMapsToActionableIPCError(t *testing.T) {
 		}
 	}
 }
+
+func TestCancelDeadQueuedOwnersAfterRehydrate(t *testing.T) {
+	journal := filepath.Join(t.TempDir(), "state.json")
+	st := store.New(journal)
+	seed := map[string]*broker.Lease{
+		"lease-active": {
+			ID: "lease-active", State: broker.LeaseActive, Owner: broker.Owner{PID: 1},
+			Spec: testSpec(), Connection: broker.Connection{Transport: "local"},
+			TTL: time.Minute, Device: &broker.Device{UDID: "U1", Name: "simurgh-clone[a]", Booted: true},
+			AcquiredAt: time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC),
+		},
+		"lease-dead-queued": {
+			ID: "lease-dead-queued", State: broker.LeaseQueued, Owner: broker.Owner{PID: 424242},
+			Spec: testSpec(), Connection: broker.Connection{Transport: "local"},
+			TTL: time.Minute, AcquiredAt: time.Date(2026, 7, 16, 12, 1, 0, 0, time.UTC),
+		},
+		"lease-live-queued": {
+			ID: "lease-live-queued", State: broker.LeaseQueued, Owner: broker.Owner{PID: 7},
+			Spec: testSpec(), Connection: broker.Connection{Transport: "local"},
+			TTL: time.Minute, AcquiredAt: time.Date(2026, 7, 16, 12, 2, 0, 0, time.UTC),
+		},
+	}
+	raw, err := json.Marshal(seed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Save(store.State{SchemaVersion: store.SchemaVersion, Leases: raw}); err != nil {
+		t.Fatal(err)
+	}
+
+	b := broker.New(broker.BrokerOptions{
+		Capacity:    1,
+		Provisioner: &fakeProvisioner{},
+		Store:       st,
+		PressureOK:  func() (bool, string) { return true, "" },
+	})
+	if err := b.Rehydrate(); err != nil {
+		t.Fatalf("Rehydrate: %v", err)
+	}
+
+	deps := Deps{Broker: b}
+	alive := func(pid int) bool { return pid != 424242 }
+	if err := CancelDeadQueuedOwners(deps, alive); err != nil {
+		t.Fatalf("CancelDeadQueuedOwners: %v", err)
+	}
+
+	dead, ok := b.Get("lease-dead-queued")
+	if !ok || dead.State != broker.LeaseCancelled {
+		t.Fatalf("dead-owner queued lease = %+v ok=%v want cancelled", dead, ok)
+	}
+	live, ok := b.Get("lease-live-queued")
+	if !ok || live.State != broker.LeaseQueued {
+		t.Fatalf("live-owner queued lease = %+v ok=%v want queued", live, ok)
+	}
+	active, ok := b.Get("lease-active")
+	if !ok || active.State != broker.LeaseActive {
+		t.Fatalf("active lease disturbed: %+v ok=%v", active, ok)
+	}
+
+	// Persisted truth must match: reload into a fresh broker.
+	b2 := broker.New(broker.BrokerOptions{
+		Capacity:    1,
+		Provisioner: &fakeProvisioner{},
+		Store:       st,
+		PressureOK:  func() (bool, string) { return true, "" },
+	})
+	if err := b2.Rehydrate(); err != nil {
+		t.Fatalf("second Rehydrate: %v", err)
+	}
+	persisted, ok := b2.Get("lease-dead-queued")
+	if !ok || persisted.State != broker.LeaseCancelled {
+		t.Fatalf("persisted dead-owner lease = %+v ok=%v want cancelled", persisted, ok)
+	}
+	live2, ok := b2.Get("lease-live-queued")
+	if !ok || live2.State != broker.LeaseQueued {
+		t.Fatalf("persisted live-owner lease = %+v ok=%v want queued", live2, ok)
+	}
+}
+
+func TestCancelDeadQueuedOwnersSkipsPromotedLease(t *testing.T) {
+	deps, b, deleter := newTestDeps(t, 1)
+	first, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), TTL: time.Hour, Owner: broker.Owner{PID: 1},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	queued, err := b.Acquire(context.Background(), broker.AcquireRequest{
+		Spec: testSpec(), TTL: time.Hour, Wait: false, Owner: broker.Owner{PID: 424242},
+	})
+	if !errors.As(err, new(*broker.CapacityQueuedError)) {
+		t.Fatalf("want CAPACITY_QUEUED, got %v", err)
+	}
+
+	// Capacity frees and promotes before the stale dead-owner cancel applies.
+	if _, err := b.Release(context.Background(), first.ID); err != nil {
+		t.Fatalf("release first: %v", err)
+	}
+	promoted, ok := b.Get(queued.ID)
+	if !ok || promoted.State != broker.LeaseActive {
+		t.Fatalf("queued lease not promoted: %+v ok=%v", promoted, ok)
+	}
+
+	if err := CancelDeadQueuedOwners(deps, func(pid int) bool { return false }); err != nil {
+		t.Fatalf("CancelDeadQueuedOwners: %v", err)
+	}
+
+	got, ok := b.Get(queued.ID)
+	if !ok || got.State != broker.LeaseActive {
+		t.Fatalf("stale dead-owner cancel changed promoted lease: %+v ok=%v", got, ok)
+	}
+	if deleted := deleter.deleted(); len(deleted) != 0 {
+		t.Fatalf("startup cancel must not delete devices, deleted=%v", deleted)
+	}
+}
+
+func TestCancelDeadQueuedOwnersRequiresBroker(t *testing.T) {
+	if err := CancelDeadQueuedOwners(Deps{}, nil); err == nil {
+		t.Fatal("expected error when broker is nil")
+	}
+}

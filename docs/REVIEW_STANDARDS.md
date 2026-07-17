@@ -50,3 +50,9 @@ These rules supplement the product and architecture source of truth. Reviewers m
   (Found 2026-07-14, R-WP6: replacing a `dialAndCall("lease.get", ...)` round-trip
   with a bare in-process closure silently changed lease-not-found from a structured
   `LEASE_NOT_FOUND`/exit-3 error to a generic `INTERNAL`/exit-5 one.)
+- A transport error classification shared by multiple public boundaries must be
+  wired and tested at every boundary that performs the response read (currently
+  CLI, MCP, and doctor), not only at the boundary where the bug was first
+  observed. Include a negative protocol-frame test so connection-loss mapping
+  cannot swallow malformed/truncated responses. (Found 2026-07-17, issue #2:
+  the first fix mapped mid-RPC EOF for CLI while MCP still returned bare EOF.)

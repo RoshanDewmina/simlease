@@ -109,11 +109,14 @@ integration for physical devices (post-v0).
 
 Agents are the user. Humans configure; agents consume.
 
-1. **MCP server built in** (`simurgh mcp`): `lease_acquire`, `lease_release`,
-   `lease_renew`, `lease_status`, `pool_status`. Tool results carry
-   everything the agent needs (UDID, env, expiry) in structured form.
-2. **CLI with `--json` everywhere** for bash-driven agents, hooks, CI.
-   Machine-readable exit codes; human-readable tables by default.
+1. **MCP server built in** (`simurgh mcp`): `lease_acquire`, `lease_renew`,
+   `lease_hold`, `lease_unhold`, `lease_release`, `lease_status`,
+   `pool_status` (seven tools; see `docs/ARCHITECTURE.md` §8). Tool results
+   carry everything the agent needs (UDID, env, expiry) in structured form.
+2. **CLI with `--json` everywhere** for bash-driven agents, hooks, CI —
+   acquire/release/renew/hold/unhold/status/list/env/exec/shell/warm/prune/
+   doctor/init/mcp/daemon/integration. Machine-readable exit codes;
+   human-readable tables by default.
 3. **Paste-ready agent onboarding**: `simurgh init` writes/offers a
    `CLAUDE.md`/rules snippet + `.mcp.json` entry. Agents only use tools
    they're told about — the snippet is product, not documentation garnish.
@@ -127,14 +130,17 @@ Agents are the user. Humans configure; agents consume.
 ## 6. What v0 ships (scope contract)
 
 **In:** daemon (launchd LaunchAgent, Unix-socket IPC) · lease lifecycle
-(acquire/queue/renew/release/reclaim) · sim clone provisioning + warm
-templates · per-lease build-env isolation (env + flags emission) · capacity
-limits + basic queue · CLI (`acquire`, `release`, `renew`, `status`, `list`,
-`prune`, `doctor`, `init`, `mcp`, `daemon`) · MCP server · cleanup/orphan
-detection · agent onboarding snippet.
+(acquire/queue/renew/hold/unhold/release/reclaim) · sim clone provisioning +
+warm templates · per-lease build-env isolation (env + flags emission) · capacity
+limits + basic queue · CLI (`acquire`, `release`, `renew`, `hold`, `unhold`,
+`status`, `list`, `env`, `exec`, `shell`, `warm`, `prune`, `doctor`, `init`,
+`mcp`, `daemon`, `integration`) · MCP server (seven tools) · cleanup/orphan
+detection · agent onboarding snippet · `--reuse-if-exists` identity matching
+(R-WP1) · audit-mode PATH shims via `simurgh shell` (R-WP5).
 
-**Out (v0):** PATH shim (v0.1, opt-in) · physical devices · proof gate ·
-remote hosts · dashboard/GUI · Android · multi-Mac · teams/auth/billing.
+**Out (v0/current):** PATH-shim stage 2 flag injection/enforcement · physical
+devices · proof gate · remote hosts · dashboard/GUI · Android · multi-Mac ·
+teams/auth/billing.
 
 ## 7. Success metrics (from the report, adapted)
 

@@ -13,11 +13,12 @@
 #   across all reps (acquired up front with --reuse-if-exists +
 #   per-agent labels, released after the last rep) instead of paying a
 #   fresh clone+boot every rep — this mirrors how a real agent iterates
-#   on a task. NOTE (found during P0-1): --reuse-if-exists is parsed by
-#   the CLI and carried over the wire, but broker.Acquire never reads
-#   it — the flag is a no-op in the product today. The reuse economics
-#   here come from the harness holding the lease, and the flag is
-#   passed anyway to keep the invocation honest about intent.
+#   on a task. R-WP1 ships real --reuse-if-exists matching (Spec + exact
+#   Labels including project + stable Owner.Agent/SessionID); the harness
+#   still holds one lease per agent across reps for measured economics.
+#   Bench acquires pass per-agent labels but do not set SIMURGH_SESSION_ID
+#   or project — cross-rep broker reuse needs those; here reuse is primarily
+#   from the harness keeping the same lease_id/udid via REUSE_LEASE_DIR.
 #
 # Drives one scenario across the requested arms/reps, writing one JSON
 # per agent-task to results/<ts>/run-<scenario>-<arm>-rep<rep>-<agent>.json,

@@ -5,8 +5,9 @@
 // the same shape as cmd/simurgh's CLI commands, with an MCP tool-call interface
 // instead of os.Args flags.
 //
-// The five tools (lease_acquire, lease_renew, lease_release, lease_status,
-// pool_status) are the v0 surface from docs/ARCHITECTURE.md §8. Tool
+// The seven tools (lease_acquire, lease_renew, lease_hold, lease_unhold,
+// lease_release, lease_status, pool_status) are the agent surface from
+// docs/ARCHITECTURE.md §8. Tool
 // descriptions are agent-facing API surface: they state when to call and what
 // not to do (e.g. never pick a UDID from simctl yourself).
 package mcp

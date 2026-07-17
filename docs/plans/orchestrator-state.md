@@ -2274,3 +2274,84 @@ across all 18 packages. Dependency footprint: one direct dependency
 Threat-model claim for the one remaining tracked debt item (Start-side `sessionLocks` growth)
 independently re-verified at the socket-permission level (`internal/ipc` creates the socket dir
 `0o700` and the socket file `0o600` — same-user-only access confirmed, not just asserted).
+
+### 2026-07-17 — W-matrix stress scan + gap ledger (`ae676d7`)
+
+**HEAD:** `ae676d7fd466fcd1099bb762bdeaeead8c2644bb` (`feat(shell): ship R-WP5 audit PATH shims`).
+**Commit:** not performed in this packet (ledger/doc drift only). **No push.**
+
+**W-matrix (18 cells):** **16 PASS · 1 BLOCKED · 1 FAIL** — full table in
+`docs/plans/GAP_LIST.md`. Evidence roots: `/tmp/simurgh-w-evidence` (W1–W10,
+W13, W16 exact 5/5) and `/tmp/simurgh-resilience-evidence` (W11–W12, W14–W15,
+issue #2/#3).
+
+**Highlights:**
+
+- **W12 BLOCKED:** live RAM pressure-queue proof not triggerable — kernel level
+  1 (normal), `free+inactive+purgeable` 5.839 GiB vs 4 GiB floor
+  (`/tmp/simurgh-resilience-evidence/w12/live-pressure.txt`); unit supplement
+  PASS distinguished.
+- **W18 FAIL:** GitHub [#2](https://github.com/RoshanDewmina/simurgh/issues/2)
+  reproduced on `ae676d7` — kill daemon during QUEUED `--wait` → client bare
+  `EOF`; restart exposes dead-owner `lease-2` QUEUED until watcher cancel ~5s
+  (`/tmp/simurgh-resilience-evidence/issue2/`). **Not fixed.** Fix lane:
+  `docs/plans/work-packages/issue2-queued-daemon-death.md`.
+- **Issues closed after live verification + owner comments:** [#1](https://github.com/RoshanDewmina/simurgh/issues/1)
+  (`--reuse-if-exists`, W7) and [#3](https://github.com/RoshanDewmina/simurgh/issues/3)
+  (auto-started daemon survives parent, W17). [#2](https://github.com/RoshanDewmina/simurgh/issues/2)
+  remains **OPEN**.
+
+**R-WP5:** shipped at `ae676d7` (audit PATH shims, `simurgh shell`, focused
+race + `darwin_sim` live managed-shell gate).
+
+**Doc drift corrected this packet:** `docs/plans/GAP_LIST.md` (new),
+`bench/run.sh` stale `--reuse-if-exists` no-op comment, `internal/mcp/doc.go`
+and `docs/PRD.md` current-surface seven-tool/CLI alignment.
+
+### 2026-07-17 — Issue #2 fixed, matrix finalized, bench blocked (`2c8332e`)
+
+**HEAD:** `2c8332ed6ce8cfe5092ef2437551b123216bbfb7`.
+**Commits:** `d403a51` implementation, locally merged as `2c8332e`.
+**No push.**
+
+- Fresh blackbox SIGKILL acceptance: queued waiter returned structured
+  `DAEMON_DISCONNECTED`; first post-restart list reported zero QUEUED and one
+  CANCELLED dead-owner lease. CLI, MCP, and doctor share the response-loss
+  classification. Full `go test -race -count=1 ./...`, focused 10x race
+  tests, builds, and vet passed.
+- GitHub #2 received the evidence comment and was closed. Together with the
+  earlier verified closures of #1 and #3, W18 is now PASS.
+- Final W-matrix: **17 PASS · 1 BLOCKED · 0 FAIL**. W12 remains BLOCKED
+  because live host pressure was normal and no safe production pressure
+  trigger exists.
+- Bench Phase A: **BLOCKED, not run**. Guarded preflight exit 1 on active
+  owner `cursor-agent` PID 1202. Other gates passed: 109 GB Data free,
+  about 1987s idle, pressure OK, no heavy Xcode/XcodeBuildMCP job, no booted
+  simulator or Simurgh residue. No owner process was killed.
+- Next: final full build/vet/race/darwin_sim gate, morning packet, then
+  proof-gate plan only if the packet is complete.
+
+### 2026-07-17 — Final gates green; morning packet ready (`dcc6bf7`)
+
+**HEAD:** `dcc6bf737c097cf7fdffe5ff0864ea43bda8e12c`.
+**No push.**
+
+Additional test-hardening fixes found by the final gate:
+
+- `53204f1`, merged as `be6fb2f`: provisioner live cleanup now asserts and
+  deletes only its exact owned UDID, so concurrent foreign clones are neither
+  deleted nor treated as failures.
+- `35fbdf5`, merged as `dcc6bf7`: daemon parent-survival proof uses
+  hard-bounded condition polling under tagged-suite contention while retaining
+  same-PID, 30-second, and SIGHUP assertions.
+
+Final blackbox gate on the combined tree passed on the first run:
+`go build` for both binaries, `go vet ./...`, `go test ./... -race -count=1`
+(21/21 packages), `go test -tags=darwin_sim ./... -race -count=1`
+(21/21 packages, 2m11s), focused negative bundle, and `git diff --check`.
+Zero booted simulators remained; verification-owned temp assets were removed.
+
+Final matrix remains **17 PASS · 1 BLOCKED · 0 FAIL**. The sole BLOCKED cell
+is W12 live induced-pressure queueing; normal-pressure product and unit
+evidence passed. Bench Phase A remains BLOCKED by guarded preflight and was not
+run. Morning packet: `docs/plans/MORNING_PUBLISH.md`.

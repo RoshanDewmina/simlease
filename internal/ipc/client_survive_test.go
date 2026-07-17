@@ -74,10 +74,8 @@ func TestDialDaemonSurvivesParentExit(t *testing.T) {
 	// Parent is gone. Confirm the SAME PID keeps answering for ≥30s.
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		pid := pingDaemonPID(t, socketPath)
-		if pid != daemonPID {
-			t.Fatalf("daemon pid changed: got %d want %d (relaunch?)\nlog:\n%s",
-				pid, daemonPID, readFileBestEffort(logPath))
+		if err := checkDaemonPID(socketPath, daemonPID, pingPollTimeout); err != nil {
+			t.Fatalf("%v (relaunch?)\nlog:\n%s", err, readFileBestEffort(logPath))
 		}
 		if !processAlive(daemonPID) {
 			t.Fatalf("daemon pid %d died before 30s\nlog:\n%s", daemonPID, readFileBestEffort(logPath))
@@ -97,9 +95,8 @@ func TestDialDaemonSurvivesParentExit(t *testing.T) {
 		t.Fatalf("SIGHUP: %v", err)
 	}
 	time.Sleep(500 * time.Millisecond)
-	pid := pingDaemonPID(t, socketPath)
-	if pid != daemonPID {
-		t.Fatalf("after SIGHUP pid=%d want %d", pid, daemonPID)
+	if err := checkDaemonPID(socketPath, daemonPID, pingPollTimeout); err != nil {
+		t.Fatalf("after SIGHUP: %v", err)
 	}
 }
 
@@ -119,7 +116,7 @@ func runSurviveParentChild() int {
 	defer func() { executablePath = origExec }()
 	// Production detach path — do not replace startDetached.
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), pingPollTimeout)
 	defer cancel()
 	conn, err := Dial(ctx, socketPath, logPath)
 	if err != nil {
@@ -128,7 +125,7 @@ func runSurviveParentChild() int {
 	}
 	_ = conn.Close()
 
-	pid, err := pingDaemonPIDErr(socketPath)
+	pid, err := pollDaemonPID(socketPath, pingPollTimeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "survive child ping: %v\n", err)
 		return 4
@@ -162,22 +159,76 @@ func buildRealSimurgh(t *testing.T) string {
 	return out
 }
 
-func pingDaemonPID(t *testing.T, socketPath string) int {
-	t.Helper()
-	pid, err := pingDaemonPIDErr(socketPath)
-	if err != nil {
-		t.Fatalf("daemon.ping: %v", err)
+// pingPollTimeout bounds a single startup / survival-loop / post-SIGHUP ping
+// under parallel darwin_sim host load. 10s still exhausted under the full
+// tagged race suite; 45s keeps a hard bound while absorbing CoreSimulator
+// scheduling contention. Per-attempt dial/read stays short; the outer poll
+// retries until this deadline.
+const pingPollTimeout = 45 * time.Second
+
+const pingPollInterval = 50 * time.Millisecond
+
+// pollDaemonPID retries daemon.ping until success or timeout. Transient dial /
+// read deadlines under host contention are retried; a successful response is
+// returned immediately (callers must check PID separately).
+func pollDaemonPID(socketPath string, timeout time.Duration) (int, error) {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+		attempt := 2 * time.Second
+		if attempt > remaining {
+			attempt = remaining
+		}
+		pid, err := pingDaemonPIDErrTimeout(socketPath, attempt)
+		if err == nil {
+			return pid, nil
+		}
+		lastErr = err
+		sleep := pingPollInterval
+		if rem := time.Until(deadline); sleep > rem {
+			sleep = rem
+		}
+		if sleep > 0 {
+			time.Sleep(sleep)
+		}
 	}
-	return pid
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no attempt made")
+	}
+	return 0, fmt.Errorf("daemon.ping timed out after %s: %w", timeout, lastErr)
+}
+
+// checkDaemonPID polls until a successful ping, then requires wantPID
+// immediately — a wrong PID must not burn the remaining poll window.
+func checkDaemonPID(socketPath string, wantPID int, timeout time.Duration) error {
+	pid, err := pollDaemonPID(socketPath, timeout)
+	if err != nil {
+		return err
+	}
+	if pid != wantPID {
+		return fmt.Errorf("daemon pid changed: got %d want %d", pid, wantPID)
+	}
+	return nil
 }
 
 func pingDaemonPIDErr(socketPath string) (int, error) {
-	conn, err := net.DialTimeout("unix", socketPath, 2*time.Second)
+	return pingDaemonPIDErrTimeout(socketPath, 2*time.Second)
+}
+
+func pingDaemonPIDErrTimeout(socketPath string, attemptTimeout time.Duration) (int, error) {
+	if attemptTimeout <= 0 {
+		return 0, fmt.Errorf("daemon.ping: no time remaining")
+	}
+	conn, err := net.DialTimeout("unix", socketPath, attemptTimeout)
 	if err != nil {
 		return 0, err
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetDeadline(time.Now().Add(attemptTimeout))
 	req := Request{V: ProtocolVersion, ID: "survive-ping", Method: MethodDaemonPing}
 	if err := Encode(conn, req); err != nil {
 		return 0, err
@@ -199,6 +250,105 @@ func pingDaemonPIDErr(socketPath string) (int, error) {
 		return 0, fmt.Errorf("invalid pid in result %s", string(resp.Result))
 	}
 	return result.PID, nil
+}
+
+// TestPollDaemonPIDNeverRespondsTimesOut: an accepted-but-silent Unix peer
+// must fail when the bounded poll deadline expires — covering hung response
+// reads, not only missing-socket dial failures.
+func TestPollDaemonPIDNeverRespondsTimesOut(t *testing.T) {
+	dir := shortTempDir(t)
+	socketPath := filepath.Join(dir, "silent.sock")
+	ln, err := Listen(socketPath)
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer ln.Close()
+	go serveSilentUnixPeer(ln)
+
+	timeout := 200 * time.Millisecond
+	start := time.Now()
+	_, err = pollDaemonPID(socketPath, timeout)
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("expected timeout error for never-responding endpoint")
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("error=%v want timed out", err)
+	}
+	if elapsed < timeout {
+		t.Fatalf("returned too early: elapsed=%v timeout=%v", elapsed, timeout)
+	}
+	if elapsed > timeout+500*time.Millisecond {
+		t.Fatalf("poll hung past deadline: elapsed=%v timeout=%v", elapsed, timeout)
+	}
+}
+
+// serveSilentUnixPeer accepts connections and drains the request but never
+// writes a response, so clients hit read deadlines (hung peer).
+func serveSilentUnixPeer(ln net.Listener) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go func(c net.Conn) {
+			defer c.Close()
+			_, _ = DecodeRequest(c)
+			var b [1]byte
+			_, _ = c.Read(b[:])
+		}(conn)
+	}
+}
+
+// TestCheckDaemonPIDWrongPIDFailsImmediately: after a successful ping, a wrong
+// PID must fail immediately without consuming the remaining poll window.
+func TestCheckDaemonPIDWrongPIDFailsImmediately(t *testing.T) {
+	dir := shortTempDir(t)
+	socketPath := filepath.Join(dir, "fake.sock")
+	ln, err := Listen(socketPath)
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer ln.Close()
+	const reportedPID = 424242
+	go serveFixedPIDPing(ln, reportedPID)
+
+	start := time.Now()
+	err = checkDaemonPID(socketPath, 1, 2*time.Second)
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("expected wrong-pid error")
+	}
+	if !strings.Contains(err.Error(), "424242") || !strings.Contains(err.Error(), "want 1") {
+		t.Fatalf("error=%v want got=424242 want=1", err)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("wrong-pid waited too long: elapsed=%v (must fail immediately after ping)", elapsed)
+	}
+}
+
+func serveFixedPIDPing(ln net.Listener, pid int) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go func(c net.Conn) {
+			defer c.Close()
+			_ = c.SetDeadline(time.Now().Add(2 * time.Second))
+			req, err := DecodeRequest(c)
+			if err != nil {
+				return
+			}
+			result, _ := json.Marshal(map[string]int{"pid": pid})
+			_ = Encode(c, Response{
+				V:      ProtocolVersion,
+				ID:     req.ID,
+				OK:     true,
+				Result: result,
+			})
+		}(conn)
+	}
 }
 
 func processAlive(pid int) bool {

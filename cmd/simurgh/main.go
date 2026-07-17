@@ -103,6 +103,8 @@ Blocks until stdin closes or the process is signaled.`)
 			os.Exit(runMCP())
 		case "integration":
 			os.Exit(runIntegration(os.Args[2:]))
+		case "proof":
+			os.Exit(runProof(os.Args[2:]))
 		}
 	}
 
@@ -133,6 +135,7 @@ Usage:
   simurgh init [--force] [--json]
   simurgh mcp
   simurgh integration xcodebuildmcp start|stop|status --session <id>
+  simurgh proof status [--lease <id> | --lease-root <path>] [--policy <path>] [--tier quick|full] [--json]
   simurgh [help]
 
 Acquire/release/renew/status/list are thin IPC clients over the daemon lease RPCs.
@@ -144,6 +147,8 @@ with lease env + audit-mode PATH shims for xcodebuild/xcrun (see docs/AGENT_GUID
 init writes .simurgh.yaml, registers simurgh mcp in .mcp.json, and prints an agent rules snippet.
 mcp runs the stdio MCP server exposing the seven agent tools from ARCHITECTURE §8.
 integration xcodebuildmcp owns ephemeral MCP config + child lifecycle for an ACTIVE lease.
+proof status is an advisory, read-only check of lease evidence against .simurgh/verification.yaml
+(see docs/PROOF_GATE.md); it does not enforce or block.
 Daemon serves the Unix socket IPC endpoint (daemon.ping + lease.* + pool.status + warm.* + prune.*).
 Doctor checks Xcode, simctl, iOS runtimes, socket perms, daemon liveness, stale leases, and disk usage.
 See docs/ROADMAP.md for the build plan.`)

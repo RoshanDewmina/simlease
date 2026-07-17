@@ -64,7 +64,14 @@ isolation and risk mid-run reclaim when TTL expires. Between discrete steps,
 call lease_renew / simurgh renew if work will outlast the current expiry —
 do not acquire a second lease. For XcodeBuildMCP, use
 simurgh integration xcodebuildmcp start --session <lease-id> bound to the same
-lease.
+lease — but starting it is NOT enough: your existing mcp__XcodeBuildMCP__* tool
+calls stay bound to whatever server your session already had registered at
+startup. Register the printed configPath as a NEW, lease-named MCP server
+(e.g. claude mcp add-json xcodebuildmcp-<lease-id> < <configPath>) and call
+tools under that name for the life of the lease. Calling the pre-registered
+global XcodeBuildMCP tools after start still hits the SAME shared server every
+other lease is using — concurrent leases will clobber each other's session
+defaults (observed live, 2026-07-17, github.com/RoshanDewmina/simurgh/issues/4).
 
 **Managed shell:** simurgh shell <lease-id> exports the lease env, prepends
 audit-mode PATH shims for xcodebuild/xcrun, and renews the lease while you

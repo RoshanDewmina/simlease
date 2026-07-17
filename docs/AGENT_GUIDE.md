@@ -214,15 +214,26 @@ session A's adapter was stopped. This is a functional isolation proof, not
 a latency/performance claim, and not an independent-review pass — see
 `docs/ARCHITECTURE.md` §14 and `docs/plans/orchestrator-state.md`.
 
-**Isolation only holds if every caller goes through the adapter.** Calling
-the raw XcodeBuildMCP MCP tools directly (`session_set_defaults`,
-`build_run_sim`, etc. against a globally-registered XcodeBuildMCP server,
-not one started via `integration xcodebuildmcp start --session <id>`)
-bypasses this isolation entirely — that server's session defaults are
-process-global, so two concurrent agents calling it directly WILL clobber
-each other's project/scheme/simulator regardless of which Simurgh lease
-each one holds (observed live, two independent agents, 2026-07-17). Always
-start the per-lease adapter first and drive builds through it.
+**Starting the adapter is necessary but not sufficient.** The child process
+itself IS isolated per lease (own UDID, own DerivedData, own PID — see
+above). But `integration xcodebuildmcp start` only writes an ephemeral
+`configPath` under the lease root; it does **not** wire that config into
+your MCP client's `.mcp.json`. If your session already had a global
+`mcp__XcodeBuildMCP__*` server registered at startup (the common case),
+your existing tool calls stay bound to THAT server after `start` returns —
+`session_set_defaults`/`build_run_sim` calls land on the shared global
+process, not your lease's isolated one, and two concurrent leases WILL
+clobber each other's project/scheme/simulator (observed live, two
+independent agents, 2026-07-17,
+[issue #4](https://github.com/RoshanDewmina/simurgh/issues/4)).
+
+To actually reach the isolated child: register the `configPath` the CLI
+prints (`start --json` → `.configPath`) as a **new, lease-named** MCP
+server — e.g. `claude mcp add-json xcodebuildmcp-<lease-id> < <configPath>`
+— and call tools under that name, not the pre-registered global one, for
+the life of the lease. There is currently no automatic way to do this;
+Simurgh does not yet auto-register the ephemeral config or proxy
+XcodeBuildMCP calls through its own MCP server (tracked in issue #4).
 
 **`build_run_sim`'s `launchArgs` parameter is argv, not env vars.** To pass
 environment (e.g. `LANCER_SEED_DEMO=1`) to the launched app, use

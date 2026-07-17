@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/RoshanDewmina/simurgh/internal/ipc"
@@ -31,18 +32,48 @@ type CallFunc func(ctx context.Context, method string, params any) (json.RawMess
 type serverConfig struct {
 	Call          CallFunc
 	LastLeasePath string // absolute path; empty → DefaultLastLeasePath()
+	LeasesRoot    string // absolute path; empty → ~/.simurgh/leases
+
+	// LaunchCommand overrides the XcodeBuildMCP child argv (tests inject a
+	// helper-process fake; production leaves nil → DefaultLaunchCommand).
+	LaunchCommand []string
+	// LaunchExtraEnv is appended to the child environ (test seams only).
+	LaunchExtraEnv []string
+	// LaunchExtraEnvFunc, when set, supplies per-lease extra env (tests).
+	LaunchExtraEnvFunc func(leaseID string) []string
+	// LifecycleCtx, when cancelled, kills all owned XcodeBuildMCP children.
+	LifecycleCtx context.Context
+}
+
+// Server is the simurgh MCP server. It embeds the SDK server and owns
+// per-lease XcodeBuildMCP child sessions for the proxy tools.
+type Server struct {
+	*mcpsdk.Server
+	impl *server
 }
 
 // NewServer constructs the simurgh MCP server with all lease/pool tools registered.
-func NewServer() *mcpsdk.Server {
+func NewServer() *Server {
 	return newServer(serverConfig{})
 }
 
-func newServer(cfg serverConfig) *mcpsdk.Server {
+// Run serves one stdio (or other) session and kills all XcodeBuildMCP children
+// when ctx ends or the session closes.
+func (s *Server) Run(ctx context.Context, t mcpsdk.Transport) error {
+	s.impl.attachLifecycle(ctx)
+	defer s.impl.stopAllChildren()
+	return s.Server.Run(ctx, t)
+}
+
+func newServer(cfg serverConfig) *Server {
 	if cfg.Call == nil {
 		cfg.Call = defaultDialAndCall
 	}
-	s := &server{cfg: cfg}
+	s := &server{
+		cfg:        cfg,
+		children:   map[string]*xbmcpChild{},
+		leaseLocks: map[string]*sync.Mutex{},
+	}
 	srv := mcpsdk.NewServer(&mcpsdk.Implementation{
 		Name:    "simurgh",
 		Title:   "simurgh",
@@ -84,7 +115,8 @@ func newServer(cfg serverConfig) *mcpsdk.Server {
 		Name: "lease_release",
 		Description: "Release a lease when you are finished with the simulator so the device can be deleted and capacity returned to the pool. " +
 			"Always release before ending your session. Do not leave leases dangling — they hold pool capacity and keep clone devices around until cleaned up. " +
-			"Pass the lease_id returned by lease_acquire. Prefer release over abandoning the lease and hoping a reaper finds it.",
+			"Pass the lease_id returned by lease_acquire. Prefer release over abandoning the lease and hoping a reaper finds it. " +
+			"Also stops any live per-lease XcodeBuildMCP proxy child for this lease_id.",
 	}, s.handleLeaseRelease)
 
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
@@ -103,11 +135,25 @@ func newServer(cfg serverConfig) *mcpsdk.Server {
 			"Do not use this to pick a device or UDID — always go through lease_acquire for that.",
 	}, s.handlePoolStatus)
 
-	return srv
+	s.registerXBMCPProxyTools(srv)
+
+	out := &Server{Server: srv, impl: s}
+	if cfg.LifecycleCtx != nil {
+		s.attachLifecycle(cfg.LifecycleCtx)
+	}
+	return out
 }
 
 type server struct {
 	cfg serverConfig
+
+	childrenMu sync.Mutex
+	children   map[string]*xbmcpChild
+
+	leaseMu    sync.Mutex
+	leaseLocks map[string]*sync.Mutex
+
+	lifecycleOnce sync.Once
 }
 
 // --- path helpers (shared with cmd/simurgh via internal/simurghhome) ---
@@ -498,10 +544,18 @@ func (s *server) handleLeaseUnhold(ctx context.Context, _ *mcpsdk.CallToolReques
 
 func (s *server) handleLeaseRelease(ctx context.Context, _ *mcpsdk.CallToolRequest, in leaseIDParams) (*mcpsdk.CallToolResult, leaseReleaseResult, error) {
 	var zero leaseReleaseResult
-	if strings.TrimSpace(in.LeaseID) == "" {
+	trimmedID := strings.TrimSpace(in.LeaseID)
+	if trimmedID == "" {
 		return nil, zero, fmt.Errorf("lease_id is required")
 	}
-	raw, err := s.cfg.Call(ctx, "lease.release", map[string]any{"id": in.LeaseID})
+	// Hold the per-lease lock across child-stop + lease.release so a concurrent
+	// xcodebuildmcp_call cannot respawn a child for a lease being released.
+	mu := s.lockForLease(trimmedID)
+	mu.Lock()
+	defer mu.Unlock()
+	// Stop any live proxy child before releasing — stdio ownership dies with the lease.
+	s.stopXBMCPChildLocked(trimmedID)
+	raw, err := s.cfg.Call(ctx, "lease.release", map[string]any{"id": trimmedID})
 	if err != nil {
 		return nil, zero, mapCallError(err)
 	}

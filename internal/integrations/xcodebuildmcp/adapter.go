@@ -148,12 +148,20 @@ func (a *Adapter) version() string {
 	return DefaultPinnedVersion
 }
 
+// DefaultLaunchCommand returns the argv used to launch the XcodeBuildMCP MCP
+// server over stdio. Empty version falls back to DefaultPinnedVersion.
+func DefaultLaunchCommand(version string) []string {
+	if version == "" {
+		version = DefaultPinnedVersion
+	}
+	return []string{"npx", "-y", "xcodebuildmcp@" + version, "mcp"}
+}
+
 func (a *Adapter) launchCommand() []string {
 	if len(a.Command) > 0 {
 		return append([]string(nil), a.Command...)
 	}
-	ver := a.version()
-	return []string{"npx", "-y", "xcodebuildmcp@" + ver, "mcp"}
+	return DefaultLaunchCommand(a.version())
 }
 
 // Start resolves an ACTIVE lease, writes ephemeral config, and launches an

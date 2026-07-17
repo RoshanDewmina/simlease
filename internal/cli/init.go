@@ -47,7 +47,8 @@ func AgentRulesSnippet() string {
 	return `## Simurgh (iOS Simulator leases)
 
 Use the Simurgh MCP tools for all simulator work: lease_acquire, lease_renew,
-lease_hold, lease_unhold, lease_release, lease_status, pool_status.
+lease_hold, lease_unhold, lease_release, lease_status, pool_status,
+xcodebuildmcp_tools, xcodebuildmcp_call, xcodebuildmcp_stop.
 Never pick a UDID from simctl yourself — always go through lease_acquire.
 Always call lease_release when done so the device is torn down and capacity
 returns to the pool.
@@ -62,16 +63,19 @@ run) through simurgh exec <lease-id> -- … so isolation flags merge and the
 lease auto-renews during the run. Bare xcodebuild or hand-merged flags defeat
 isolation and risk mid-run reclaim when TTL expires. Between discrete steps,
 call lease_renew / simurgh renew if work will outlast the current expiry —
-do not acquire a second lease. For XcodeBuildMCP, use
-simurgh integration xcodebuildmcp start --session <lease-id> bound to the same
-lease — but starting it is NOT enough: your existing mcp__XcodeBuildMCP__* tool
-calls stay bound to whatever server your session already had registered at
-startup. Register the printed configPath as a NEW, lease-named MCP server
-(e.g. claude mcp add-json xcodebuildmcp-<lease-id> < <configPath>) and call
-tools under that name for the life of the lease. Calling the pre-registered
-global XcodeBuildMCP tools after start still hits the SAME shared server every
-other lease is using — concurrent leases will clobber each other's session
-defaults (observed live, 2026-07-17, github.com/RoshanDewmina/simurgh/issues/4).
+do not acquire a second lease.
+
+**XcodeBuildMCP (preferred):** after lease_acquire, use Simurgh's lease-scoped
+proxy tools — xcodebuildmcp_tools / xcodebuildmcp_call / xcodebuildmcp_stop with
+the same lease_id. They spawn an isolated per-lease child on first use; never
+call raw mcp__XcodeBuildMCP__* tools from a global registration (those bypass
+isolation and clobber concurrent leases — issue #4). lease_release also stops
+any live proxy child for that lease.
+
+**XcodeBuildMCP (CLI fallback for non-Simurgh-MCP clients):** 
+simurgh integration xcodebuildmcp start --session <lease-id>, then register the
+printed configPath as a new lease-named MCP server if your client cannot use
+Simurgh's proxy tools.
 
 **Managed shell:** simurgh shell <lease-id> exports the lease env, prepends
 audit-mode PATH shims for xcodebuild/xcrun, and renews the lease while you

@@ -83,6 +83,12 @@ func TestAgentRulesSnippet(t *testing.T) {
 	if !strings.Contains(s, "lease_release") && !strings.Contains(strings.ToLower(s), "release") {
 		t.Fatalf("snippet missing release guidance:\n%s", s)
 	}
+	if !strings.Contains(s, "xcodebuildmcp_call") {
+		t.Fatalf("snippet missing xcodebuildmcp_call proxy guidance:\n%s", s)
+	}
+	if strings.Contains(s, "claude mcp add-json") {
+		t.Fatalf("snippet still pushes manual mcp add-json as primary path:\n%s", s)
+	}
 }
 
 func TestUpsertMCPEntry_CreatesFreshFile(t *testing.T) {

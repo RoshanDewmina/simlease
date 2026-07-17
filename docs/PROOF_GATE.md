@@ -4,8 +4,10 @@ Simurgh can evaluate whether a lease's **existing** execution evidence satisfies
 repo-scoped verification policy. This is the first "done means evidence" layer.
 
 **Advisory only.** `simurgh proof status` never blocks acquire/release, never
-talks to the daemon except to resolve a lease root, and never creates, modifies,
-or deletes files. Agents and CI may ignore the result; exit code `3` is an
+talks to the daemon except to resolve a lease root, and writes nothing itself.
+(Caveat: `--lease` uses the shared CLI IPC dial, which auto-starts the daemon if
+it isn't running — like every other lease-resolving command. `--lease-root` is
+fully offline.) Agents and CI may ignore the result; exit code `3` is an
 advisory unsatisfied signal, not enforcement.
 
 For design context see [plans/PROOF_GATE_EXPLORATION.md](plans/PROOF_GATE_EXPLORATION.md)

@@ -40,7 +40,8 @@ func printProofHelp() {
 	fmt.Println(`usage: simurgh proof status [--lease <id> | --lease-root <path>] [--policy <path>] [--tier quick|full] [--json]
 
 Advisory check: does existing lease evidence satisfy .simurgh/verification.yaml?
-Read-only — never creates, modifies, or deletes files. Does not enforce done.
+Read-only — writes nothing itself; --lease may auto-start the daemon (shared CLI
+dial), --lease-root is fully offline. Does not enforce done.
 
 Exit codes:
   0  satisfied, or no policy configured

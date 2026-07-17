@@ -198,13 +198,32 @@ new `bench/evidence` publishes are explicitly out of this package. Do not
 treat any warm-seed or readiness change as a measured latency win until a
 later owner-directed benchmark pass.
 
-## XcodeBuildMCP integration adapter (R-WP6)
+## XcodeBuildMCP integration (lease-scoped proxy + CLI fallback)
+
+### Preferred: Simurgh MCP proxy tools (issue #4 structural fix)
+
+When your agent session already has the Simurgh MCP server registered, use
+these tools with the `lease_id` from `lease_acquire` — do **not** call raw
+`mcp__XcodeBuildMCP__*` tools from a global XcodeBuildMCP registration:
+
+| Tool | Args | Behavior |
+|------|------|----------|
+| `xcodebuildmcp_tools` | `lease_id` | Ensure a per-lease XcodeBuildMCP child is running; return its tool list |
+| `xcodebuildmcp_call` | `lease_id`, `tool`, `arguments` | Forward `tools/call` to that child; return content/`isError` verbatim |
+| `xcodebuildmcp_stop` | `lease_id` | Stop that lease's child if running (idempotent) |
+
+The child is spawned lazily on first `tools`/`call`, with the same isolation
+env as `simurgh integration xcodebuildmcp start` (own UDID, DerivedData,
+SwiftPM, module cache). One child per `lease_id`; `lease_release` stops a
+live child for that lease before releasing. Server shutdown cancels all
+children.
+
+### CLI fallback (non-Simurgh-MCP clients)
 
 `simurgh integration xcodebuildmcp start|stop|status --session <id> [--json]`
 starts/stops an XcodeBuildMCP child process bound to one lease's isolated
-env/paths (own UDID, own DerivedData/SwiftPM/module cache). Two concurrent
-sessions get two independent adapters; stopping one never touches the
-other's process or DerivedData. `stop` rejects a foreign PID.
+env/paths. Two concurrent sessions get two independent adapters; stopping one
+never touches the other's process or DerivedData. `stop` rejects a foreign PID.
 
 Live-validated (two real leases, two real `xcodebuildmcp simulator build`
 runs, `darwin_sim`-tagged `TestXcodeBuildMCPRuntimeTwoSessionAttribution`):
@@ -214,30 +233,19 @@ session A's adapter was stopped. This is a functional isolation proof, not
 a latency/performance claim, and not an independent-review pass — see
 `docs/ARCHITECTURE.md` §14 and `docs/plans/orchestrator-state.md`.
 
-**Starting the adapter is necessary but not sufficient.** The child process
-itself IS isolated per lease (own UDID, own DerivedData, own PID — see
-above). But `integration xcodebuildmcp start` only writes an ephemeral
+**CLI-only caveat:** `integration xcodebuildmcp start` writes an ephemeral
 `configPath` under the lease root; it does **not** wire that config into
-your MCP client's `.mcp.json`. If your session already had a global
-`mcp__XcodeBuildMCP__*` server registered at startup (the common case),
-your existing tool calls stay bound to THAT server after `start` returns —
-`session_set_defaults`/`build_run_sim` calls land on the shared global
-process, not your lease's isolated one, and two concurrent leases WILL
-clobber each other's project/scheme/simulator (observed live, two
-independent agents, 2026-07-17,
-[issue #4](https://github.com/RoshanDewmina/simurgh/issues/4)).
-
-To actually reach the isolated child: register the `configPath` the CLI
-prints (`start --json` → `.configPath`) as a **new, lease-named** MCP
-server — e.g. `claude mcp add-json xcodebuildmcp-<lease-id> < <configPath>`
-— and call tools under that name, not the pre-registered global one, for
-the life of the lease. There is currently no automatic way to do this;
-Simurgh does not yet auto-register the ephemeral config or proxy
-XcodeBuildMCP calls through its own MCP server (tracked in issue #4).
+your MCP client's `.mcp.json`. If you are **not** using Simurgh's proxy tools
+above and your session already had a global `mcp__XcodeBuildMCP__*` server
+registered at startup, register the printed `configPath` (`start --json` →
+`.configPath`) as a **new, lease-named** MCP server — e.g.
+`claude mcp add-json xcodebuildmcp-<lease-id> < <configPath>` — and call
+tools under that name for the life of the lease. Prefer the proxy tools when
+Simurgh MCP is available.
 
 **`build_run_sim`'s `launchArgs` parameter is argv, not env vars.** To pass
 environment (e.g. `LANCER_SEED_DEMO=1`) to the launched app, use
-`session_set_defaults({env: {...}})` (via the per-lease adapter) or
+`session_set_defaults({env: {...}})` (via the per-lease child) or
 `launch_app_sim`'s `env:` map — not `launchArgs`, which only affects process
 argv and silently does nothing for env-gated debug seams.
 

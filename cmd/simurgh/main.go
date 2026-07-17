@@ -79,6 +79,8 @@ func main() {
 			os.Exit(runEnv(os.Args[2:]))
 		case "exec":
 			os.Exit(runExec(os.Args[2:]))
+		case "shell":
+			os.Exit(runShell(os.Args[2:]))
 		case "warm":
 			os.Exit(runWarm(os.Args[2:]))
 		case "prune":
@@ -120,6 +122,7 @@ Usage:
   simurgh list [--label-selector k=v,...] [--json]
   simurgh env <lease-id> [--json]
   simurgh exec <lease-id> -- <cmd...>
+  simurgh shell <lease-id>
   simurgh warm create --model NAME [--runtime VER] [--json]
   simurgh warm list [--json]
   simurgh warm remove --model NAME [--runtime VER] [--json]
@@ -136,9 +139,10 @@ Acquire/release/renew/status/list are thin IPC clients over the daemon lease RPC
 warm create|list|remove manages primed shut-down clone sources.
 prune plans (and optionally applies) cleanup of orphan devices and held leases.
 env prints eval-able isolation exports; exec runs a command with those env vars
-(and xcodebuild isolation flags) injected. PATH shim is v0.1 — not built.
+(and xcodebuild isolation flags) injected; shell starts an interactive shell
+with lease env + audit-mode PATH shims for xcodebuild/xcrun (see docs/AGENT_GUIDE.md).
 init writes .simurgh.yaml, registers simurgh mcp in .mcp.json, and prints an agent rules snippet.
-mcp runs the stdio MCP server exposing the five agent tools from ARCHITECTURE §8.
+mcp runs the stdio MCP server exposing the seven agent tools from ARCHITECTURE §8.
 integration xcodebuildmcp owns ephemeral MCP config + child lifecycle for an ACTIVE lease.
 Daemon serves the Unix socket IPC endpoint (daemon.ping + lease.* + pool.status + warm.* + prune.*).
 Doctor checks Xcode, simctl, iOS runtimes, socket perms, daemon liveness, stale leases, and disk usage.

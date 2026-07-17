@@ -47,7 +47,7 @@ func AgentRulesSnippet() string {
 	return `## Simurgh (iOS Simulator leases)
 
 Use the Simurgh MCP tools for all simulator work: lease_acquire, lease_renew,
-lease_release, lease_status, pool_status.
+lease_hold, lease_unhold, lease_release, lease_status, pool_status.
 Never pick a UDID from simctl yourself — always go through lease_acquire.
 Always call lease_release when done so the device is torn down and capacity
 returns to the pool.
@@ -56,6 +56,20 @@ releasing, the lease is reclaimed automatically. Do not pass detach=true
 unless a lease must deliberately outlive the session.
 If using the CLI instead of MCP, acquire with --rm so the lease dies with
 your shell session.
+
+**Builds and tests:** route every xcodebuild (and long XcodeBuildMCP simulator
+run) through simurgh exec <lease-id> -- … so isolation flags merge and the
+lease auto-renews during the run. Bare xcodebuild or hand-merged flags defeat
+isolation and risk mid-run reclaim when TTL expires. Between discrete steps,
+call lease_renew / simurgh renew if work will outlast the current expiry —
+do not acquire a second lease. For XcodeBuildMCP, use
+simurgh integration xcodebuildmcp start --session <lease-id> bound to the same
+lease.
+
+**Managed shell:** simurgh shell <lease-id> exports the lease env, prepends
+audit-mode PATH shims for xcodebuild/xcrun, and renews the lease while you
+work. Shims log bare invocations to <lease>/pathshim/audit.log; they do not
+yet inject isolation flags — still prefer simurgh exec for long builds.
 `
 }
 

@@ -77,6 +77,7 @@ func TestResolverFallsBackToXcodeSelectWhenDeveloperDirUnset(t *testing.T) {
 
 func TestResolverErrorsWhenRealBinaryMissing(t *testing.T) {
 	devDir := t.TempDir() // no usr/bin/xcodebuild written
+	emptySys := t.TempDir()
 	r := Resolver{
 		Getenv: func(key string) string {
 			if key == "DEVELOPER_DIR" {
@@ -84,9 +85,39 @@ func TestResolverErrorsWhenRealBinaryMissing(t *testing.T) {
 			}
 			return ""
 		},
+		SystemBinDir: emptySys, // no /usr/bin fallback either
 	}
 	if _, err := r.Resolve("xcodebuild"); err == nil {
 		t.Fatal("expected error when real binary is missing, got nil")
+	}
+}
+
+func TestResolverFallsBackToSystemBinWhenMissingUnderDeveloperDir(t *testing.T) {
+	// Xcode-beta (and some Xcode layouts) ship xcodebuild under
+	// Developer/usr/bin but not xcrun — the OS entry point is /usr/bin/xcrun.
+	devDir := t.TempDir()
+	sysDir := t.TempDir()
+	want := filepath.Join(sysDir, "xcrun")
+	if err := os.WriteFile(want, []byte("#!/bin/bash\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wantAbs, _ := filepath.Abs(want)
+
+	r := Resolver{
+		Getenv: func(key string) string {
+			if key == "DEVELOPER_DIR" {
+				return devDir
+			}
+			return ""
+		},
+		SystemBinDir: sysDir,
+	}
+	got, err := r.Resolve("xcrun")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got != wantAbs {
+		t.Fatalf("Resolve = %q, want system fallback %q", got, wantAbs)
 	}
 }
 

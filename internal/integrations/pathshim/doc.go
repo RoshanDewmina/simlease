@@ -32,15 +32,17 @@
 // # Recursion safety
 //
 // The real binary is resolved via an ABSOLUTE path only — DEVELOPER_DIR if
-// set, else `xcode-select -p` plus the well-known "usr/bin/<name>" suffix —
-// NEVER via a bare-name exec.LookPath. Looking up "xcodebuild" by name
-// while the shim's own session bin directory could still be first on PATH
-// is exactly how a shim recurses into itself. On top of that
-// belt-and-braces absolute-path resolution, Run sets SIMURGH_SHIM_ACTIVE=1
-// in the real binary's environment before exec'ing it, and refuses outright
-// (no exec at all) if it ever finds that variable already set on entry.
-// That should be unreachable given absolute-path resolution alone, which is
-// exactly why it exists as defense-in-depth rather than the only guard.
+// set, else `xcode-select -p` plus the well-known "usr/bin/<name>" suffix,
+// falling back to `/usr/bin/<name>` when the developer-dir copy is absent
+// (Xcode-beta omits Developer/usr/bin/xcrun) — NEVER via a bare-name
+// exec.LookPath. Looking up "xcodebuild" by name while the shim's own
+// session bin directory could still be first on PATH is exactly how a shim
+// recurses into itself. On top of that belt-and-braces absolute-path
+// resolution, Run sets SIMURGH_SHIM_ACTIVE=1 in the real binary's
+// environment before exec'ing it, and refuses outright (no exec at all) if
+// it ever finds that variable already set on entry. That should be
+// unreachable given absolute-path resolution alone, which is exactly why
+// it exists as defense-in-depth rather than the only guard.
 //
 // # Known coverage gap (not a bug)
 //

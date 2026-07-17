@@ -53,6 +53,7 @@ func run(args, environ []string) int {
 		Getenv:          func(key string) string { return pathshim.LookupEnv(environ, key) },
 		XcodeSelectPath: defaultResolver.XcodeSelectPath,
 		Stat:            defaultResolver.Stat,
+		SystemBinDir:    defaultResolver.SystemBinDir,
 	}
 
 	opts := pathshim.RunOptions{

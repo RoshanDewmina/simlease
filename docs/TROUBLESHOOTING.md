@@ -85,6 +85,22 @@ Notes:
 
 There is no `daemon stop` / `daemon install` yet — stop with `kill` / Ctrl-C.
 
+## `simurgh shell`: simurgh-shim not found
+
+`simurgh shell` needs the `simurgh-shim` binary beside `simurgh` (preferred) or
+on `PATH`. A clean checkout only has source — build both:
+
+```bash
+go build -o simurgh ./cmd/simurgh
+go build -o simurgh-shim ./cmd/simurgh-shim
+# or: make binaries
+```
+
+Stage 1 is audit-only: bare `xcodebuild`/`xcrun` invocations are logged to
+`<lease-root>/pathshim/audit.log` and still run the real tools without
+auto-injecting isolation flags. Prefer `simurgh exec <lease-id> -- xcodebuild …`
+for long builds.
+
 ## Lease reclaimed unexpectedly
 
 `--rm` maps to `ReleaseOnPIDExit`:

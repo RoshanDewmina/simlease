@@ -2,7 +2,9 @@
 
 **Version:** 1.0 (2026-07-12) · **Status:** approved for v0 build
 **Language:** Go (≥1.23), no cgo (pure-Go deps only) · **Target:** macOS 14+, Apple Silicon primary
-**Binary:** one static binary `simurgh`; the daemon is `simurgh daemon run` under a launchd LaunchAgent alias `simurghd`.
+**Binary:** `simurgh` CLI/daemon plus sibling `simurgh-shim` for R-WP5 PATH
+audit shims; the daemon is `simurgh daemon run` under a launchd LaunchAgent
+alias `simurghd`.
 
 ---
 
@@ -257,9 +259,10 @@ Grant returns (and writes to `<lease-dir>/lease.json`):
 Flag set is VibeChard's proven seven-resource matrix (attribution: VibeChard,
 Apache-2.0 — pattern reuse with attribution comment in source). v0 emits
 env + flags + `simurgh env <id>` (eval-able exports) and `simurgh exec
-<id> -- <cmd>` (runs a command with the env injected). The **PATH shim**
-(auto-injecting flags into any `xcodebuild` call, VibeChard-style) is v0.1:
-same emission machinery, extra intercept binary — designed for now, not built.
+<id> -- <cmd>` (runs a command with the env injected). **PATH shim stage 1
+(R-WP5, shipped):** `simurgh shell <id>` prepends audit-mode session
+symlinks for bare `xcodebuild`/`xcrun` (JSONL audit log only — no flag
+injection yet). Stage 2 (warn/enforce auto-inject) remains future work.
 
 Result-bundle discipline: `-resultBundlePath` requires a *new* path per run;
 `simurgh exec` allocates `Results/run-<timestamp>.xcresult` automatically when
@@ -299,6 +302,8 @@ Tools (names stable, results mirror IPC):
 |---|---|---|
 | `lease_acquire` | model, runtime?, labels?, ttl?, reuse_if_exists?, wait? | full lease grant (UDID, env, flags, expiry) |
 | `lease_renew` | lease_id, ttl? | new expiry |
+| `lease_hold` | lease_id, duration? | lease with HeldUntil set |
+| `lease_unhold` | lease_id | lease with hold cleared |
 | `lease_release` | lease_id | confirmation + cleanup summary |
 | `lease_status` | lease_id? (default: caller's newest) | lease detail |
 | `pool_status` | — | global capacity, optional per-spec/provisioning caps, buildSlots/activeBuilds/queuedBuilds, active/queued leases, pressure |
@@ -317,10 +322,13 @@ simurgh acquire --model "iPhone 17 Pro" [--runtime 27.0] [--label k=v]...
         [--inactivity-timeout 10m] [--hard-timeout 3h] [--json]
 simurgh release [<lease-id>] [--all --label k=v]
 simurgh renew <lease-id> [--ttl 30m]
+simurgh hold <lease-id> [--duration 30m]
+simurgh unhold <lease-id>
 simurgh status [--queue] [--json]        # pool + leases overview
 simurgh list [--label-selector k=v,...]  # leases (Limrun-style selectors)
 simurgh env <lease-id>                   # eval-able exports
 simurgh exec <lease-id> -- <cmd...>      # run with env injected
+simurgh shell <lease-id>                 # interactive shell + audit PATH shims
 simurgh warm create|list|remove --model ... --runtime ...
 simurgh prune [--apply]                  # orphan plan, dry-run default
 simurgh doctor                           # env checks: Xcode, simctl, runtimes, daemon, socket perms

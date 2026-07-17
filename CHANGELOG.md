@@ -58,8 +58,19 @@ Post-v0.0.1 work, tracked as `R-WP*` packages (Phase B). Not yet tagged.
   narrower, non-blocking finding remains tracked (unbounded lock-map
   growth from malformed session IDs, same-user local IPC only).
 
-R-WP5 (PATH shim) remains gated/not started; no entry here because no code
-shipped for it.
+### R-WP5 — PATH shim (stage 1 audit + managed shell) — shipped
+
+- `cmd/simurgh-shim` + `internal/integrations/pathshim`: audit-mode PATH shims for
+  `xcodebuild`/`xcrun` (resolve real binary via absolute path, recursion guard,
+  structured audit log).
+- `simurgh shell <lease-id>`: interactive managed shell with lease env, PATH
+  shims prepended, and TTL/3 auto-renew while the shell runs. Requires
+  `simurgh-shim` built beside `simurgh` (or on `PATH`).
+- `simurgh init` agent-rules snippet updated with exec-or-fail guidance.
+
+R-WP5 stage 1 is **shipped** (audit-mode shims + managed shell; live gate passed).
+Stage 2 (warn: auto-inject xcodebuild flags into bare shim invocations) remains
+future work.
 
 ## v0.0.1 — 2026-07-13
 

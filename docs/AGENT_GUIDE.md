@@ -16,7 +16,7 @@ when finished.
 
 ## MCP tools (preferred when available)
 
-`simurgh mcp` exposes five tools. Descriptions below are the live API surface
+`simurgh mcp` exposes seven tools. Descriptions below are the live API surface
 from `internal/mcp/server.go` — follow them literally.
 
 ### `lease_acquire`
@@ -26,6 +26,14 @@ from `internal/mcp/server.go` — follow them literally.
 ### `lease_renew`
 
 > Extend an active lease's TTL before it expires. Call when your work will outlast the current expiry (from lease_acquire or lease_status). Do not acquire a second lease just to keep working — renew the lease you already hold. Requires an explicit lease_id; this tool does not fall back to the last-lease pointer.
+
+### `lease_hold`
+
+> Mark an active lease busy so inactivity reclaim is suppressed while you run a long non-exec command. Call before starting work that bypasses simurgh exec (e.g. a long xcodebuild). Pair with lease_unhold when finished. TTL and hard-timeout reclaim still apply.
+
+### `lease_unhold`
+
+> Clear a lease_hold busy marker so normal inactivity reclaim resumes.
 
 ### `lease_release`
 
@@ -53,10 +61,20 @@ SIMURGH_SESSION_ID=my-agent-session \
 simurgh acquire --model "iPhone 17 Pro" --label project=myapp --label agent=claude-a \
   --reuse-if-exists --wait --rm --json   # same Spec+labels+agent/session → renew same lease
 simurgh env <lease-id>                 # or: eval "$(simurgh env <lease-id>)"
+simurgh shell <lease-id>               # interactive shell + audit PATH shims
 simurgh exec <lease-id> -- xcodebuild … build
 simurgh renew <lease-id> [--ttl DUR]
+simurgh hold <lease-id> [--duration DUR]
+simurgh unhold <lease-id>
 simurgh status --json                  # pool + pressure
 simurgh release <lease-id>
+```
+
+Build both CLI binaries for managed shell (sibling discovery):
+
+```bash
+go build -o simurgh ./cmd/simurgh
+go build -o simurgh-shim ./cmd/simurgh-shim
 ```
 
 ### `--reuse-if-exists` matching (R-WP1)
@@ -108,9 +126,10 @@ Emitted `xcodebuildFlags` (also on the lease / MCP acquire result):
 - `-destination` → `platform=iOS Simulator,id=<SIMURGH_UDID>`
 
 `simurgh exec` injects those flags for `xcodebuild` (and allocates a fresh
-`-resultBundlePath` under Results for `test` / `test-without-building`). There
-is no PATH shim yet (v0.1) — bare `xcodebuild` without `exec` or explicit flags
-will use shared defaults and defeat isolation.
+`-resultBundlePath` under Results for `test` / `test-without-building`). Audit-mode
+PATH shims (stage 1) are available via `simurgh shell <lease-id>` — they log bare
+`xcodebuild`/`xcrun` calls but do not yet auto-inject flags; long builds still
+need `simurgh exec`.
 
 ## Build discipline
 

@@ -174,16 +174,17 @@ milestones. One line each:
 - **R-WP4 — readiness cache**: bounded readiness polling with classified
   timeouts, additive phase timings, writable-cache confinement under the
   lease root, and stricter warm-seed compatibility/CoW handling.
-- **R-WP5 — PATH shim**: gated / not started. Not skipped-forever — still
-  the planned opt-in PATH shim from the "Post-v0" backlog above — just not
-  yet begun.
+- **R-WP5 — PATH shim**: stage 1 (audit-mode shims + `simurgh shell`) **shipped**;
+  stage 2 (warn: auto-inject xcodebuild flags into bare shim invocations) not
+  started.
 - **R-WP6 — XcodeBuildMCP session adapter**: `simurgh integration
   xcodebuildmcp start|stop|status --session <id>`, a bounded adapter
   owning ephemeral MCP config and child-process lifecycle for an active
   lease, moved into the daemon so start/stop/status are daemon-owned
   rather than CLI-process-owned.
 
-All of R-WP0–R-WP4 and R-WP6 are merged to `master`; R-WP5 remains gated.
+All of R-WP0–R-WP4 and R-WP6 are merged to `master`; R-WP5 stage 1 is
+shipped (audit shims + managed shell).
 This section is a summary, not the live status — for exact current state
 (what's merged, in-flight, or blocked right now), see
 [`docs/plans/orchestrator-state.md`](plans/orchestrator-state.md) and

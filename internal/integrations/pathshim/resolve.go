@@ -21,6 +21,12 @@ type Resolver struct {
 	XcodeSelectPath func() (string, error)
 	// Stat checks the candidate real-binary path exists. Defaults to os.Stat.
 	Stat func(path string) (os.FileInfo, error)
+	// SystemBinDir is the absolute fallback directory tried when
+	// <developer-dir>/usr/bin/<name> is missing. Defaults to "/usr/bin".
+	// Apple ships /usr/bin/xcrun as the public entry point; some Xcode
+	// trees (notably Xcode-beta) omit Developer/usr/bin/xcrun entirely.
+	// Always an absolute directory — never a PATH lookup.
+	SystemBinDir string
 }
 
 // DefaultResolver wires Resolver to the real environment and xcode-select.
@@ -34,7 +40,8 @@ func DefaultResolver() Resolver {
 			}
 			return strings.TrimSpace(string(out)), nil
 		},
-		Stat: os.Stat,
+		Stat:         os.Stat,
+		SystemBinDir: "/usr/bin",
 	}
 }
 
@@ -42,8 +49,10 @@ func DefaultResolver() Resolver {
 // ("xcodebuild" or "xcrun"). It NEVER uses a bare-name PATH lookup — see
 // the package doc for why that specific shortcut is the recursion risk
 // this whole package exists to avoid. Resolution order: DEVELOPER_DIR env
-// var if non-empty, else `xcode-select -p`; either way the real binary is
-// expected at "<developer-dir>/usr/bin/<name>".
+// var if non-empty, else `xcode-select -p`; prefer
+// "<developer-dir>/usr/bin/<name>", then fall back to
+// "<SystemBinDir>/<name>" (default /usr/bin/<name>) when the developer-dir
+// copy is absent.
 func (r Resolver) Resolve(name string) (string, error) {
 	if name != "xcodebuild" && name != "xcrun" {
 		return "", fmt.Errorf("pathshim: unsupported shim name %q (must be xcodebuild or xcrun)", name)
@@ -76,7 +85,15 @@ func (r Resolver) Resolve(name string) (string, error) {
 
 	candidate := filepath.Join(devDir, "usr", "bin", name)
 	if _, err := stat(candidate); err != nil {
-		return "", fmt.Errorf("pathshim: real %s not found at %s: %w", name, candidate, err)
+		sysDir := r.SystemBinDir
+		if sysDir == "" {
+			sysDir = "/usr/bin"
+		}
+		fallback := filepath.Join(sysDir, name)
+		if _, err2 := stat(fallback); err2 != nil {
+			return "", fmt.Errorf("pathshim: real %s not found at %s: %w", name, candidate, err)
+		}
+		candidate = fallback
 	}
 	abs, err := filepath.Abs(candidate)
 	if err != nil {

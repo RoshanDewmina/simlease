@@ -2,6 +2,7 @@
 /bin/
 /dist/
 /simurgh
+/simurgh-shim
 *.exe
 *.exe~
 *.dll

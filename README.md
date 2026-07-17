@@ -25,10 +25,16 @@ CLI yourself:
 
 ```bash
 go build -o simurgh ./cmd/simurgh
+go build -o simurgh-shim ./cmd/simurgh-shim   # required beside simurgh for `simurgh shell`
+# or: make binaries
 # optional: install somewhere on PATH, e.g.
-#   sudo cp simurgh /usr/local/bin/simurgh
-export PATH="$PWD:$PATH"   # if you keep the binary in the repo root
+#   sudo cp simurgh simurgh-shim /usr/local/bin/
+export PATH="$PWD:$PATH"   # if you keep the binaries in the repo root
 ```
+
+`simurgh shell` discovers `simurgh-shim` next to the `simurgh` executable first,
+then falls back to `PATH`. Do not commit the generated root binaries
+(`/simurgh`, `/simurgh-shim` are gitignored).
 
 Confirm the environment (Xcode, simctl, runtimes, socket, daemon liveness).
 `doctor` dials the socket **without** auto-starting a daemon:
@@ -123,8 +129,8 @@ Confirmed `.mcp.json` shape (M3.2):
 
 Claude Code loads MCP servers from `.mcp.json` at session start. After `init`,
 restart the session (or open the project fresh) so the `simurgh` server
-attaches. Then use the five tools: `lease_acquire`, `lease_renew`,
-`lease_release`, `lease_status`, `pool_status`.
+attaches. Then use the seven tools: `lease_acquire`, `lease_renew`,
+`lease_hold`, `lease_unhold`, `lease_release`, `lease_status`, `pool_status`.
 
 ## CLI reference
 
@@ -133,9 +139,12 @@ attaches. Then use the five tools: `lease_acquire`, `lease_renew`,
 | `simurgh acquire --model NAME [flags]` | Request a lease (clone + boot); `--wait` blocks on queue/pressure; `--json` for machine output |
 | `simurgh release [<lease-id>] [--all --label k=v] [--json]` | Release lease(s); tears down the clone device |
 | `simurgh renew <lease-id> [--ttl DUR] [--json]` | Extend an active lease’s TTL |
+| `simurgh hold <lease-id> [--duration DUR] [--json]` | Suppress inactivity reclaim while busy (TTL still applies) |
+| `simurgh unhold <lease-id> [--json]` | Clear a hold so inactivity reclaim resumes |
 | `simurgh status [--queue] [--json]` | Host-global capacity (+ optional per-spec/provisioning caps), buildSlots/activeBuilds/queuedBuilds, lease counts, `pressure` |
 | `simurgh list [--label-selector k=v,...] [--json]` | List leases |
 | `simurgh env <lease-id> [--json]` | Print eval-able isolation `export` lines (or JSON env/flags) |
+| `simurgh shell <lease-id>` | Interactive shell with lease env + audit-mode PATH shims for `xcodebuild`/`xcrun` |
 | `simurgh exec <lease-id> -- <cmd...>` | Run a command with isolation env; injects xcodebuild flags |
 | `simurgh warm create --model NAME [--runtime VER] [--json]` | Create a warm clone-source template |
 | `simurgh warm list [--json]` | List warm templates |
@@ -150,7 +159,9 @@ attaches. Then use the five tools: `lease_acquire`, `lease_renew`,
 
 Not built (deliberately deferred): `daemon stop`, `daemon install` / launchd
 helpers. Stop a foreground/background daemon with the usual process signal
-(`kill` / Ctrl-C). PATH shim for bare `xcodebuild` is deferred to v0.1.
+(`kill` / Ctrl-C). PATH shim stage 2 (auto-inject xcodebuild flags into bare
+invocations) remains future work — stage 1 audit shims are shipped via
+`simurgh shell` (audit-only; not yet flag-injecting).
 
 ## Docs
 

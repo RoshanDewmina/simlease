@@ -37,7 +37,7 @@ func TestNewServerRegistersLeaseTools(t *testing.T) {
 			return nil, nil
 		},
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.ListTools(context.Background(), nil)
 	if err != nil {
 		t.Fatalf("ListTools: %v", err)
@@ -50,6 +50,9 @@ func TestNewServerRegistersLeaseTools(t *testing.T) {
 		"lease_release",
 		"lease_status",
 		"pool_status",
+		"xcodebuildmcp_tools",
+		"xcodebuildmcp_call",
+		"xcodebuildmcp_stop",
 	}
 	if len(res.Tools) != len(want) {
 		t.Fatalf("got %d tools, want %d: %#v", len(res.Tools), len(want), toolNames(res.Tools))
@@ -109,7 +112,7 @@ func TestLeaseAcquireMapsParamsAndResult(t *testing.T) {
 		},
 		LastLeasePath: filepath.Join(t.TempDir(), "last-lease"),
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name: "lease_acquire",
 		Arguments: map[string]any{
@@ -215,7 +218,7 @@ func TestLeaseAcquireDetachAndInactivity(t *testing.T) {
 		},
 		LastLeasePath: filepath.Join(t.TempDir(), "last-lease"),
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name: "lease_acquire",
 		Arguments: map[string]any{
@@ -256,7 +259,7 @@ func TestLeaseAcquireWritesLastLease(t *testing.T) {
 		},
 		LastLeasePath: lastPath,
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	_, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "lease_acquire",
 		Arguments: map[string]any{"model": "iPhone 17 Pro"},
@@ -291,7 +294,7 @@ func TestLeaseRenewMapsParamsAndResult(t *testing.T) {
 			}`), nil
 		},
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "lease_renew",
 		Arguments: map[string]any{"lease_id": "lease-1", "ttl": "45m"},
@@ -340,7 +343,7 @@ func TestLeaseReleaseMapsResult(t *testing.T) {
 			}`), nil
 		},
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "lease_release",
 		Arguments: map[string]any{"lease_id": "lease-1"},
@@ -384,7 +387,7 @@ func TestLeaseStatusWithID(t *testing.T) {
 			}`), nil
 		},
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "lease_status",
 		Arguments: map[string]any{"lease_id": "lease-9"},
@@ -425,7 +428,7 @@ func TestLeaseStatusFallsBackToLastLeaseFile(t *testing.T) {
 			}`), nil
 		},
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "lease_status",
 		Arguments: map[string]any{},
@@ -453,7 +456,7 @@ func TestLeaseStatusNoLastLeaseReturnsClearError(t *testing.T) {
 			return nil, nil
 		},
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "lease_status",
 		Arguments: map[string]any{},
@@ -496,7 +499,7 @@ func TestPoolStatusMapsResult(t *testing.T) {
 			}`), nil
 		},
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "pool_status",
 		Arguments: map[string]any{},
@@ -545,7 +548,7 @@ func TestLeaseAcquireCapacityQueuedHasStructuredResourceReason(t *testing.T) {
 			}}
 		},
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "lease_acquire",
 		Arguments: map[string]any{"model": "iPhone 17 Pro"},
@@ -586,7 +589,7 @@ func TestDaemonErrorSurfacesAsToolErrorWithMessageAndFix(t *testing.T) {
 			}}
 		},
 	})
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name:      "lease_release",
 		Arguments: map[string]any{"lease_id": "x"},
@@ -640,7 +643,7 @@ func TestLeaseAcquireWaitMidResponseEOFDaemonDisconnected(t *testing.T) {
 	}()
 
 	srv := NewServer()
-	cs := connectTestClient(t, srv)
+	cs := connectTestClient(t, srv.Server)
 	res, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
 		Name: "lease_acquire",
 		Arguments: map[string]any{

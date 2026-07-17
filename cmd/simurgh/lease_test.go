@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -184,5 +186,130 @@ func TestParseAcquireFlagsBadDuration(t *testing.T) {
 	_, err := parseAcquireFlags([]string{"--model", "iPhone 17 Pro", "--ttl", "nope"})
 	if err == nil {
 		t.Fatal("want duration error")
+	}
+}
+
+func TestExitCodeForIPCErrorDaemonDisconnected(t *testing.T) {
+	err := &ipc.DaemonDisconnectedError{
+		ErrorEnvelope: &ipc.Error{
+			Code:    ipc.CodeDaemonDisconnected,
+			Message: "connection to daemon lost",
+			Fix:     ipc.FixDaemonDisconnected,
+		},
+	}
+	if got := exitCodeForIPCError(err); got != 4 {
+		t.Fatalf("exitCodeForIPCError(DAEMON_DISCONNECTED) = %d want 4", got)
+	}
+}
+
+func TestDialAndCallDaemonDisconnectOnEOF(t *testing.T) {
+	home, err := os.MkdirTemp("/tmp", "smg-eof-")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	t.Setenv("SIMURGH_HOME", home)
+	socketPath := filepath.Join(home, "simurghd.sock")
+	ln, err := ipc.Listen(socketPath)
+	if err != nil {
+		t.Fatalf("Listen: %v", err)
+	}
+	defer ln.Close()
+
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		if _, err := ipc.NewDecoder(c).DecodeRequest(); err != nil {
+			return
+		}
+		// Drop the connection after the request was received so the client
+		// sees EOF on the response read — the W18 / issue #2 failure mode.
+	}()
+
+	_, err = dialAndCall(context.Background(), "lease.list", map[string]any{})
+	if err == nil {
+		t.Fatal("want daemon-disconnected error, got nil")
+	}
+	var dd *ipc.DaemonDisconnectedError
+	if !errors.As(err, &dd) || dd.ErrorEnvelope == nil {
+		t.Fatalf("err = %v (%T), want DaemonDisconnectedError", err, err)
+	}
+	if dd.ErrorEnvelope.Code != ipc.CodeDaemonDisconnected {
+		t.Fatalf("code=%q want %s", dd.ErrorEnvelope.Code, ipc.CodeDaemonDisconnected)
+	}
+	if dd.ErrorEnvelope.Fix == "" || !strings.Contains(dd.ErrorEnvelope.Fix, "simurgh daemon status") {
+		t.Fatalf("fix=%q want actionable daemon status fix", dd.ErrorEnvelope.Fix)
+	}
+	if exitCodeForIPCError(err) != 4 {
+		t.Fatalf("exit code = %d want 4", exitCodeForIPCError(err))
+	}
+}
+
+func TestPrintIPCErrorDaemonDisconnect(t *testing.T) {
+	err := &ipc.DaemonDisconnectedError{
+		ErrorEnvelope: &ipc.Error{
+			Code:    ipc.CodeDaemonDisconnected,
+			Message: "connection to daemon lost after request was sent",
+			Fix:     ipc.FixDaemonDisconnected,
+		},
+	}
+	old := os.Stdout
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatal(pipeErr)
+	}
+	os.Stdout = w
+	printIPCError(err, false)
+	_ = w.Close()
+	os.Stdout = old
+	out, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	text := string(out)
+	if !strings.Contains(text, ipc.CodeDaemonDisconnected) || !strings.Contains(text, "fix:") {
+		t.Fatalf("printIPCError output missing structured triple:\n%s", text)
+	}
+}
+
+func TestPrintIPCErrorDaemonDisconnectJSON(t *testing.T) {
+	err := &ipc.DaemonDisconnectedError{
+		ErrorEnvelope: &ipc.Error{
+			Code:    ipc.CodeDaemonDisconnected,
+			Message: "connection to daemon lost after request was sent",
+			Fix:     ipc.FixDaemonDisconnected,
+		},
+	}
+	old := os.Stdout
+	r, w, pipeErr := os.Pipe()
+	if pipeErr != nil {
+		t.Fatal(pipeErr)
+	}
+	os.Stdout = w
+	printIPCError(err, true)
+	_ = w.Close()
+	os.Stdout = old
+	out, readErr := io.ReadAll(r)
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	var got ipc.Error
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("printIPCError JSON: %v\n%s", err, out)
+	}
+	if got.Code != ipc.CodeDaemonDisconnected {
+		t.Fatalf("code=%q want %s", got.Code, ipc.CodeDaemonDisconnected)
+	}
+	if got.Message == "" || got.Fix == "" {
+		t.Fatalf("want non-empty message/fix, got %+v", got)
+	}
+	if got.Fix != ipc.FixDaemonDisconnected {
+		t.Fatalf("fix=%q want %q", got.Fix, ipc.FixDaemonDisconnected)
+	}
+	if strings.TrimSpace(got.Message) == "EOF" || strings.EqualFold(got.Message, "EOF") {
+		t.Fatalf("message must not be bare EOF: %q", got.Message)
 	}
 }

@@ -45,6 +45,10 @@ func exitCodeForIPCError(err error) int {
 	if errors.As(err, &dn) {
 		return 4
 	}
+	var dd *ipc.DaemonDisconnectedError
+	if errors.As(err, &dd) {
+		return 4
+	}
 	var re *rpcError
 	if errors.As(err, &re) && re.e != nil {
 		switch re.e.Code {
@@ -56,6 +60,7 @@ func exitCodeForIPCError(err error) int {
 			safety.CodeDeviceNotManaged, safety.CodeDeviceNotFound:
 			return 3
 		case broker.CodeProvisionFailed, ipc.CodeDaemonNotRunning,
+			ipc.CodeDaemonDisconnected,
 			provisioner.CodeCloneFailed, provisioner.CodeBootTimeout,
 			safety.CodeDeviceDeleteFailed:
 			return 4
@@ -99,7 +104,7 @@ func dialAndCall(ctx context.Context, method string, params any) (json.RawMessag
 	}
 	resp, err := ipc.NewDecoder(conn).DecodeResponse()
 	if err != nil {
-		return nil, err
+		return nil, ipc.ClassifyResponseFailure(err)
 	}
 	if resp.ID != req.ID {
 		return nil, fmt.Errorf("response id mismatch: got %q want %q", resp.ID, req.ID)
@@ -141,6 +146,16 @@ func printIPCError(err error, asJSON bool) {
 		}
 		fmt.Fprintf(os.Stdout, "%s: %s\n", dn.ErrorEnvelope.Code, dn.ErrorEnvelope.Message)
 		fmt.Fprintf(os.Stdout, "fix: %s\n", dn.ErrorEnvelope.Fix)
+		return
+	}
+	var dd *ipc.DaemonDisconnectedError
+	if errors.As(err, &dd) && dd.ErrorEnvelope != nil {
+		if asJSON {
+			_ = json.NewEncoder(os.Stdout).Encode(dd.ErrorEnvelope)
+			return
+		}
+		fmt.Fprintf(os.Stdout, "%s: %s\n", dd.ErrorEnvelope.Code, dd.ErrorEnvelope.Message)
+		fmt.Fprintf(os.Stdout, "fix: %s\n", dd.ErrorEnvelope.Fix)
 		return
 	}
 	fmt.Fprintf(os.Stderr, "simurgh: %v\n", err)

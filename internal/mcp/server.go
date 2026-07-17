@@ -207,7 +207,7 @@ func defaultDialAndCall(ctx context.Context, method string, params any) (json.Ra
 	}
 	resp, err := ipc.NewDecoder(conn).DecodeResponse()
 	if err != nil {
-		return nil, err
+		return nil, ipc.ClassifyResponseFailure(err)
 	}
 	if resp.ID != req.ID {
 		return nil, fmt.Errorf("response id mismatch: got %q want %q", resp.ID, req.ID)
@@ -232,6 +232,10 @@ func mapCallError(err error) error {
 	var dn *ipc.DaemonNotRunningError
 	if errors.As(err, &dn) && dn.ErrorEnvelope != nil {
 		return fmt.Errorf("%s", formatIPCError(dn.ErrorEnvelope))
+	}
+	var dd *ipc.DaemonDisconnectedError
+	if errors.As(err, &dd) && dd.ErrorEnvelope != nil {
+		return fmt.Errorf("%s", formatIPCError(dd.ErrorEnvelope))
 	}
 	return err
 }

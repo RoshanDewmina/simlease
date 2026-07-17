@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/RoshanDewmina/simurgh/internal/broker"
@@ -98,6 +99,41 @@ func AdvanceRehydratedQueues(ctx context.Context, deps Deps) error {
 		return errors.New("daemon: provisioner not ready for rehydrated queue advance")
 	}
 	deps.Broker.RetryQueues(ctx)
+	return nil
+}
+
+// CancelDeadQueuedOwners synchronously cancels and persists every QUEUED lease
+// whose owner PID is dead. Call after Broker.Rehydrate and before serving
+// clients (and before AdvanceRehydratedQueues) so orphaned queues from a prior
+// daemon death are not observable and cannot be promoted.
+//
+// isAlive defaults to syscall.Kill(pid, 0) == nil. CancelQueued re-checks state,
+// so a lease promoted between decision and apply is never cancelled. Devices
+// are never deleted here — QUEUED leases have none.
+func CancelDeadQueuedOwners(deps Deps, isAlive func(pid int) bool) error {
+	if deps.Broker == nil {
+		return errors.New("daemon: broker not ready for dead queued cancel")
+	}
+	if isAlive == nil {
+		isAlive = func(pid int) bool {
+			return syscall.Kill(pid, 0) == nil
+		}
+	}
+	for _, lease := range deps.Broker.List(broker.ListFilter{}) {
+		if lease.State != broker.LeaseQueued {
+			continue
+		}
+		if lease.Owner.PID <= 0 {
+			continue
+		}
+		if isAlive(lease.Owner.PID) {
+			continue
+		}
+		if _, err := deps.Broker.CancelQueued(lease.ID); err != nil {
+			// Stale decision: lease promoted or otherwise left QUEUED. Skip.
+			continue
+		}
+	}
 	return nil
 }
 

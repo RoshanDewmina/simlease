@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -15,6 +16,13 @@ import (
 const (
 	CodeDaemonNotRunning = "DAEMON_NOT_RUNNING"
 	FixDaemonNotRunning  = "simurgh daemon run"
+
+	// CodeDaemonDisconnected is returned when the daemon drops an in-flight
+	// RPC after the client already sent the request (EOF / reset / broken pipe).
+	CodeDaemonDisconnected = "DAEMON_DISCONNECTED"
+	// FixDaemonDisconnected is the exact retry/status remediation for a lost
+	// mid-RPC connection (issue #2 / W18: bare EOF on acquire --wait).
+	FixDaemonDisconnected = "simurgh daemon status   # confirm daemon is up, then retry your command"
 
 	dialRetryWindow = 2 * time.Second
 	dialRetryTick   = 50 * time.Millisecond
@@ -157,4 +165,84 @@ func daemonNotRunning(cause error) error {
 		return errDaemonNotRunning
 	}
 	return &DaemonNotRunningError{ErrorEnvelope: env}
+}
+
+// DaemonDisconnectedError is returned when a response read fails because the
+// daemon closed or reset the connection after the request was sent.
+type DaemonDisconnectedError struct {
+	ErrorEnvelope *Error
+	Cause         error
+}
+
+func (e *DaemonDisconnectedError) Error() string {
+	if e == nil || e.ErrorEnvelope == nil {
+		return "ipc: daemon disconnected"
+	}
+	return fmt.Sprintf("ipc: %s: %s", e.ErrorEnvelope.Code, e.ErrorEnvelope.Message)
+}
+
+func (e *DaemonDisconnectedError) Unwrap() error {
+	if e != nil && e.Cause != nil {
+		return e.Cause
+	}
+	return errDaemonDisconnected
+}
+
+var errDaemonDisconnected = errors.New("ipc: daemon disconnected")
+
+// ClassifyResponseFailure maps connection-loss failures on a response read to
+// DaemonDisconnectedError. Protocol-frame errors (truncated, malformed, empty,
+// oversized, validation) are returned unchanged so they stay protocol errors.
+func ClassifyResponseFailure(err error) error {
+	if err == nil {
+		return nil
+	}
+	if isProtocolFrameError(err) {
+		return err
+	}
+	if isLostConnection(err) {
+		return daemonDisconnected(err)
+	}
+	return err
+}
+
+func isProtocolFrameError(err error) bool {
+	return errors.Is(err, ErrTruncatedFrame) ||
+		errors.Is(err, ErrMalformedJSON) ||
+		errors.Is(err, ErrEmptyFrame) ||
+		errors.Is(err, ErrOversizedFrame) ||
+		errors.Is(err, ErrMissingID) ||
+		errors.Is(err, ErrMissingMethod) ||
+		errors.Is(err, ErrInvalidVersion) ||
+		errors.Is(err, ErrInvalidError) ||
+		errors.Is(err, ErrUnexpectedError) ||
+		errors.Is(err, ErrUnexpectedResult) ||
+		errors.Is(err, ErrUnsupportedVersion) ||
+		errors.Is(err, ErrNoProgress)
+}
+
+func isLostConnection(err error) bool {
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) {
+		return true
+	}
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return errno == syscall.ECONNRESET || errno == syscall.EPIPE
+	}
+	return false
+}
+
+func daemonDisconnected(cause error) error {
+	msg := "connection to daemon lost after request was sent"
+	if cause != nil {
+		msg = fmt.Sprintf("connection to daemon lost after request was sent (%v)", cause)
+	}
+	env, err := NewError(CodeDaemonDisconnected, msg, FixDaemonDisconnected)
+	if err != nil {
+		return errDaemonDisconnected
+	}
+	return &DaemonDisconnectedError{ErrorEnvelope: env, Cause: cause}
 }

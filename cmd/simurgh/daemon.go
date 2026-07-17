@@ -256,6 +256,13 @@ func runDaemon() int {
 	}
 	daemon.RegisterLeaseHandlers(srv, deps)
 	daemon.RegisterXcodeBuildMCPHandlers(srv, deps)
+	// Cancel orphaned QUEUED leases from a prior daemon death before any
+	// client can observe them and before the one-shot queue advance might
+	// promote a dead-owner waiter. Watcher/ReclaimLoop remains defense in depth.
+	if err := daemon.CancelDeadQueuedOwners(deps, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "simurgh daemon run: cancel dead queued owners: %v\n", err)
+		return 1
+	}
 	// Rehydrate may have converted a crashed PROVISIONING lease to FAILED,
 	// freeing a global slot while other specs remain QUEUED. Advance once now,
 	// after all daemon dependencies and handlers are ready, instead of waiting

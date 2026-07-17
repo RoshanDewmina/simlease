@@ -127,7 +127,7 @@ func dialPing(socketPath string) func(ctx context.Context) error {
 		}
 		resp, err := ipc.NewDecoder(conn).DecodeResponse()
 		if err != nil {
-			return err
+			return ipc.ClassifyResponseFailure(err)
 		}
 		if resp.ID != req.ID {
 			return fmt.Errorf("ping response id mismatch: got %q want %q", resp.ID, req.ID)

@@ -2355,3 +2355,12 @@ Final matrix remains **17 PASS · 1 BLOCKED · 0 FAIL**. The sole BLOCKED cell
 is W12 live induced-pressure queueing; normal-pressure product and unit
 evidence passed. Bench Phase A remains BLOCKED by guarded preflight and was not
 run. Morning packet: `docs/plans/MORNING_PUBLISH.md`.
+
+### 2026-07-17 — Proof-gate exploration complete (`1b7a425`)
+
+Morning packet was committed first at `1b7a425`; only then was the optional
+proof-gate side quest opened. `docs/plans/PROOF_GATE_EXPLORATION.md` separates
+current fragmented evidence sinks from unimplemented proof capabilities and
+recommends: local policy schema → advisory MCP manifest capture → opt-in daemon
+`session.finish` gate. Lease release remains an unconditional cleanup escape
+hatch. This package changes documentation only; no product code was written.

@@ -9,6 +9,9 @@ Columns: date · Lancer lane · friction · repro · severity · fix SHA / worka
 | Date | Lancer lane | Friction | Repro | Severity | Fix / workaround | Status |
 |---|---|---|---|---|---|---|
 | 2026-07-17 | (session start) | — no frictions yet; ledger opened at Simurgh origin/master `deac3efb` (96-commit publish incl. exec flag-merge/auto-renew, hold/unhold, TTL 60m, xcodebuildmcp adapter) | — | — | — | open |
+| 2026-07-17 | WP5 gap-reproof (lease-205) | XcodeBuildMCP session defaults silently clobbered mid-run by a concurrent lease (lease-204) — screenshots/builds hit the wrong sim | Two concurrent leases, both driving XcodeBuildMCP; second `session_set_defaults` overwrites the first's | HIGH (wrong-device evidence, wasted builds) | Workaround: explicit-UDID per call; real fix = per-lease XcodeBuildMCP session isolation in the adapter (`simurgh integration xcodebuildmcp` should namespace session defaults per lease) | open — tracked issue |
+| 2026-07-17 | WP5 gap-reproof | Claude Code PreToolUse hook resolves `$HOME/.lancer/bin/lancerd` via real `$HOME`, so an isolated (`LANCER_STATE_DIR`) daemon's runs still execute the PRODUCTION binary for hook gating (state stayed isolated via inherited env, binary did not) | Isolated daemon + real agent run; `ps` shows hook argv with production path | MED (version skew between daemon under test and hook binary) | Lancer-side fix filed (hook script should honor LANCER_BIN/state-dir-relative binary); noted here because Simurgh-driven isolated-daemon lanes hit it | open — Lancer issue |
+| 2026-07-17 | WP5 gap-reproof | Relay pairing codes expire too fast for multi-step manual sim navigation (pair flow raced expiry twice) | Mint code → navigate sim UI by hand → code expired before Connect | LOW | Workaround: pre-stage pairing sheet before minting; consider longer TTL for dev pairing | open |
 
 ## Session 2026-07-17 notes
 

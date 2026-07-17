@@ -187,6 +187,9 @@ func (s *server) ensureXBMCPChild(ctx context.Context, leaseID string) (*xbmcpCh
 	cmd := exec.CommandContext(context.Background(), cmdArgv[0], cmdArgv[1:]...)
 	cmd.Dir = bindings.Dirs.Root
 	cmd.Env = mergeChildEnviron(os.Environ(), bindings.Env, s.launchExtraEnv(leaseID))
+	// New session: killChild signals the process group so an npx wrapper's
+	// node grandchild cannot outlive stop/release/shutdown.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	// Never log cmd.Env — may contain credentials / isolation secrets.
 
 	client := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "simurgh-xbmcp-proxy", Version: mcpVersion}, nil)
@@ -257,7 +260,13 @@ func (s *server) stopXBMCPChild(leaseID string) bool {
 	mu := s.lockForLease(leaseID)
 	mu.Lock()
 	defer mu.Unlock()
+	return s.stopXBMCPChildLocked(leaseID)
+}
 
+// stopXBMCPChildLocked stops the child for leaseID. Caller must hold
+// lockForLease(leaseID). Used by handleLeaseRelease so stop + lease.release
+// stay under the same lock without deadlocking stopXBMCPChild.
+func (s *server) stopXBMCPChildLocked(leaseID string) bool {
 	s.childrenMu.Lock()
 	child := s.children[leaseID]
 	delete(s.children, leaseID)
@@ -298,16 +307,18 @@ func (s *server) killChild(child *xbmcpChild) {
 		_ = child.session.Close()
 	}
 	pid := child.pid
-	if pid > 0 && xbmcpProcessAlive(pid) {
-		_ = syscall.Kill(pid, syscall.SIGTERM)
-		deadline := time.Now().Add(3 * time.Second)
-		for xbmcpProcessAlive(pid) && time.Now().Before(deadline) {
-			time.Sleep(20 * time.Millisecond)
-		}
-		if xbmcpProcessAlive(pid) {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
-		}
+	if pid <= 0 {
+		return
 	}
+	// Negative pid → process group (Setsid at spawn). Always signal the
+	// group: session.Close may already have reaped the wrapper while leaving
+	// same-pgid grandchildren (npx → node) alive.
+	_ = syscall.Kill(-pid, syscall.SIGTERM)
+	deadline := time.Now().Add(3 * time.Second)
+	for xbmcpProcessAlive(pid) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	_ = syscall.Kill(-pid, syscall.SIGKILL)
 }
 
 func (s *server) childPID(leaseID string) int {

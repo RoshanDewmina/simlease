@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -17,8 +19,9 @@ import (
 )
 
 const (
-	envRunFakeXBMCP     = "SIMURGH_TEST_FAKE_XBMCP"
-	envFakeXBMCPEnvFile = "SIMURGH_TEST_XBMCP_ENVFILE"
+	envRunFakeXBMCP               = "SIMURGH_TEST_FAKE_XBMCP"
+	envFakeXBMCPEnvFile           = "SIMURGH_TEST_XBMCP_ENVFILE"
+	envFakeXBMCPGrandchildPIDFile = "SIMURGH_TEST_XBMCP_GRANDCHILD_PIDFILE"
 )
 
 func TestMain(m *testing.M) {
@@ -31,9 +34,20 @@ func TestMain(m *testing.M) {
 
 // runFakeXBMCPChild is the helper-process fake stdio MCP server: records env
 // to SIMURGH_TEST_XBMCP_ENVFILE and exposes one echo tool.
+// When SIMURGH_TEST_XBMCP_GRANDCHILD_PIDFILE is set, spawns a sleeper in the
+// same process group (npx-wrapper stand-in) and writes its PID to that file.
 func runFakeXBMCPChild() {
 	if path := os.Getenv(envFakeXBMCPEnvFile); path != "" {
 		_ = os.WriteFile(path, []byte(strings.Join(os.Environ(), "\n")+"\n"), 0o600)
+	}
+	if path := os.Getenv(envFakeXBMCPGrandchildPIDFile); path != "" {
+		sleep := exec.Command("sleep", "120")
+		if err := sleep.Start(); err == nil && sleep.Process != nil {
+			_ = os.WriteFile(path, []byte(strconv.Itoa(sleep.Process.Pid)+"\n"), 0o600)
+			// Intentionally not Wait()'d — stands in for an npx grandchild
+			// that must die via process-group teardown, not parent Wait.
+			go func() { _ = sleep.Wait() }()
+		}
 	}
 	ctx := context.Background()
 	srv := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "fake-xbmcp", Version: "test"}, nil)
@@ -454,4 +468,132 @@ func TestXBMCPProxyLifecycleCancelKillsChildren(t *testing.T) {
 
 	f.cancel() // cancel LifecycleCtx
 	waitDeadPID(t, pid, 5*time.Second)
+}
+
+func TestXBMCPProxyStopKillsProcessGroup(t *testing.T) {
+	leases := map[string]json.RawMessage{
+		"lease-pg": leaseGetJSON("lease-pg", "AAAAAAAA-0000-0000-0000-0000000000PG"),
+	}
+	root := t.TempDir()
+	envFile := filepath.Join(root, "child.env")
+	gcPIDFile := filepath.Join(root, "grandchild.pid")
+	lifecycle, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	cfg := serverConfig{
+		Call: func(_ context.Context, method string, params any) (json.RawMessage, error) {
+			if method != "lease.get" && method != "lease.release" {
+				return nil, fmt.Errorf("unexpected method %s", method)
+			}
+			raw, err := json.Marshal(params)
+			if err != nil {
+				return nil, err
+			}
+			var p struct {
+				ID string `json:"id"`
+			}
+			if err := json.Unmarshal(raw, &p); err != nil {
+				return nil, err
+			}
+			leaseRaw, ok := leases[p.ID]
+			if !ok {
+				env, err := ipc.NewError("LEASE_NOT_FOUND", "lease not found: "+p.ID, "simurgh acquire --model <model>")
+				if err != nil {
+					return nil, err
+				}
+				return nil, &rpcError{e: env}
+			}
+			return leaseRaw, nil
+		},
+		LastLeasePath: filepath.Join(root, "last-lease"),
+		LeasesRoot:    filepath.Join(root, "leases"),
+		LaunchCommand: fakeXBMCPLaunchCommand(),
+		LaunchExtraEnv: []string{
+			envRunFakeXBMCP + "=1",
+			envFakeXBMCPEnvFile + "=" + envFile,
+			envFakeXBMCPGrandchildPIDFile + "=" + gcPIDFile,
+		},
+		LifecycleCtx: lifecycle,
+	}
+	srv := newServer(cfg)
+	t.Cleanup(func() {
+		cancel()
+		srv.impl.stopAllChildren()
+	})
+	cs := connectTestClient(t, srv.Server)
+
+	_, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name: "xcodebuildmcp_call",
+		Arguments: map[string]any{
+			"lease_id":  "lease-pg",
+			"tool":      "echo",
+			"arguments": map[string]any{"message": "pg"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	wrapperPID := srv.impl.childPID("lease-pg")
+	if wrapperPID <= 0 || !processAlivePID(wrapperPID) {
+		t.Fatalf("wrapper pid=%d not alive", wrapperPID)
+	}
+	gcRaw := strings.TrimSpace(string(waitFile(t, gcPIDFile, 3*time.Second)))
+	gcPID, err := strconv.Atoi(gcRaw)
+	if err != nil || gcPID <= 0 {
+		t.Fatalf("grandchild pid file %q: %v", gcRaw, err)
+	}
+	if !processAlivePID(gcPID) {
+		t.Fatalf("grandchild pid %d not alive before stop", gcPID)
+	}
+
+	stopRes, err := cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name:      "xcodebuildmcp_stop",
+		Arguments: map[string]any{"lease_id": "lease-pg"},
+	})
+	if err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	if stopRes.IsError {
+		t.Fatalf("stop error: %v", toolErrorText(t, stopRes))
+	}
+	waitDeadPID(t, wrapperPID, 5*time.Second)
+	waitDeadPID(t, gcPID, 5*time.Second)
+}
+
+func TestXBMCPProxyLeaseReleaseStopsChild(t *testing.T) {
+	leases := map[string]json.RawMessage{
+		"lease-rel": leaseGetJSON("lease-rel", "AAAAAAAA-0000-0000-0000-0000000000R7"),
+	}
+	f := newProxyFixture(t, leases)
+
+	_, err := f.cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name: "xcodebuildmcp_call",
+		Arguments: map[string]any{
+			"lease_id":  "lease-rel",
+			"tool":      "echo",
+			"arguments": map[string]any{"message": "before-release"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("call: %v", err)
+	}
+	pid := f.srv.impl.childPID("lease-rel")
+	if pid <= 0 || !processAlivePID(pid) {
+		t.Fatalf("child not alive pid=%d", pid)
+	}
+
+	rel, err := f.cs.CallTool(context.Background(), &mcpsdk.CallToolParams{
+		Name:      "lease_release",
+		Arguments: map[string]any{"lease_id": "lease-rel"},
+	})
+	if err != nil {
+		t.Fatalf("lease_release: %v", err)
+	}
+	if rel.IsError {
+		t.Fatalf("lease_release error: %v", toolErrorText(t, rel))
+	}
+	waitDeadPID(t, pid, 5*time.Second)
+	if f.srv.impl.childPID("lease-rel") != 0 {
+		t.Fatal("child map still has entry after lease_release")
+	}
 }

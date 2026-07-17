@@ -544,12 +544,18 @@ func (s *server) handleLeaseUnhold(ctx context.Context, _ *mcpsdk.CallToolReques
 
 func (s *server) handleLeaseRelease(ctx context.Context, _ *mcpsdk.CallToolRequest, in leaseIDParams) (*mcpsdk.CallToolResult, leaseReleaseResult, error) {
 	var zero leaseReleaseResult
-	if strings.TrimSpace(in.LeaseID) == "" {
+	trimmedID := strings.TrimSpace(in.LeaseID)
+	if trimmedID == "" {
 		return nil, zero, fmt.Errorf("lease_id is required")
 	}
+	// Hold the per-lease lock across child-stop + lease.release so a concurrent
+	// xcodebuildmcp_call cannot respawn a child for a lease being released.
+	mu := s.lockForLease(trimmedID)
+	mu.Lock()
+	defer mu.Unlock()
 	// Stop any live proxy child before releasing — stdio ownership dies with the lease.
-	s.stopXBMCPChild(in.LeaseID)
-	raw, err := s.cfg.Call(ctx, "lease.release", map[string]any{"id": in.LeaseID})
+	s.stopXBMCPChildLocked(trimmedID)
+	raw, err := s.cfg.Call(ctx, "lease.release", map[string]any{"id": trimmedID})
 	if err != nil {
 		return nil, zero, mapCallError(err)
 	}

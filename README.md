@@ -1,136 +1,110 @@
 # Simurgh
 
-Local macOS control plane for parallel AI agent access to isolated iOS
-simulators. A daemon leases exclusive simulator clones (queue + TTL instead of
-collisions), emits per-lease DerivedData / module-cache / SwiftPM isolation, and
-exposes the same surface as a CLI and a stdio MCP server.
+**A lease broker that gives parallel AI coding agents their own iOS simulators.**
 
-**Status:** `v0.0.1`. A private GitHub remote (`origin`) exists; the repo is
-currently private on GitHub. No LICENSE file exists yet — licensing/publication
-is a pending decision by the owner, not a permanent prohibition. Do not treat
-this as open-source, redistribute it, or add a license file until the owner
-decides and explicitly confirms.
+When several coding agents (Claude Code, Cursor, Codex, scripts) build and test
+the same iOS app on one Mac, they share one simulator, one DerivedData folder and
+one SwiftPM cache. They install over each other's builds, launch the wrong app
+variant, and screenshot each other's screens. Simulators left behind by a crashed
+agent pile up until someone cleans them by hand.
 
-## Requirements
+Simurgh is a small Go daemon that makes the simulator a leased resource. An agent
+asks for a device, gets an exclusive simulator clone and its own isolated build
+directories, and gives it back when it finishes. If the agent dies, the daemon
+reclaims the lease and deletes the clone.
 
-- macOS with Xcode + an iOS Simulator runtime installed
-- Go 1.25+ (see `go.mod`)
+## Results
 
-## Quickstart
+Measured on one 16 GB MacBook Air (Apple silicon), Xcode 27, building and
+launching a fixture app whose build flag stamps a per-agent badge on screen, so
+cross-contamination is visible in screenshots. Every number traces to committed
+JSON in [`bench/evidence/`](bench/evidence/); the full write-up, including the
+unflattering results, is in [`bench/RESULTS.md`](bench/RESULTS.md).
 
-Commands below match the live CLI in `cmd/simurgh` and the syntax used in this
-repo’s dogfood / orchestrator evidence. The Makefile’s `build` target only runs
-`go build ./...` (compile check) — it does **not** install a binary. Build the
-CLI yourself:
+| Scenario | Shared simulator (naive) | Hand-written isolation script | Simurgh |
+|---|---|---|---|
+| **4 agents in parallel**, 20 tasks (B2) | 3/20 passed; 5 install clobbers, 9 screenshots showing another agent's app | 20/20 | **20/20, zero incidents, zero leftover devices** |
+| **Agent killed mid-build** (B4) | — | killed agent's simulator orphaned in 5/5 runs | lease reclaimed and clone deleted in 4/4 cleanly measured runs |
+| **Solo overhead** (B3), median per task | 7.3 s | — | 48.7 s (cold DerivedData + clean install; a careful hand-written script pays about the same) |
+
+Not everything was a clean win, and the write-up says so: at 2 agents (B1) the
+first-attempt pass rate was 17/20, and with 6 agents on 3 slots (B5) only 10/18
+tasks finished. Dogfooding under 4-agent load also found a real daemon bug (a
+queued lease could stall after a transient memory-pressure dip); it was
+root-caused, fixed with a regression test, and B2 was re-run to 20/20.
+
+## How it works
+
+```text
+ Claude Code / Cursor / Codex / scripts
+        │ MCP (stdio)         │ CLI (--json)
+        ▼                     ▼
+   simurgh mcp           simurgh <cmd>          (one binary)
+        └──────────┬──────────┘
+                   │ Unix socket, versioned JSON protocol
+                   ▼
+   simurgh daemon (single writer of all state)
+     Broker       lease queue, capacity, build slots, memory pressure
+     Provisioner  clone / boot / delete simulators (simctl only)
+     Isolator     per-lease DerivedData, module cache, SwiftPM, results
+     Watcher      client PID liveness, heartbeats, TTLs
+     Reaper       reclaims dead leases, finds orphaned clones
+     Store        journaled state, reconciled on restart
+```
+
+- **Leases, not locks.** Each lease is an exclusive simulator clone with a TTL.
+  MCP leases are bound to the requesting process by default (CLI: `acquire --rm`),
+  so the lease is released when that process exits. Requests that can't be
+  granted wait in a queue instead of colliding.
+- **Isolation is emitted, not hoped for.** A lease carries its own
+  `-derivedDataPath`, `-clonedSourcePackagesDirPath` and `-destination`;
+  `simurgh exec` injects them into any `xcodebuild` call.
+- **Safe deletion.** Every destructive call goes through one `safety` package
+  that only deletes paths under `~/.simurgh/leases/` and devices whose names and
+  UDIDs Simurgh created. It never touches a developer's own simulators.
+- **Public Apple interfaces only** (`xcrun simctl`, documented `xcodebuild`
+  flags). No private frameworks.
+- **Agent-native.** A stdio MCP server exposes seven tools (`lease_acquire`,
+  `lease_renew`, `lease_hold`, `lease_unhold`, `lease_release`, `lease_status`,
+  `pool_status`); `simurgh init` registers it in a project's `.mcp.json`.
+
+Details: [Architecture](docs/ARCHITECTURE.md).
+
+## Codebase
+
+- Go 1.25, no cgo. About 15k lines of Go plus 17k lines of tests (393 test
+  functions across 22 packages), built with the official MCP Go SDK.
+- Unit tests run against a scripted fake of `simctl`. An integration suite and
+  the benchmark harness run against real simulators on a Mac.
+- Built in July 2026 with AI coding agents (Claude Code and Cursor) working
+  under Roshan Silva's direction: he set the architecture, scope and acceptance
+  gates and verified the results.
+
+## Run it
+
+Requires macOS with Xcode and an iOS Simulator runtime, plus Go 1.25+.
 
 ```bash
 go build -o simurgh ./cmd/simurgh
-go build -o simurgh-shim ./cmd/simurgh-shim   # required beside simurgh for `simurgh shell`
-# or: make binaries
-# optional: install somewhere on PATH, e.g.
-#   sudo cp simurgh simurgh-shim /usr/local/bin/
-export PATH="$PWD:$PATH"   # if you keep the binaries in the repo root
+go build -o simurgh-shim ./cmd/simurgh-shim   # needed beside simurgh for `simurgh shell`
+export PATH="$PWD:$PATH"
+
+simurgh doctor                 # checks Xcode, simctl, runtimes, daemon
+simurgh daemon run &           # start the daemon
+
+simurgh acquire --model "iPhone 17 Pro" --wait --json   # note .lease.id, e.g. lease-1
+simurgh exec lease-1 -- xcodebuild \
+  -project test/fixtures/SampleApp/SampleApp.xcodeproj -scheme SampleApp build
+simurgh release lease-1        # tears down the clone
 ```
 
-`simurgh shell` discovers `simurgh-shim` next to the `simurgh` executable first,
-then falls back to `PATH`. Do not commit the generated root binaries
-(`/simurgh`, `/simurgh-shim` are gitignored).
+`simurgh exec` injects the lease's build flags and renews the lease during long
+builds. `simurgh env <lease>` prints the same isolation as `export` lines.
 
-Confirm the environment (Xcode, simctl, runtimes, socket, daemon liveness).
-`doctor` dials the socket **without** auto-starting a daemon:
+To use it from an MCP client, run `simurgh init` in your project, then restart
+the agent session so it loads the `simurgh` server from `.mcp.json`.
 
-```bash
-simurgh doctor
-```
-
-Start the daemon explicitly (accepted path for a fresh machine):
-
-```bash
-simurgh daemon run &
-```
-
-Client commands (`acquire`, `env`, `exec`, …) call `ipc.Dial`, which **will**
-auto-start `simurgh daemon run` once if the socket is missing or refused. Prefer
-an explicit `daemon run &` when you want a known-up daemon; use `simurgh daemon
-status` / `simurgh doctor` to check without spawning one.
-
-Acquire a lease (blocks under pool or host pressure until grantable):
-
-```bash
-simurgh acquire --model "iPhone 17 Pro" --wait --json
-```
-
-Pick the lease id from the JSON (field `.lease.id`, e.g. `lease-1`), then load
-isolation exports:
-
-```bash
-L=lease-1   # replace with .lease.id from acquire
-simurgh env "$L"
-eval "$(simurgh env "$L")"
-```
-
-`simurgh env` prints `export …` lines for the isolation contract. The same
-acquire JSON also carries `.lease.env.xcodebuildFlags` — typically:
-
-`-derivedDataPath`, `-clonedSourcePackagesDirPath`, and
-`-destination platform=iOS Simulator,id=<udid>`.
-
-Easiest way to apply those flags: `simurgh exec` injects them for any
-`xcodebuild` argv and auto-renews the lease during long runs — always route
-builds/tests through exec (see `docs/AGENT_GUIDE.md`). Against this repo’s
-fixture (live-proven in M2.1 / M3.3):
-
-```bash
-simurgh exec "$L" -- xcodebuild \
-  -project test/fixtures/SampleApp/SampleApp.xcodeproj \
-  -scheme SampleApp \
-  build
-```
-
-Expect `** BUILD SUCCEEDED **`. DerivedData lands under the lease directory
-(`$SIMURGH_HOME/leases/<id>/DerivedData`, default home `~/.simurgh`), not the
-shared Xcode default.
-
-Release when finished — release tears down the clone device (M2.3):
-
-```bash
-simurgh release "$L"
-```
-
-## MCP setup (Claude Code / other MCP clients)
-
-From a project directory:
-
-```bash
-simurgh init
-```
-
-That command:
-
-1. Writes `.simurgh.yaml` if missing (default model `iPhone 17 Pro`; use
-   `--force` to overwrite).
-2. Upserts a `simurgh` entry under `mcpServers` in `.mcp.json`.
-3. Prints a short agent-rules snippet to paste into `AGENTS.md` / `CLAUDE.md`.
-
-Confirmed `.mcp.json` shape (M3.2):
-
-```json
-{
-  "mcpServers": {
-    "simurgh": {
-      "type": "stdio",
-      "command": "simurgh",
-      "args": ["mcp"],
-      "env": {}
-    }
-  }
-}
-```
-
-Claude Code loads MCP servers from `.mcp.json` at session start. After `init`,
-restart the session (or open the project fresh) so the `simurgh` server
-attaches. Then use the seven tools: `lease_acquire`, `lease_renew`,
-`lease_hold`, `lease_unhold`, `lease_release`, `lease_status`, `pool_status`.
+Run the tests with `go test ./...`.
 
 ## CLI reference
 
@@ -138,43 +112,34 @@ attaches. Then use the seven tools: `lease_acquire`, `lease_renew`,
 |---|---|
 | `simurgh acquire --model NAME [flags]` | Request a lease (clone + boot); `--wait` blocks on queue/pressure; `--json` for machine output |
 | `simurgh release [<lease-id>] [--all --label k=v] [--json]` | Release lease(s); tears down the clone device |
-| `simurgh renew <lease-id> [--ttl DUR] [--json]` | Extend an active lease’s TTL |
+| `simurgh renew <lease-id> [--ttl DUR] [--json]` | Extend an active lease's TTL |
 | `simurgh hold <lease-id> [--duration DUR] [--json]` | Suppress inactivity reclaim while busy (TTL still applies) |
 | `simurgh unhold <lease-id> [--json]` | Clear a hold so inactivity reclaim resumes |
-| `simurgh status [--queue] [--json]` | Host-global capacity (+ optional per-spec/provisioning caps), buildSlots/activeBuilds/queuedBuilds, lease counts, `pressure` |
+| `simurgh status [--queue] [--json]` | Capacity, build slots, lease counts, memory pressure |
 | `simurgh list [--label-selector k=v,...] [--json]` | List leases |
 | `simurgh env <lease-id> [--json]` | Print eval-able isolation `export` lines (or JSON env/flags) |
 | `simurgh shell <lease-id>` | Interactive shell with lease env + audit-mode PATH shims for `xcodebuild`/`xcrun` |
 | `simurgh exec <lease-id> -- <cmd...>` | Run a command with isolation env; injects xcodebuild flags |
-| `simurgh warm create --model NAME [--runtime VER] [--json]` | Create a warm clone-source template |
-| `simurgh warm list [--json]` | List warm templates |
-| `simurgh warm remove --model NAME [--runtime VER] [--json]` | Delete a warm template |
-| `simurgh integration xcodebuildmcp start\|stop\|status --session <id> [--json]` | Own XcodeBuildMCP lifecycle for an ACTIVE lease (session id accepts the lease id); `start` writes ephemeral MCP config under the lease root and launches an owned child, `stop` kills only that child |
+| `simurgh warm create\|list\|remove --model NAME [--runtime VER] [--json]` | Manage warm clone-source templates |
+| `simurgh integration xcodebuildmcp start\|stop\|status --session <id> [--json]` | Run an XcodeBuildMCP instance scoped to an active lease |
 | `simurgh prune [--apply] [--json]` | Plan (default) or apply orphan/held cleanup |
 | `simurgh doctor [--json]` | Environment diagnostics (does not auto-start the daemon) |
 | `simurgh init [--force] [--json]` | Project `.simurgh.yaml` + `.mcp.json` registration |
-| `simurgh mcp` | Stdio MCP server (blocks until stdin closes) |
-| `simurgh daemon run` | Run the daemon in the foreground |
-| `simurgh daemon status [--logs] [--json]` | Reachability probe (does not auto-start); optional log tail |
+| `simurgh mcp` | Stdio MCP server |
+| `simurgh daemon run` / `simurgh daemon status [--logs] [--json]` | Run the daemon in the foreground / probe it without starting one |
 
-Not built (deliberately deferred): `daemon stop`, `daemon install` / launchd
-helpers. Stop a foreground/background daemon with the usual process signal
-(`kill` / Ctrl-C). PATH shim stage 2 (auto-inject xcodebuild flags into bare
-invocations) remains future work — stage 1 audit shims are shipped via
-`simurgh shell` (audit-only; not yet flag-injecting).
+Not built yet: `daemon stop` and launchd install helpers (stop the daemon with a
+signal), and flag injection for bare `xcodebuild` calls outside `simurgh exec`.
 
 ## Docs
 
 - [Architecture](docs/ARCHITECTURE.md)
-- [Roadmap](docs/ROADMAP.md)
-- [Agent guide](docs/AGENT_GUIDE.md) — for AI agents using leases / MCP
+- [Benchmark results](bench/RESULTS.md) and [publishable numbers](bench/LAUNCH_NUMBERS.md)
+- [Agent guide](docs/AGENT_GUIDE.md), for AI agents using leases or MCP
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Changelog](CHANGELOG.md)
+- [Roadmap](docs/ROADMAP.md) and [changelog](CHANGELOG.md)
 
-## License / distribution
+## Status and license
 
-No LICENSE file exists yet, so no license is granted — this is not
-open-source and must not be redistributed. A private GitHub remote
-(`origin`) exists and the repo is currently private on GitHub; publishing
-publicly, adding a license file, and any package-registry publish are
-pending decisions by the owner, not yet made.
+Version `v0.0.1`. No license file has been added yet, so no license is granted;
+that decision is pending with the owner.

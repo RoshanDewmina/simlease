@@ -1,6 +1,8 @@
-# Simurgh
+# SimLease
 
 **A lease broker that gives parallel AI coding agents their own iOS simulators.**
+
+*Formerly Simurgh: the binary, Go module and commands still use the name `simurgh`.*
 
 When several coding agents (Claude Code, Cursor, Codex, scripts) build and test
 the same iOS app on one Mac, they share one simulator, one DerivedData folder and
@@ -8,7 +10,7 @@ one SwiftPM cache. They install over each other's builds, launch the wrong app
 variant, and screenshot each other's screens. Simulators left behind by a crashed
 agent pile up until someone cleans them by hand.
 
-Simurgh is a small Go daemon that makes the simulator a leased resource. An agent
+SimLease is a small Go daemon that makes the simulator a leased resource. An agent
 asks for a device, gets an exclusive simulator clone and its own isolated build
 directories, and gives it back when it finishes. If the agent dies, the daemon
 reclaims the lease and deletes the clone.
@@ -21,7 +23,7 @@ cross-contamination is visible in screenshots. Every number traces to committed
 JSON in [`bench/evidence/`](bench/evidence/); the full write-up, including the
 unflattering results, is in [`bench/RESULTS.md`](bench/RESULTS.md).
 
-| Scenario | Shared simulator (naive) | Hand-written isolation script | Simurgh |
+| Scenario | Shared simulator (naive) | Hand-written isolation script | SimLease |
 |---|---|---|---|
 | **4 agents in parallel**, 20 tasks (B2) | 3/20 passed; 5 install clobbers, 9 screenshots showing another agent's app | 20/20 | **20/20, zero incidents, zero leftover devices** |
 | **Agent killed mid-build** (B4) | — | killed agent's simulator orphaned in 5/5 runs | lease reclaimed and clone deleted in 4/4 cleanly measured runs |
@@ -61,7 +63,7 @@ root-caused, fixed with a regression test, and B2 was re-run to 20/20.
   `simurgh exec` injects them into any `xcodebuild` call.
 - **Safe deletion.** Every destructive call goes through one `safety` package
   that only deletes paths under `~/.simurgh/leases/` and devices whose names and
-  UDIDs Simurgh created. It never touches a developer's own simulators.
+  UDIDs SimLease created. It never touches a developer's own simulators.
 - **Public Apple interfaces only** (`xcrun simctl`, documented `xcodebuild`
   flags). No private frameworks.
 - **Agent-native.** A stdio MCP server exposes seven tools (`lease_acquire`,
